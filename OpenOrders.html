@@ -1,0 +1,1549 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Asung Trading — Open Orders Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d0f14;--surface:#14171f;--surface2:#1c2030;--border:#252a38;
+  --blue:#4f8ef7;--orange:#f7934f;--green:#4ff79e;--yellow:#f7d94f;--red:#f74f6e;
+  --text:#e8ecf5;--muted:#6b738a;
+  --font-kpi:Impact,'Arial Narrow',sans-serif;
+  --font-ui:-apple-system,'Segoe UI',Arial,sans-serif;
+  --font-mono:'Courier New',Consolas,monospace;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--font-ui);min-height:100vh}
+
+/* ── UPLOAD SCREEN ── */
+#uploadScreen{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  min-height:100vh;padding:40px 20px;
+}
+.upload-logo{font-size:13px;font-weight:700;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:48px}
+.upload-logo span{color:var(--blue)}
+.drop-zone{
+  width:100%;max-width:520px;border:2px dashed var(--border);border-radius:16px;
+  padding:60px 40px;text-align:center;cursor:pointer;transition:all .25s;
+  background:var(--surface);position:relative;
+}
+.drop-zone:hover,.drop-zone.dragover{border-color:var(--blue);background:rgba(79,142,247,.05)}
+.drop-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.drop-icon{font-size:48px;margin-bottom:20px;filter:grayscale(1);transition:filter .25s}
+.drop-zone:hover .drop-icon,.drop-zone.dragover .drop-icon{filter:none}
+.drop-title{font-size:18px;font-weight:700;margin-bottom:8px}
+.drop-sub{font-size:12px;color:var(--muted);line-height:1.6}
+.drop-sub strong{color:var(--blue);font-family:var(--font-mono)}
+.upload-specs{max-width:520px;width:100%;margin-top:24px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.spec-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px}
+.spec-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px}
+.spec-val{font-size:11px;font-family:var(--font-mono);color:var(--text)}
+.upload-error{max-width:520px;width:100%;margin-top:16px;padding:12px 16px;background:rgba(247,79,110,.1);border:1px solid rgba(247,79,110,.3);border-radius:8px;font-size:12px;color:var(--red);display:none}
+.loading-bar{max-width:520px;width:100%;margin-top:20px;display:none}
+.loading-bar-track{height:4px;background:var(--surface2);border-radius:2px;overflow:hidden}
+.loading-bar-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--green));border-radius:2px;width:0;transition:width .4s}
+.loading-label{font-size:11px;color:var(--muted);margin-top:8px;text-align:center}
+
+/* ── DASHBOARD ── */
+#dashboard{display:none}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+header h1{font-size:16px;font-weight:700;letter-spacing:.5px}
+.header-meta{font-size:11px;color:var(--muted);font-family:var(--font-mono)}
+.header-right{display:flex;align-items:center;gap:12px}
+.btn-reload{background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:5px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-family:var(--font-ui);transition:all .2s}
+.btn-reload:hover{color:var(--text);border-color:var(--blue)}
+.btn-save{background:rgba(79,142,247,.15);border:1px solid rgba(79,142,247,.4);color:var(--blue);padding:5px 14px;border-radius:6px;font-size:11px;cursor:pointer;font-family:var(--font-ui);font-weight:600;transition:all .2s}
+.btn-save:hover{background:rgba(79,142,247,.25);border-color:var(--blue)}
+.btn-save:active{transform:scale(.97)}
+
+/* ── TABS ── */
+.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--surface);overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{padding:12px 20px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;border-bottom:2px solid transparent;color:var(--muted);transition:all .2s}
+.tab.active{color:var(--blue);border-bottom-color:var(--blue)}
+.tab:hover:not(.active){color:var(--text)}
+.pane{display:none;padding:20px;animation:fadein .2s}
+.pane.active{display:block}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+
+/* ── LAYOUT ── */
+.branch-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+@media(max-width:640px){.branch-row{grid-template-columns:1fr}}
+.branch-section{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px}
+.branch-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
+.branch-title.toronto{color:var(--blue)}
+.branch-title.edmonton{color:var(--orange)}
+.stat-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)}
+.stat-row:last-child{border-bottom:none}
+.stat-row .lbl{font-size:11px;color:var(--muted)}
+.stat-row .val{font-size:12px;font-weight:700}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:640px){.two-col{grid-template-columns:1fr}}
+.divider{height:1px;background:var(--border);margin:14px 0}
+
+/* ── CHART BOXES ── */
+.chart-box{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px}
+.chart-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:12px}
+.chart-wrap{position:relative;height:220px}
+.chart-wrap.tall{height:280px}
+.chart-wrap.short{height:160px}
+
+/* ── TABLES ── */
+.tbl-wrap{overflow-x:auto;margin-top:8px}
+table{width:100%;border-collapse:collapse;font-size:11px}
+th{background:var(--surface2);color:var(--muted);padding:8px 10px;text-align:left;font-weight:600;text-transform:uppercase;letter-spacing:.5px;cursor:pointer;white-space:nowrap;user-select:none}
+th:hover{color:var(--text)}
+td{padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:hover td{background:var(--surface2)}
+
+/* ── TAGS & BADGES ── */
+.tag{display:inline-block;padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700}
+.tag-hold{background:rgba(247,79,110,.18);color:var(--red)}
+.tag-new{background:rgba(79,247,158,.12);color:var(--green)}
+.tag-fin{background:rgba(79,142,247,.12);color:var(--blue)}
+.tag-wms{background:rgba(247,217,79,.12);color:var(--yellow)}
+.tag-t{background:rgba(79,142,247,.1);color:var(--blue)}
+.tag-e{background:rgba(247,147,79,.1);color:var(--orange)}
+.badge{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-family:var(--font-mono);font-weight:700}
+.badge-t{background:rgba(79,142,247,.15);color:var(--blue)}
+.badge-e{background:rgba(247,147,79,.15);color:var(--orange)}
+.badge-ok{background:rgba(79,247,158,.15);color:var(--green)}
+
+/* ── ALERTS ── */
+.alerts-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:10px;margin-top:24px}
+.alert-item{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px;font-size:12px}
+.alert-item.danger{border-left:3px solid var(--red)}
+.alert-item.success{border-left:3px solid var(--green)}
+.alert-item.warning{border-left:3px solid var(--yellow)}
+.alert-item.info{border-left:3px solid var(--blue)}
+
+/* ── DONUT ── */
+.donut-area{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.donut-wrap{position:relative;width:160px;height:160px;flex-shrink:0}
+.donut-legend{flex:1;min-width:140px}
+.legend-item{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:11px}
+.legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.donut-hint{font-size:10px;color:var(--muted);text-align:center;margin-top:6px;font-style:italic}
+
+/* ── FULFIL ── */
+.fulfil-cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+.fulfil-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center}
+.fulfil-num{font-family:var(--font-kpi);font-size:36px;line-height:1}
+.pct-bar-wrap{margin:8px 0}
+.pct-bar-label{font-size:10px;color:var(--muted);margin-bottom:3px;display:flex;justify-content:space-between}
+.pct-bar{height:8px;background:var(--surface2);border-radius:4px;overflow:hidden}
+.pct-bar-fill{height:100%;border-radius:4px;transition:width .8s}
+.note{font-size:10px;color:var(--muted);font-style:italic;margin-top:6px}
+
+/* ── OVERDUE ── */
+td.overdue-high{color:var(--red);font-weight:700}
+td.overdue-med{color:var(--yellow);font-weight:700}
+
+/* ── MODAL ── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:1000;align-items:center;justify-content:center;padding:20px}
+.modal-overlay.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;width:100%;max-width:860px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,.6)}
+.modal-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.modal-title{font-size:14px;font-weight:700}
+.modal-meta{font-size:11px;color:var(--muted);margin-top:2px}
+.modal-close{background:var(--surface2);border:1px solid var(--border);color:var(--muted);width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:color .15s}
+.modal-close:hover{color:var(--text)}
+.modal-body{overflow-y:auto;padding:16px 20px;flex:1}
+.modal-summary{display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.modal-stat{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;min-width:100px}
+.modal-stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.modal-stat-val{font-family:var(--font-kpi);font-size:22px;margin-top:2px}
+.modal-filter{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.modal-filter input{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:6px;font-size:11px;outline:none;width:200px}
+.modal-filter input:focus{border-color:var(--blue)}
+.modal-filter select{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:6px;font-size:11px;outline:none;cursor:pointer}
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════
+     UPLOAD SCREEN
+════════════════════════════════════ -->
+<div id="uploadScreen">
+  <div class="upload-logo">Asung Trading <span>|</span> Open Orders Dashboard</div>
+
+  <div class="drop-zone" id="dropZone">
+    <input type="file" id="fileInput" accept=".xlsx,.csv">
+    <div class="drop-icon">📂</div>
+    <div class="drop-title">파일을 드래그하거나 클릭하여 업로드</div>
+    <div class="drop-sub">
+      Cin7 Core에서 내보낸 병합 파일을 선택하세요<br>
+      지원 형식: <strong>.xlsx</strong> / <strong>.csv</strong>
+    </div>
+  </div>
+
+  <div class="upload-specs">
+    <div class="spec-card">
+      <div class="spec-label">필수 컬럼</div>
+      <div class="spec-val">Source_Date, Order #<br>Order date, Customer<br>Location, Status<br>Order Progress, Quantity, Total</div>
+    </div>
+    <div class="spec-card">
+      <div class="spec-label">파일 형식</div>
+      <div class="spec-val">Merged_Daily_Orders<br>_Final.xlsx<br><br>날짜 포함 파일명도 가능</div>
+    </div>
+  </div>
+
+  <div class="upload-error" id="uploadError"></div>
+
+  <div class="loading-bar" id="loadingBar">
+    <div class="loading-bar-track"><div class="loading-bar-fill" id="loadingFill"></div></div>
+    <div class="loading-label" id="loadingLabel">파일 읽는 중…</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════
+     DASHBOARD
+════════════════════════════════════ -->
+<div id="dashboard">
+  <header>
+    <div>
+      <h1>📦 Asung Trading — Open Orders Dashboard</h1>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">
+        캐나다 뷰티·헤어케어 유통 | 최신 스냅샷: <strong id="hdrMaxDate" style="color:var(--text)"></strong>
+        | 분석 범위: <span id="hdrDateRange"></span>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="header-meta" id="hdrFile"></div>
+      <button class="btn-save" onclick="saveSnapshot()" id="btnSave">💾 HTML로 저장</button>
+      <button class="btn-reload" onclick="resetDashboard()">⟳ 다른 파일 열기</button>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" onclick="showTab(0)">📊 Overview</div>
+    <div class="tab" onclick="showTab(1)">📈 추이 분석</div>
+    <div class="tab" onclick="showTab(2)">⏸ On Hold</div>
+    <div class="tab" onclick="showTab(3)">⏱ Fulfilment Time</div>
+    <div class="tab" onclick="showTab(4)">👥 고객별</div>
+    <div class="tab" onclick="showTab(5)">🏙 Location</div>
+  </div>
+
+  <!-- TAB 0: OVERVIEW -->
+  <div class="pane active" id="pane0">
+    <div class="branch-row">
+      <div class="branch-section">
+        <div class="branch-title toronto">🔵 Toronto</div>
+        <div class="stat-row"><span class="lbl">오더 수</span><span class="val" id="t-orders"></span></div>
+        <div class="stat-row"><span class="lbl">총 수량</span><span class="val" id="t-qty"></span></div>
+        <div class="stat-row"><span class="lbl">총 금액</span><span class="val" id="t-amount"></span></div>
+        <div class="divider"></div>
+        <div class="stat-row"><span class="lbl">On Hold 건수</span><span class="val" id="t-oh-orders" style="color:var(--red)"></span></div>
+        <div class="stat-row"><span class="lbl">On Hold 수량</span><span class="val" id="t-oh-qty" style="color:var(--red)"></span></div>
+        <div class="stat-row"><span class="lbl">On Hold 금액</span><span class="val" id="t-oh-amount" style="color:var(--red)"></span></div>
+      </div>
+      <div class="branch-section">
+        <div class="branch-title edmonton">🟠 Edmonton</div>
+        <div class="stat-row"><span class="lbl">오더 수</span><span class="val" id="e-orders"></span></div>
+        <div class="stat-row"><span class="lbl">총 수량</span><span class="val" id="e-qty"></span></div>
+        <div class="stat-row"><span class="lbl">총 금액</span><span class="val" id="e-amount"></span></div>
+        <div class="divider"></div>
+        <div class="stat-row"><span class="lbl">On Hold 건수</span><span class="val" id="e-oh-orders" style="color:var(--red)"></span></div>
+        <div class="stat-row"><span class="lbl">On Hold 수량</span><span class="val" id="e-oh-qty" style="color:var(--red)"></span></div>
+        <div class="stat-row"><span class="lbl">On Hold 금액</span><span class="val" id="e-oh-amount" style="color:var(--red)"></span></div>
+      </div>
+    </div>
+    <div class="two-col">
+      <div class="chart-box">
+        <div class="chart-title">일별 오더수 + 금액 (이중축, 브랜치별)</div>
+        <div class="chart-wrap tall"><canvas id="chartOverviewMain"></canvas></div>
+      </div>
+      <div class="chart-box">
+        <div class="chart-title">최신일 Order Progress 분포</div>
+        <div style="padding:8px 0">
+          <div class="donut-area">
+            <div class="donut-wrap"><canvas id="chartDonut" style="cursor:pointer"></canvas></div>
+            <div class="donut-legend" id="donutLegend"></div>
+          </div>
+          <div class="donut-hint">💡 도넛 차트 항목 클릭 → 오더 상세 테이블</div>
+        </div>
+      </div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title">On Hold 수량 추이 (Toronto vs Edmonton)</div>
+      <div class="chart-wrap"><canvas id="chartOverviewOH"></canvas></div>
+    </div>
+    <div class="alerts-title">⚡ 인사이트 자동 감지</div>
+    <div id="alertsContainer"></div>
+
+    <!-- Finalized 지연 의심 테이블 -->
+    <div id="finalizedSlowSection" style="display:none;margin-top:20px">
+      <div class="alerts-title">🟡 3.Finalized 지연 의심 오더 — 브랜치 평균 리드타임 초과</div>
+      <div id="finalizedSlowMeta" style="font-size:11px;color:var(--muted);margin-bottom:10px"></div>
+      <div class="chart-box" style="padding:12px 16px">
+        <div class="tbl-wrap">
+          <table id="tblFinalizedSlow">
+            <thead><tr>
+              <th onclick="sortTable('tblFinalizedSlow',0)">Order #</th>
+              <th onclick="sortTable('tblFinalizedSlow',1)">고객명</th>
+              <th onclick="sortTable('tblFinalizedSlow',2)">브랜치</th>
+              <th onclick="sortTable('tblFinalizedSlow',3)">오더일</th>
+              <th onclick="sortTable('tblFinalizedSlow',4)">수량</th>
+              <th onclick="sortTable('tblFinalizedSlow',5)">금액</th>
+              <th onclick="sortTable('tblFinalizedSlow',6)">리드타임(일)</th>
+              <th onclick="sortTable('tblFinalizedSlow',7)">브랜치 평균(일)</th>
+              <th onclick="sortTable('tblFinalizedSlow',8)">초과(일)</th>
+            </tr></thead>
+            <tbody id="tbodyFinalizedSlow"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 1: TREND -->
+  <div class="pane" id="pane1">
+    <div class="chart-box">
+      <div class="chart-title">일별 오더수 (평균선 점선 포함)</div>
+      <div class="chart-wrap tall"><canvas id="chartTrendOrders"></canvas></div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title">일별 총금액 (평균선 점선 포함)</div>
+      <div class="chart-wrap tall"><canvas id="chartTrendAmount"></canvas></div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title">일별 총수량</div>
+      <div class="chart-wrap"><canvas id="chartTrendQty"></canvas></div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title">일별 상세 테이블</div>
+      <div class="tbl-wrap">
+        <table id="tblTrend">
+          <thead><tr>
+            <th onclick="sortTable('tblTrend',0)">날짜</th>
+            <th onclick="sortTable('tblTrend',1)">오더수</th>
+            <th onclick="sortTable('tblTrend',2)">총수량</th>
+            <th onclick="sortTable('tblTrend',3)">총금액</th>
+            <th onclick="sortTable('tblTrend',4)">Backordered 수량</th>
+            <th onclick="sortTable('tblTrend',5)">On Hold 수량</th>
+          </tr></thead>
+          <tbody id="tbodyTrend"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 2: ON HOLD -->
+  <div class="pane" id="pane2">
+    <div class="chart-box">
+      <div class="chart-title">On Hold 수량 — Toronto</div>
+      <div class="chart-wrap"><canvas id="chartOHT"></canvas></div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title">On Hold 수량 — Edmonton</div>
+      <div class="chart-wrap"><canvas id="chartOHE"></canvas></div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title">On Hold 수량 오버레이 (Toronto + Edmonton)</div>
+      <div class="chart-wrap"><canvas id="chartOHOverlay"></canvas></div>
+    </div>
+    <div class="two-col">
+      <div class="chart-box">
+        <div class="chart-title">On Hold 오더수 추이</div>
+        <div class="chart-wrap short"><canvas id="chartOHOrders"></canvas></div>
+      </div>
+      <div class="chart-box">
+        <div class="chart-title">On Hold 금액 추이</div>
+        <div class="chart-wrap short"><canvas id="chartOHAmount"></canvas></div>
+      </div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title">최신일 On Hold 오더 상세</div>
+      <div class="tbl-wrap">
+        <table id="tblOH">
+          <thead><tr>
+            <th onclick="sortTable('tblOH',0)">Order #</th>
+            <th onclick="sortTable('tblOH',1)">고객명</th>
+            <th onclick="sortTable('tblOH',2)">브랜치</th>
+            <th onclick="sortTable('tblOH',3)">오더일</th>
+            <th onclick="sortTable('tblOH',4)">수량</th>
+            <th onclick="sortTable('tblOH',5)">금액</th>
+          </tr></thead>
+          <tbody id="tbodyOH"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 3: FULFILMENT -->
+  <div class="pane" id="pane3">
+    <p class="note" style="margin-bottom:14px">⚠️ Fulfilment 소요일은 스냅샷 기반 추정치입니다. 오더별 첫 3.Finalized 스냅샷 날짜 − Order date로 산출되며 실제 출고일과 다를 수 있습니다.</p>
+    <div class="fulfil-cards">
+      <div class="fulfil-card" style="border-top:3px solid var(--blue)">
+        <div class="branch-title toronto" style="margin-bottom:8px">🔵 Toronto</div>
+        <div class="fulfil-num" id="fulfil-t-avg" style="color:var(--blue)"></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">평균 소요일 (근사치)</div>
+        <div class="pct-bar-wrap" style="margin-top:10px">
+          <div class="pct-bar-label"><span>7일 이내 처리율</span><span id="fulfil-t-pct" style="color:var(--green)"></span></div>
+          <div class="pct-bar"><div class="pct-bar-fill" id="fulfil-t-bar" style="background:var(--blue)"></div></div>
+        </div>
+        <div class="note">표본 수: <span id="fulfil-t-count"></span>건</div>
+      </div>
+      <div class="fulfil-card" style="border-top:3px solid var(--orange)">
+        <div class="branch-title edmonton" style="margin-bottom:8px">🟠 Edmonton</div>
+        <div class="fulfil-num" id="fulfil-e-avg" style="color:var(--orange)"></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">평균 소요일 (근사치)</div>
+        <div class="pct-bar-wrap" style="margin-top:10px">
+          <div class="pct-bar-label"><span>7일 이내 처리율</span><span id="fulfil-e-pct" style="color:var(--green)"></span></div>
+          <div class="pct-bar"><div class="pct-bar-fill" id="fulfil-e-bar" style="background:var(--orange)"></div></div>
+        </div>
+        <div class="note">표본 수: <span id="fulfil-e-count"></span>건</div>
+      </div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title">소요일 분포 버킷 비교 (브랜치별)</div>
+      <div class="chart-wrap"><canvas id="chartFulfilBucket"></canvas></div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title">주별 평균 Fulfilment 소요일 추이</div>
+      <div class="chart-wrap"><canvas id="chartFulfilWeekly"></canvas></div>
+    </div>
+  </div>
+
+  <!-- TAB 4: CUSTOMERS -->
+  <div class="pane" id="pane4">
+    <div class="chart-box">
+      <div class="chart-title">상위 15 고객 — 총금액 기준 (최신일)</div>
+      <div class="chart-wrap tall"><canvas id="chartCustAmount"></canvas></div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title">상위 15 고객 — 수량 기준</div>
+      <div class="chart-wrap tall"><canvas id="chartCustQty"></canvas></div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title">고객별 상세 테이블</div>
+      <div class="tbl-wrap">
+        <table id="tblCust">
+          <thead><tr>
+            <th onclick="sortTable('tblCust',0)">고객명</th>
+            <th onclick="sortTable('tblCust',1)">오더수</th>
+            <th onclick="sortTable('tblCust',2)">수량</th>
+            <th onclick="sortTable('tblCust',3)">금액</th>
+            <th onclick="sortTable('tblCust',4)">On Hold</th>
+          </tr></thead>
+          <tbody id="tbodyCust"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 5: LOCATION -->
+  <div class="pane" id="pane5">
+    <div class="chart-box">
+      <div class="chart-title">일별 오더수 비교 (Toronto vs Edmonton)</div>
+      <div class="chart-wrap tall"><canvas id="chartLocOrders"></canvas></div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title">일별 금액 비교</div>
+      <div class="chart-wrap tall"><canvas id="chartLocAmount"></canvas></div>
+    </div>
+    <div class="two-col">
+      <div class="chart-box">
+        <div class="chart-title">최신일 브랜치 비율 (오더수)</div>
+        <div style="padding:8px 0">
+          <div class="donut-area">
+            <div class="donut-wrap"><canvas id="chartLocDonut"></canvas></div>
+            <div class="donut-legend" id="locDonutLegend"></div>
+          </div>
+        </div>
+      </div>
+      <div class="chart-box">
+        <div class="chart-title">브랜치별 지표 비교</div>
+        <div style="padding:8px 0">
+          <div class="stat-row"><span class="lbl">평균 리드타임</span><span>
+            <span class="badge badge-t">Toronto</span> <span id="lt-t" style="font-weight:700"></span> &nbsp;
+            <span class="badge badge-e">Edmonton</span> <span id="lt-e" style="font-weight:700"></span>
+          </span></div>
+          <div class="stat-row" style="margin-top:6px"><span class="lbl">7일 이내 처리율</span><span>
+            <span class="badge badge-t">Toronto</span> <span id="pct7-t" style="font-weight:700;color:var(--green)"></span> &nbsp;
+            <span class="badge badge-e">Edmonton</span> <span id="pct7-e" style="font-weight:700;color:var(--yellow)"></span>
+          </span></div>
+          <div class="divider"></div>
+          <div class="stat-row"><span class="lbl">On Hold 수량 (최신일)</span><span>
+            <span class="badge badge-t">Toronto</span> <span id="oh-cmp-t" style="font-weight:700;color:var(--red)"></span> &nbsp;
+            <span class="badge badge-e">Edmonton</span> <span id="oh-cmp-e" style="font-weight:700;color:var(--red)"></span>
+          </span></div>
+          <div class="stat-row" style="margin-top:6px"><span class="lbl">On Hold 금액 (최신일)</span><span>
+            <span class="badge badge-t">Toronto</span> <span id="oh-cmp-t-amt" style="font-weight:700;color:var(--red)"></span> &nbsp;
+            <span class="badge badge-e">Edmonton</span> <span id="oh-cmp-e-amt" style="font-weight:700;color:var(--red)"></span>
+          </span></div>
+        </div>
+      </div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title">🔴 장기 미처리 오더 (리드타임 14일 이상)</div>
+      <div class="tbl-wrap">
+        <table id="tblOverdue">
+          <thead><tr>
+            <th onclick="sortTable('tblOverdue',0)">Order #</th>
+            <th onclick="sortTable('tblOverdue',1)">고객명</th>
+            <th onclick="sortTable('tblOverdue',2)">브랜치</th>
+            <th onclick="sortTable('tblOverdue',3)">Order Progress</th>
+            <th onclick="sortTable('tblOverdue',4)">리드타임(일)</th>
+            <th onclick="sortTable('tblOverdue',5)">수량</th>
+            <th onclick="sortTable('tblOverdue',6)">금액</th>
+          </tr></thead>
+          <tbody id="tbodyOverdue"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PROGRESS DETAIL MODAL -->
+<div class="modal-overlay" id="progressModal" onclick="closeModalOverlay(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modalTitle"></div>
+        <div class="modal-meta" id="modalMeta"></div>
+      </div>
+      <button class="modal-close" onclick="document.getElementById('progressModal').classList.remove('open')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-summary" id="modalSummary"></div>
+      <div class="modal-filter">
+        <input type="text" id="modalSearch" placeholder="고객명 / Order # 검색…" oninput="filterModalTable()">
+        <select id="modalBranch" onchange="filterModalTable()">
+          <option value="">전체 브랜치</option>
+          <option value="Toronto">🔵 Toronto</option>
+          <option value="Edmonton">🟠 Edmonton</option>
+        </select>
+      </div>
+      <div class="tbl-wrap">
+        <table id="tblModal">
+          <thead><tr>
+            <th onclick="sortTable('tblModal',0)">Order #</th>
+            <th onclick="sortTable('tblModal',1)">고객명</th>
+            <th onclick="sortTable('tblModal',2)">브랜치</th>
+            <th onclick="sortTable('tblModal',3)">오더일</th>
+            <th onclick="sortTable('tblModal',4)">Status</th>
+            <th onclick="sortTable('tblModal',5)">수량</th>
+            <th onclick="sortTable('tblModal',6)">금액</th>
+            <th onclick="sortTable('tblModal',7)">리드타임</th>
+          </tr></thead>
+          <tbody id="tbodyModal"></tbody>
+        </table>
+      </div>
+      <div id="modalEmpty" style="display:none;text-align:center;padding:24px;color:var(--muted);font-size:12px">검색 결과 없음</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════
+//  GLOBALS
+// ════════════════════════════════════════════
+const C = {t:'#4f8ef7',e:'#f7934f',g:'#4ff79e',y:'#f7d94f',r:'#f74f6e',m:'#6b738a'};
+const LOC_MAP = {'Asung Trading Inc.':'Toronto','Asung - Edmonton':'Edmonton'};
+const PCOLORS = {'1.New':C.g,'2.Release to WMS':C.y,'3.Finalized':C.t,'On Hold':C.r};
+const charts = {};
+const sortState = {};
+let G = {}; // computed globals after file load
+let _modalAllRows = [];
+
+// ════════════════════════════════════════════
+//  FORMATTING
+// ════════════════════════════════════════════
+const fmt  = n => '$' + Number(n).toLocaleString('en-CA',{minimumFractionDigits:0,maximumFractionDigits:0});
+const fmtN = n => Number(n).toLocaleString('en-CA');
+const mmdd = s => s.slice(5);
+
+// ════════════════════════════════════════════
+//  FILE UPLOAD HANDLING
+// ════════════════════════════════════════════
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files[0]) handleFile(e.target.files[0]);
+});
+
+function setLoading(pct, label) {
+  const bar = document.getElementById('loadingBar');
+  bar.style.display = 'block';
+  document.getElementById('loadingFill').style.width = pct + '%';
+  document.getElementById('loadingLabel').textContent = label;
+}
+function showError(msg) {
+  const el = document.getElementById('uploadError');
+  el.textContent = '⚠️ ' + msg;
+  el.style.display = 'block';
+  document.getElementById('loadingBar').style.display = 'none';
+}
+
+function handleFile(file) {
+  document.getElementById('uploadError').style.display = 'none';
+  setLoading(10, '파일 읽는 중…');
+
+  const ext = file.name.split('.').pop().toLowerCase();
+  const reader = new FileReader();
+
+  reader.onload = e => {
+    try {
+      setLoading(40, '데이터 파싱 중…');
+      let rows;
+      if (ext === 'csv') {
+        rows = parseCSV(e.target.result);
+      } else {
+        const wb = XLSX.read(e.target.result, {type:'array', cellDates:true});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(ws, {raw:false, dateNF:'yyyy-mm-dd'});
+      }
+      setLoading(70, '집계 계산 중…');
+      const ok = processData(rows, file.name);
+      if (!ok) return;
+      setLoading(90, '차트 렌더링 중…');
+      setTimeout(() => {
+        renderDashboard();
+        document.getElementById('loadingBar').style.display = 'none';
+        document.getElementById('uploadScreen').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+      }, 100);
+    } catch(err) {
+      showError('파일 처리 중 오류: ' + err.message);
+    }
+  };
+  reader.onerror = () => showError('파일을 읽을 수 없습니다.');
+
+  if (ext === 'csv') reader.readAsText(file, 'UTF-8');
+  else reader.readAsArrayBuffer(file);
+}
+
+function parseCSV(text) {
+  const lines = text.split(/\r?\n/);
+  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,''));
+  return lines.slice(1).filter(l=>l.trim()).map(line => {
+    const vals = line.match(/(".*?"|[^,]+|(?<=,)(?=,)|^(?=,)|(?<=,)$)/g) || [];
+    const obj = {};
+    headers.forEach((h,i) => { obj[h] = (vals[i]||'').replace(/^"|"$/g,'').trim(); });
+    return obj;
+  });
+}
+
+// ════════════════════════════════════════════
+//  DATA PROCESSING
+// ════════════════════════════════════════════
+function parseDate(val) {
+  if (!val) return null;
+  if (val instanceof Date) return val;
+  const s = String(val).trim();
+  // yyyy-mm-dd or yyyy/mm/dd
+  const m = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+  if (m) return new Date(+m[1], +m[2]-1, +m[3]);
+  return new Date(s);
+}
+function dateStr(d) {
+  if (!d) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const dy = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${dy}`;
+}
+
+function processData(rows, fileName) {
+  // Validate required columns
+  const required = ['Source_Date','Order #','Order date','Customer','Location','Status','Order Progress','Quantity','Total'];
+  const cols = Object.keys(rows[0] || {});
+  const missing = required.filter(r => !cols.includes(r));
+  if (missing.length) { showError('필수 컬럼 누락: ' + missing.join(', ')); return false; }
+
+  // Parse & normalize
+  const data = rows.map(r => {
+    const sd = parseDate(r['Source_Date']);
+    const od = parseDate(r['Order date']);
+    const branch = LOC_MAP[r['Location']] || r['Location'] || '기타';
+    const lt = (sd && od) ? Math.round((sd - od) / 86400000) : 0;
+    return {
+      sourceDate: sd,
+      sourceDateStr: dateStr(sd),
+      orderNum: String(r['Order #'] || '').trim(),
+      orderDate: od,
+      orderDateStr: dateStr(od),
+      customer: String(r['Customer'] || '').trim(),
+      location: r['Location'],
+      branch,
+      status: String(r['Status'] || '').trim(),
+      progress: String(r['Order Progress'] || '').trim(),
+      qty: parseFloat(r['Quantity']) || 0,
+      total: parseFloat(r['Total']) || 0,
+      leadTime: lt,
+    };
+  }).filter(r => r.sourceDate && !isNaN(r.sourceDate));
+
+  if (!data.length) { showError('유효한 데이터가 없습니다.'); return false; }
+
+  // Date range
+  const allDates = [...new Set(data.map(r => r.sourceDateStr))].sort();
+  const maxDate = allDates[allDates.length - 1];
+  const minDate = allDates[0];
+
+  // Latest day
+  const latest = data.filter(r => r.sourceDateStr === maxDate);
+
+  // Daily aggregation
+  const dailyMap = {};
+  allDates.forEach(d => { dailyMap[d] = { all:{orders:new Set(),qty:0,amount:0}, t:{orders:new Set(),qty:0,amount:0}, e:{orders:new Set(),qty:0,amount:0}, ohT:{orders:new Set(),qty:0,amount:0}, ohE:{orders:new Set(),qty:0,amount:0}, ohAll:{orders:new Set(),qty:0,amount:0}, boQty:0, progress:{} }; });
+
+  data.forEach(r => {
+    const d = dailyMap[r.sourceDateStr];
+    if (!d) return;
+    d.all.orders.add(r.orderNum); d.all.qty += r.qty; d.all.amount += r.total;
+    if (r.branch === 'Toronto') { d.t.orders.add(r.orderNum); d.t.qty += r.qty; d.t.amount += r.total; }
+    else if (r.branch === 'Edmonton') { d.e.orders.add(r.orderNum); d.e.qty += r.qty; d.e.amount += r.total; }
+    if (r.status === 'Backordered') d.boQty += r.qty;
+    if (r.progress === 'On Hold') {
+      d.ohAll.orders.add(r.orderNum); d.ohAll.qty += r.qty; d.ohAll.amount += r.total;
+      if (r.branch === 'Toronto') { d.ohT.orders.add(r.orderNum); d.ohT.qty += r.qty; d.ohT.amount += r.total; }
+      else if (r.branch === 'Edmonton') { d.ohE.orders.add(r.orderNum); d.ohE.qty += r.qty; d.ohE.amount += r.total; }
+    }
+    d.progress[r.progress] = (d.progress[r.progress] || new Set());
+    d.progress[r.progress].add(r.orderNum);
+  });
+
+  // Flatten daily
+  const daily = {};
+  allDates.forEach(d => {
+    const x = dailyMap[d];
+    daily[d] = {
+      orders: x.all.orders.size, qty: x.all.qty, amount: x.all.amount,
+      t: {orders: x.t.orders.size, qty: x.t.qty, amount: x.t.amount},
+      e: {orders: x.e.orders.size, qty: x.e.qty, amount: x.e.amount},
+      ohT: {orders: x.ohT.orders.size, qty: x.ohT.qty, amount: x.ohT.amount},
+      ohE: {orders: x.ohE.orders.size, qty: x.ohE.qty, amount: x.ohE.amount},
+      ohAll: {orders: x.ohAll.orders.size, qty: x.ohAll.qty, amount: x.ohAll.amount},
+      boQty: x.boQty,
+      progress: Object.fromEntries(Object.entries(x.progress).map(([k,v])=>[k,v.size])),
+    };
+  });
+
+  // KPI latest
+  const latT = latest.filter(r=>r.branch==='Toronto');
+  const latE = latest.filter(r=>r.branch==='Edmonton');
+  const latOHT = latT.filter(r=>r.progress==='On Hold');
+  const latOHE = latE.filter(r=>r.progress==='On Hold');
+  const kpi = {
+    Toronto: { orders: new Set(latT.map(r=>r.orderNum)).size, qty: latT.reduce((s,r)=>s+r.qty,0), amount: latT.reduce((s,r)=>s+r.total,0), oh_orders: new Set(latOHT.map(r=>r.orderNum)).size, oh_qty: latOHT.reduce((s,r)=>s+r.qty,0), oh_amount: latOHT.reduce((s,r)=>s+r.total,0) },
+    Edmonton: { orders: new Set(latE.map(r=>r.orderNum)).size, qty: latE.reduce((s,r)=>s+r.qty,0), amount: latE.reduce((s,r)=>s+r.total,0), oh_orders: new Set(latOHE.map(r=>r.orderNum)).size, oh_qty: latOHE.reduce((s,r)=>s+r.qty,0), oh_amount: latOHE.reduce((s,r)=>s+r.total,0) },
+  };
+
+  // Progress distribution latest + per-progress order list
+  const progressOrders = {};
+  latest.forEach(r => {
+    const p = r.progress || '(미분류)';
+    if (!progressOrders[p]) progressOrders[p] = [];
+    progressOrders[p].push(r);
+  });
+  const progressDist = Object.fromEntries(Object.entries(progressOrders).map(([k,v])=>[k, new Set(v.map(r=>r.orderNum)).size]));
+
+  // Fulfilment time
+  const firstFin = {};
+  data.filter(r=>r.progress==='3.Finalized').forEach(r => {
+    if (!firstFin[r.orderNum] || r.sourceDate < firstFin[r.orderNum].date)
+      firstFin[r.orderNum] = {date: r.sourceDate, orderDate: r.orderDate, branch: r.branch};
+  });
+  const fulfilRows = Object.entries(firstFin).map(([num,v])=>({orderNum:num, days: Math.round((v.date-v.orderDate)/86400000), branch:v.branch})).filter(r=>r.days>=0);
+
+  const buckets = ['0-2일','3-5일','6-10일','11일+'];
+  const bucket = d => d<=2?'0-2일':d<=5?'3-5일':d<=10?'6-10일':'11일+';
+  const fulfilStats = {};
+  ['Toronto','Edmonton'].forEach(br => {
+    const sub = fulfilRows.filter(r=>r.branch===br);
+    if (!sub.length) { fulfilStats[br] = {avg:0,within7:0,count:0,buckets:{}}; return; }
+    fulfilStats[br] = {
+      avg: +(sub.reduce((s,r)=>s+r.days,0)/sub.length).toFixed(1),
+      within7: +((sub.filter(r=>r.days<=7).length/sub.length)*100).toFixed(1),
+      count: sub.length,
+      buckets: Object.fromEntries(buckets.map(b=>[b,sub.filter(r=>bucket(r.days)===b).length])),
+    };
+  });
+
+  // Weekly fulfilment
+  const weeklyFulfil = {};
+  fulfilRows.forEach(r => {
+    const d = data.find(x=>x.orderNum===r.orderNum&&x.progress==='3.Finalized');
+    if (!d) return;
+    const sd = firstFin[r.orderNum].date;
+    const wk = 'W' + getWeek(sd);
+    if (!weeklyFulfil[wk]) weeklyFulfil[wk] = {t:[],e:[]};
+    if (r.branch==='Toronto') weeklyFulfil[wk].t.push(r.days);
+    else weeklyFulfil[wk].e.push(r.days);
+  });
+  const weekLabels = Object.keys(weeklyFulfil).sort();
+  const avg = arr => arr.length ? +(arr.reduce((s,v)=>s+v,0)/arr.length).toFixed(1) : null;
+  const wtVals = weekLabels.map(w => avg(weeklyFulfil[w].t));
+  const weVals = weekLabels.map(w => avg(weeklyFulfil[w].e));
+
+  // Top 15 customers
+  const custMap = {};
+  latest.forEach(r => {
+    if (!custMap[r.customer]) custMap[r.customer] = {orders:new Set(),qty:0,amount:0,onhold:false};
+    custMap[r.customer].orders.add(r.orderNum);
+    custMap[r.customer].qty += r.qty;
+    custMap[r.customer].amount += r.total;
+    if (r.progress==='On Hold') custMap[r.customer].onhold = true;
+  });
+  const top15 = Object.entries(custMap).map(([k,v])=>({customer:k,orders:v.orders.size,qty:v.qty,amount:+v.amount.toFixed(2),onhold:v.onhold})).sort((a,b)=>b.amount-a.amount).slice(0,15);
+
+  // OH detail latest
+  const ohDetail = latest.filter(r=>r.progress==='On Hold').map(r=>({...r})).sort((a,b)=>b.total-a.total);
+
+  // Overdue (14d+)
+  const overdue = latest.filter(r=>r.leadTime>=14).sort((a,b)=>b.leadTime-a.leadTime);
+
+  // Lead time stats
+  const ltT = data.filter(r=>r.branch==='Toronto').map(r=>r.leadTime);
+  const ltE = data.filter(r=>r.branch==='Edmonton').map(r=>r.leadTime);
+  const avgLT = {Toronto: ltT.length?+(ltT.reduce((s,v)=>s+v,0)/ltT.length).toFixed(1):0, Edmonton: ltE.length?+(ltE.reduce((s,v)=>s+v,0)/ltE.length).toFixed(1):0};
+  const pct7 = {Toronto: ltT.length?+((ltT.filter(v=>v<=7).length/ltT.length)*100).toFixed(1):0, Edmonton: ltE.length?+((ltE.filter(v=>v<=7).length/ltE.length).toFixed(1)*100):0};
+
+  // 3.Finalized 오더 중 브랜치 평균 리드타임 초과 건 (최신일 기준)
+  const finalizedSlow = latest
+    .filter(r => r.progress === '3.Finalized')
+    .map(r => {
+      const brAvg = r.branch === 'Toronto' ? avgLT.Toronto : avgLT.Edmonton;
+      return { ...r, branchAvgLT: brAvg, excessDays: +(r.leadTime - brAvg).toFixed(1) };
+    })
+    .filter(r => r.excessDays > 0)
+    .sort((a, b) => b.excessDays - a.excessDays);
+
+  // Alerts
+  const alerts = [];
+  if (allDates.length>=2) {
+    const prev = daily[allDates[allDates.length-2]];
+    const curr = daily[allDates[allDates.length-1]];
+    const prevOH = prev.ohAll.qty, currOH = curr.ohAll.qty;
+    if (prevOH>0) {
+      const chg = (currOH-prevOH)/prevOH;
+      if (chg>=0.3) alerts.push({type:'danger',icon:'🔴',msg:`On Hold 급증: 전일 대비 ${(chg*100).toFixed(1)}% 증가 (${fmtN(prevOH)} → ${fmtN(currOH)}개)`});
+      else if (chg<=-0.3) alerts.push({type:'success',icon:'🟢',msg:`On Hold 급감: 전일 대비 ${(Math.abs(chg)*100).toFixed(1)}% 감소 (${fmtN(prevOH)} → ${fmtN(currOH)}개)`});
+    }
+    const prevOrd = prev.orders, currOrd = curr.orders;
+    if (prevOrd>0 && (currOrd-prevOrd)/prevOrd>=0.3)
+      alerts.push({type:'warning',icon:'🔴',msg:`오더 급증: 전일 대비 ${(((currOrd-prevOrd)/prevOrd)*100).toFixed(1)}% 증가`});
+  }
+  if (overdue.length) alerts.push({type:'danger',icon:'🔴',msg:`장기 미처리: 리드타임 14일 이상 오더 ${overdue.length}건`});
+
+  // Finalized slow alert
+  if (finalizedSlow.length) {
+    const tSlow = finalizedSlow.filter(r=>r.branch==='Toronto').length;
+    const eSlow = finalizedSlow.filter(r=>r.branch==='Edmonton').length;
+    const parts = [];
+    if (tSlow) parts.push(`Toronto ${tSlow}건 (평균 ${avgLT.Toronto}일 초과)`);
+    if (eSlow) parts.push(`Edmonton ${eSlow}건 (평균 ${avgLT.Edmonton}일 초과)`);
+    alerts.push({type:'warning', icon:'🟡', msg:`3.Finalized 지연 의심: 브랜치 평균 리드타임 초과 오더 ${finalizedSlow.length}건 — ${parts.join(' / ')}`});
+  }
+
+  // Edmonton ratio
+  const edRatios = allDates.map(d => daily[d].orders ? daily[d].e.orders/daily[d].orders : 0);
+  const avgEdR = edRatios.slice(0,-1).reduce((s,v)=>s+v,0) / Math.max(edRatios.slice(0,-1).length,1);
+  const currEdR = edRatios[edRatios.length-1];
+  if (currEdR - avgEdR >= 0.1) alerts.push({type:'info',icon:'🟡',msg:`Edmonton 비율 증가: ${(currEdR*100).toFixed(1)}% (평균 ${(avgEdR*100).toFixed(1)}%)`});
+
+  // Invoicing check
+  const invoicing = latest.filter(r=>r.status==='Invoicing'||r.progress==='4.Invoiced');
+  if (invoicing.length) alerts.push({type:'danger',icon:'🔴',msg:`Invoicing 상태 미출고 오더: ${invoicing.length}건 — 별도 확인 필요`});
+
+  if (!alerts.length) alerts.push({type:'ok',icon:'✅',msg:'현재 감지된 이슈 없음'});
+
+  // Store in global
+  G = {
+    dates: allDates, maxDate, minDate, daily, kpi,
+    progressDist, progressOrders,
+    fulfilStats, weekLabels, wtVals, weVals,
+    top15, ohDetail, overdue, avgLT, pct7, alerts,
+    finalizedSlow,
+    fileName,
+  };
+  return true;
+}
+
+function getWeek(d) {
+  const onejan = new Date(d.getFullYear(),0,1);
+  return Math.ceil((((d-onejan)/86400000)+onejan.getDay()+1)/7);
+}
+
+// ════════════════════════════════════════════
+//  RENDER DASHBOARD
+// ════════════════════════════════════════════
+function renderDashboard() {
+  const { dates, maxDate, minDate, daily, kpi, progressDist, progressOrders,
+    fulfilStats, weekLabels, wtVals, weVals, top15, ohDetail, overdue,
+    avgLT, pct7, alerts, fileName } = G;
+
+  // Header
+  document.getElementById('hdrMaxDate').textContent = maxDate;
+  document.getElementById('hdrDateRange').textContent = `${minDate} ~ ${maxDate} (${dates.length}일)`;
+  document.getElementById('hdrFile').textContent = fileName;
+
+  // KPI
+  document.getElementById('t-orders').textContent = fmtN(kpi.Toronto.orders);
+  document.getElementById('t-qty').textContent = fmtN(kpi.Toronto.qty);
+  document.getElementById('t-amount').textContent = fmt(kpi.Toronto.amount);
+  document.getElementById('t-oh-orders').textContent = kpi.Toronto.oh_orders + '건';
+  document.getElementById('t-oh-qty').textContent = fmtN(kpi.Toronto.oh_qty);
+  document.getElementById('t-oh-amount').textContent = fmt(kpi.Toronto.oh_amount);
+  document.getElementById('e-orders').textContent = fmtN(kpi.Edmonton.orders);
+  document.getElementById('e-qty').textContent = fmtN(kpi.Edmonton.qty);
+  document.getElementById('e-amount').textContent = fmt(kpi.Edmonton.amount);
+  document.getElementById('e-oh-orders').textContent = kpi.Edmonton.oh_orders + '건';
+  document.getElementById('e-oh-qty').textContent = fmtN(kpi.Edmonton.oh_qty);
+  document.getElementById('e-oh-amount').textContent = fmt(kpi.Edmonton.oh_amount);
+
+  // Alerts
+  document.getElementById('alertsContainer').innerHTML = alerts.map(a =>
+    `<div class="alert-item ${a.type}"><span style="font-size:16px">${a.icon}</span><span>${a.msg}</span></div>`
+  ).join('');
+
+  // Finalized Slow table
+  const { finalizedSlow } = G;
+  const slowSection = document.getElementById('finalizedSlowSection');
+  if (finalizedSlow.length > 0) {
+    slowSection.style.display = 'block';
+    const tSlow = finalizedSlow.filter(r=>r.branch==='Toronto');
+    const eSlow = finalizedSlow.filter(r=>r.branch==='Edmonton');
+    document.getElementById('finalizedSlowMeta').innerHTML =
+      `전체 <strong style="color:var(--yellow)">${finalizedSlow.length}건</strong> &nbsp;|&nbsp; ` +
+      `<span class="badge badge-t">Toronto</span> ${tSlow.length}건 (브랜치 평균 ${avgLT.Toronto}일) &nbsp; ` +
+      `<span class="badge badge-e">Edmonton</span> ${eSlow.length}건 (브랜치 평균 ${avgLT.Edmonton}일)`;
+    document.getElementById('tbodyFinalizedSlow').innerHTML = finalizedSlow.map(r => {
+      const exClass = r.excessDays >= 14 ? 'overdue-high' : r.excessDays >= 7 ? 'overdue-med' : '';
+      return `<tr>
+        <td style="font-family:var(--font-mono);white-space:nowrap">${r.orderNum}</td>
+        <td>${r.customer}</td>
+        <td><span class="tag ${r.branch==='Toronto'?'tag-t':'tag-e'}">${r.branch}</span></td>
+        <td style="white-space:nowrap">${r.orderDateStr}</td>
+        <td>${fmtN(r.qty)}</td>
+        <td style="white-space:nowrap">${fmt(r.total)}</td>
+        <td>${r.leadTime}일</td>
+        <td style="color:var(--muted)">${r.branchAvgLT}일</td>
+        <td class="${exClass}">+${r.excessDays}일</td>
+      </tr>`;
+    }).join('');
+  } else {
+    slowSection.style.display = 'none';
+  }
+
+  // Tab 0 charts
+  const LABELS = dates.map(mmdd);
+  const tOrders = dates.map(d=>daily[d].t.orders);
+  const eOrders = dates.map(d=>daily[d].e.orders);
+  const tAmount = dates.map(d=>daily[d].t.amount);
+  const eAmount = dates.map(d=>daily[d].e.amount);
+  const ohTQty  = dates.map(d=>daily[d].ohT.qty);
+  const ohEQty  = dates.map(d=>daily[d].ohE.qty);
+  const ohTOrd  = dates.map(d=>daily[d].ohT.orders);
+  const ohEOrd  = dates.map(d=>daily[d].ohE.orders);
+  const ohTAmt  = dates.map(d=>daily[d].ohT.amount);
+  const ohEAmt  = dates.map(d=>daily[d].ohE.amount);
+  const allOrders = dates.map(d=>daily[d].orders);
+  const allAmount = dates.map(d=>daily[d].amount);
+  const allQty    = dates.map(d=>daily[d].qty);
+  const boQty     = dates.map(d=>daily[d].boQty);
+  const avgOrd = allOrders.reduce((s,v)=>s+v,0)/allOrders.length;
+  const avgAmt = allAmount.reduce((s,v)=>s+v,0)/allAmount.length;
+
+  mkChart('chartOverviewMain','line',{labels:LABELS,datasets:[
+    ld('Toronto 오더수',tOrders,C.t,false,'y'),ld('Edmonton 오더수',eOrders,C.e,false,'y'),
+    {...ld('Toronto 금액',tAmount,C.t+'88',false,'y2'),borderDash:[3,3],yAxisID:'y2'},
+    {...ld('Edmonton 금액',eAmount,C.e+'88',false,'y2'),borderDash:[3,3],yAxisID:'y2'},
+  ]}, dualOpts());
+
+  // Donut
+  const pKeys = Object.keys(progressDist);
+  mkChart('chartDonut','doughnut',{
+    labels:pKeys,
+    datasets:[{data:pKeys.map(k=>progressDist[k]),backgroundColor:pKeys.map(k=>PCOLORS[k]||C.m),borderWidth:0,hoverOffset:6}]
+  },{responsive:true,maintainAspectRatio:false,cutout:'65%',
+    plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.parsed}건`}}},
+    onClick:(evt,els)=>{ if(els.length) openProgressModal(pKeys[els[0].index], progressOrders); }
+  });
+  document.getElementById('donutLegend').innerHTML = pKeys.map(k=>`
+    <div class="legend-item" style="cursor:${progressOrders[k]?'pointer':'default'}" onclick="openProgressModal('${k.replace(/'/g,"\\'")}', G.progressOrders)">
+      <div class="legend-dot" style="background:${PCOLORS[k]||C.m}"></div>
+      <span>${k}: <strong>${progressDist[k]}</strong>건${progressOrders[k]?' <span style="font-size:9px;color:var(--muted)">(클릭)</span>':''}</span>
+    </div>`).join('');
+
+  mkChart('chartOverviewOH','line',{labels:LABELS,datasets:[
+    ld('Toronto',ohTQty,C.t,true),ld('Edmonton',ohEQty,C.e,true)
+  ]},baseOpts('수량',null,v=>fmtN(v)));
+
+  // Tab 1
+  mkChart('chartTrendOrders','line',{labels:LABELS,datasets:[
+    ld('Toronto',tOrders,C.t),ld('Edmonton',eOrders,C.e),
+    {...ld('전체 평균',dates.map(()=>+avgOrd.toFixed(1)),C.m),borderDash:[5,5],pointRadius:0}
+  ]},baseOpts('오더수'));
+  mkChart('chartTrendAmount','line',{labels:LABELS,datasets:[
+    ld('Toronto',tAmount,C.t),ld('Edmonton',eAmount,C.e),
+    {...ld('전체 평균',dates.map(()=>+avgAmt.toFixed(0)),C.m),borderDash:[5,5],pointRadius:0}
+  ]},baseOpts('금액($)',null,v=>fmt(v)));
+  mkChart('chartTrendQty','line',{labels:LABELS,datasets:[
+    ld('Toronto',dates.map(d=>daily[d].t.qty),C.t),ld('Edmonton',dates.map(d=>daily[d].e.qty),C.e)
+  ]},baseOpts('수량'));
+  document.getElementById('tbodyTrend').innerHTML = dates.map((d,i)=>{
+    const ohQty = ohTQty[i]+ohEQty[i];
+    return `<tr><td>${d}</td><td>${fmtN(allOrders[i])}</td><td>${fmtN(allQty[i])}</td><td>${fmt(allAmount[i])}</td><td>${fmtN(boQty[i])}</td>
+    <td style="color:${ohQty>1000?'var(--red)':ohQty>300?'var(--yellow)':'inherit'}">${fmtN(ohQty)}</td></tr>`;
+  }).join('');
+
+  // Tab 2 - On Hold
+  mkChart('chartOHT','line',{labels:LABELS,datasets:[ld('Toronto On Hold 수량',ohTQty,C.t,true)]},baseOpts('수량'));
+  mkChart('chartOHE','line',{labels:LABELS,datasets:[ld('Edmonton On Hold 수량',ohEQty,C.e,true)]},baseOpts('수량'));
+  mkChart('chartOHOverlay','line',{labels:LABELS,datasets:[ld('Toronto',ohTQty,C.t),ld('Edmonton',ohEQty,C.e)]},baseOpts('수량'));
+  mkChart('chartOHOrders','line',{labels:LABELS,datasets:[ld('Toronto',ohTOrd,C.t),ld('Edmonton',ohEOrd,C.e)]},baseOpts('건수'));
+  mkChart('chartOHAmount','line',{labels:LABELS,datasets:[ld('Toronto',ohTAmt,C.t),ld('Edmonton',ohEAmt,C.e)]},baseOpts('금액($)',null,v=>fmt(v)));
+  document.getElementById('tbodyOH').innerHTML = ohDetail.map(r=>`<tr>
+    <td style="font-family:var(--font-mono)">${r.orderNum}</td><td>${r.customer}</td>
+    <td><span class="tag ${r.branch==='Toronto'?'tag-t':'tag-e'}">${r.branch}</span></td>
+    <td>${r.orderDateStr}</td><td>${fmtN(r.qty)}</td><td>${fmt(r.total)}</td>
+  </tr>`).join('');
+
+  // Tab 3 - Fulfilment
+  document.getElementById('fulfil-t-avg').textContent = fulfilStats.Toronto?.avg + '일';
+  document.getElementById('fulfil-t-pct').textContent = fulfilStats.Toronto?.within7 + '%';
+  document.getElementById('fulfil-t-bar').style.width = (fulfilStats.Toronto?.within7||0) + '%';
+  document.getElementById('fulfil-t-count').textContent = fulfilStats.Toronto?.count || 0;
+  document.getElementById('fulfil-e-avg').textContent = fulfilStats.Edmonton?.avg + '일';
+  document.getElementById('fulfil-e-pct').textContent = fulfilStats.Edmonton?.within7 + '%';
+  document.getElementById('fulfil-e-bar').style.width = (fulfilStats.Edmonton?.within7||0) + '%';
+  document.getElementById('fulfil-e-count').textContent = fulfilStats.Edmonton?.count || 0;
+  const buckets = ['0-2일','3-5일','6-10일','11일+'];
+  mkChart('chartFulfilBucket','bar',{labels:buckets,datasets:[
+    bd('Toronto',buckets.map(b=>fulfilStats.Toronto?.buckets[b]||0),C.t),
+    bd('Edmonton',buckets.map(b=>fulfilStats.Edmonton?.buckets[b]||0),C.e),
+  ]},baseOpts('건수'));
+  mkChart('chartFulfilWeekly','line',{labels:weekLabels,datasets:[
+    ld('Toronto',wtVals,C.t),ld('Edmonton',weVals,C.e)
+  ]},baseOpts('평균 소요일'));
+
+  // Tab 4 - Customers
+  const custNames = top15.map(c=>c.customer.length>22?c.customer.slice(0,22)+'…':c.customer);
+  const custAmts = top15.map(c=>c.amount);
+  const custQtys = top15.map(c=>c.qty);
+  const hOpts = yLabel => { const o=baseOpts(yLabel); o.indexAxis='y'; o.scales.x.ticks.callback=yLabel.includes('$')?v=>fmt(v):v=>fmtN(v); return o; };
+  mkChart('chartCustAmount','bar',{labels:custNames,datasets:[bd('총금액',custAmts,C.t)]},hOpts('금액($)'));
+  mkChart('chartCustQty','bar',{labels:custNames,datasets:[bd('수량',custQtys,C.e)]},hOpts('수량'));
+  document.getElementById('tbodyCust').innerHTML = top15.map(r=>`<tr>
+    <td>${r.customer}</td><td>${r.orders}</td><td>${fmtN(r.qty)}</td><td>${fmt(r.amount)}</td>
+    <td>${r.onhold?'<span class="tag tag-hold">On Hold</span>':'<span class="badge badge-ok">정상</span>'}</td>
+  </tr>`).join('');
+
+  // Tab 5 - Location
+  mkChart('chartLocOrders','line',{labels:LABELS,datasets:[ld('Toronto',tOrders,C.t),ld('Edmonton',eOrders,C.e)]},baseOpts('오더수'));
+  mkChart('chartLocAmount','line',{labels:LABELS,datasets:[ld('Toronto',tAmount,C.t),ld('Edmonton',eAmount,C.e)]},baseOpts('금액($)',null,v=>fmt(v)));
+  const tO=kpi.Toronto.orders,eO=kpi.Edmonton.orders;
+  mkChart('chartLocDonut','doughnut',{labels:['Toronto','Edmonton'],datasets:[{data:[tO,eO],backgroundColor:[C.t,C.e],borderWidth:0}]},
+    {responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.parsed}건 (${(ctx.parsed/(tO+eO)*100).toFixed(1)}%)`}}}});
+  document.getElementById('locDonutLegend').innerHTML=`
+    <div class="legend-item"><div class="legend-dot" style="background:${C.t}"></div><span>Toronto: <strong>${tO}</strong>건 (${(tO/(tO+eO)*100).toFixed(1)}%)</span></div>
+    <div class="legend-item"><div class="legend-dot" style="background:${C.e}"></div><span>Edmonton: <strong>${eO}</strong>건 (${(eO/(tO+eO)*100).toFixed(1)}%)</span></div>`;
+  document.getElementById('lt-t').textContent = avgLT.Toronto + '일';
+  document.getElementById('lt-e').textContent = avgLT.Edmonton + '일';
+  document.getElementById('pct7-t').textContent = pct7.Toronto + '%';
+  document.getElementById('pct7-e').textContent = pct7.Edmonton + '%';
+  document.getElementById('oh-cmp-t').textContent = fmtN(kpi.Toronto.oh_qty) + '개';
+  document.getElementById('oh-cmp-e').textContent = fmtN(kpi.Edmonton.oh_qty) + '개';
+  document.getElementById('oh-cmp-t-amt').textContent = fmt(kpi.Toronto.oh_amount);
+  document.getElementById('oh-cmp-e-amt').textContent = fmt(kpi.Edmonton.oh_amount);
+  const pTag = p => ({On_Hold:'hold','1.New':'new','3.Finalized':'fin','2.Release to WMS':'wms'})[p.replace(' ','_')]||'';
+  document.getElementById('tbodyOverdue').innerHTML = overdue.map(r=>`<tr>
+    <td style="font-family:var(--font-mono)">${r.orderNum}</td><td>${r.customer}</td>
+    <td><span class="tag ${r.branch==='Toronto'?'tag-t':'tag-e'}">${r.branch}</span></td>
+    <td><span class="tag tag-${pTag(r.progress)}">${r.progress}</span></td>
+    <td class="${r.leadTime>=60?'overdue-high':r.leadTime>=21?'overdue-med':''}">${r.leadTime}일</td>
+    <td>${fmtN(r.qty)}</td><td>${fmt(r.total)}</td>
+  </tr>`).join('');
+}
+
+// ════════════════════════════════════════════
+//  CHART HELPERS
+// ════════════════════════════════════════════
+const gridColor = '#252a38';
+function baseOpts(yLabel, y2Label, yFmt) {
+  return {
+    responsive:true, maintainAspectRatio:false, animation:{duration:500},
+    plugins:{legend:{labels:{color:C.m,font:{size:10},boxWidth:10}},tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${yFmt?yFmt(ctx.parsed.y):fmtN(ctx.parsed.y)}`}}},
+    scales:{
+      x:{ticks:{color:C.m,font:{size:9},maxRotation:45,autoSkip:true,maxTicksLimit:10},grid:{color:gridColor}},
+      y:{ticks:{color:C.m,font:{size:9},...(yFmt?{callback:yFmt}:{})},grid:{color:gridColor},title:{display:!!yLabel,text:yLabel,color:C.m,font:{size:9}}},
+    }
+  };
+}
+function dualOpts() {
+  const o = baseOpts('오더수');
+  o.scales.y2 = {position:'right',ticks:{color:C.m,font:{size:9},callback:v=>fmt(v)},grid:{display:false},title:{display:true,text:'금액($)',color:C.m,font:{size:9}}};
+  o.plugins.tooltip = {callbacks:{label:ctx=>ctx.dataset.yAxisID==='y2'?`${ctx.dataset.label}: ${fmt(ctx.parsed.y)}`:`${ctx.dataset.label}: ${fmtN(ctx.parsed.y)}건`}};
+  return o;
+}
+function ld(label,data,color,fill=false,yAxisID='y') {
+  return {label,data,borderColor:color,backgroundColor:fill?color+'22':'transparent',borderWidth:2,pointRadius:2,pointHoverRadius:5,tension:.3,fill,yAxisID};
+}
+function bd(label,data,color) {
+  return {label,data,backgroundColor:color+'99',borderColor:color,borderWidth:1,borderRadius:3};
+}
+function mkChart(id,type,data,opts) {
+  if(charts[id]) charts[id].destroy();
+  charts[id] = new Chart(document.getElementById(id),{type,data,options:opts});
+}
+
+// ════════════════════════════════════════════
+//  MODAL
+// ════════════════════════════════════════════
+function openProgressModal(key, progressOrders) {
+  const src = progressOrders || G.progressOrders;
+  const rows = src[key] || [];
+  _modalAllRows = rows;
+  const color = PCOLORS[key] || C.m;
+  const tCount = rows.filter(r=>r.branch==='Toronto').length;
+  const eCount = rows.filter(r=>r.branch==='Edmonton').length;
+  const totalQty = rows.reduce((s,r)=>s+r.qty,0);
+  const totalAmt = rows.reduce((s,r)=>s+r.total,0);
+  const maxLT = rows.length ? Math.max(...rows.map(r=>r.leadTime)) : 0;
+  document.getElementById('modalTitle').innerHTML = `<span style="color:${color}">● ${key}</span> — 오더 상세 목록`;
+  document.getElementById('modalMeta').textContent = `${G.maxDate} 기준 · 총 ${new Set(rows.map(r=>r.orderNum)).size}건`;
+  document.getElementById('modalSummary').innerHTML = `
+    <div class="modal-stat"><div class="modal-stat-label">총 오더수</div><div class="modal-stat-val" style="color:${color}">${new Set(rows.map(r=>r.orderNum)).size}</div></div>
+    <div class="modal-stat"><div class="modal-stat-label">총 수량</div><div class="modal-stat-val">${fmtN(totalQty)}</div></div>
+    <div class="modal-stat"><div class="modal-stat-label">총 금액</div><div class="modal-stat-val">${fmt(totalAmt)}</div></div>
+    <div class="modal-stat"><div class="modal-stat-label">Toronto / Edmonton</div><div class="modal-stat-val" style="font-size:16px"><span style="color:${C.t}">${tCount}</span> / <span style="color:${C.e}">${eCount}</span></div></div>
+    <div class="modal-stat"><div class="modal-stat-label">최장 리드타임</div><div class="modal-stat-val" style="color:${maxLT>=14?C.r:'inherit'}">${maxLT}일</div></div>`;
+  document.getElementById('modalSearch').value = '';
+  document.getElementById('modalBranch').value = '';
+  renderModalTable(rows);
+  document.getElementById('progressModal').classList.add('open');
+}
+function renderModalTable(rows) {
+  const tbody = document.getElementById('tbodyModal');
+  const empty = document.getElementById('modalEmpty');
+  if (!rows.length) { tbody.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display = 'none';
+  const sColor = {'Backordered':'tag-hold','Ordered':'tag-new','Packed':'tag-fin','Invoicing':'tag-wms'};
+  tbody.innerHTML = rows.map(r=>`<tr>
+    <td style="font-family:var(--font-mono);white-space:nowrap">${r.orderNum}</td>
+    <td>${r.customer}</td>
+    <td><span class="tag ${r.branch==='Toronto'?'tag-t':'tag-e'}">${r.branch}</span></td>
+    <td style="white-space:nowrap">${r.orderDateStr}</td>
+    <td><span class="tag ${sColor[r.status]||''}">${r.status}</span></td>
+    <td>${fmtN(r.qty)}</td>
+    <td style="white-space:nowrap">${fmt(r.total)}</td>
+    <td class="${r.leadTime>=60?'overdue-high':r.leadTime>=14?'overdue-med':''}" style="text-align:center">${r.leadTime}일</td>
+  </tr>`).join('');
+}
+function filterModalTable() {
+  const q = document.getElementById('modalSearch').value.toLowerCase();
+  const br = document.getElementById('modalBranch').value;
+  renderModalTable(_modalAllRows.filter(r=>
+    (!q || r.customer.toLowerCase().includes(q) || r.orderNum.toLowerCase().includes(q)) &&
+    (!br || r.branch === br)
+  ));
+}
+function closeModalOverlay(e) {
+  if (e.target === document.getElementById('progressModal'))
+    document.getElementById('progressModal').classList.remove('open');
+}
+document.addEventListener('keydown', e => {
+  if (e.key==='Escape') document.getElementById('progressModal').classList.remove('open');
+});
+
+// ════════════════════════════════════════════
+//  TABLE SORT
+// ════════════════════════════════════════════
+function sortTable(id, col) {
+  const tbody = document.getElementById(id).querySelector('tbody');
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  const key = id+'-'+col;
+  sortState[key] = !sortState[key];
+  rows.sort((a,b)=>{
+    const av = a.cells[col]?.textContent.trim().replace(/[$,건일개%]/g,'') || '';
+    const bv = b.cells[col]?.textContent.trim().replace(/[$,건일개%]/g,'') || '';
+    const an = parseFloat(av), bn = parseFloat(bv);
+    if(!isNaN(an)&&!isNaN(bn)) return sortState[key]?an-bn:bn-an;
+    return sortState[key]?av.localeCompare(bv,'ko'):bv.localeCompare(av,'ko');
+  });
+  rows.forEach(r=>tbody.appendChild(r));
+}
+
+// ════════════════════════════════════════════
+//  TAB CONTROL
+// ════════════════════════════════════════════
+const panes = document.querySelectorAll('.pane');
+const tabs  = document.querySelectorAll('.tab');
+function showTab(i) {
+  panes.forEach((p,j)=>p.classList.toggle('active',j===i));
+  tabs.forEach((t,j)=>t.classList.toggle('active',j===i));
+}
+
+// ════════════════════════════════════════════
+//  SAVE SNAPSHOT
+// ════════════════════════════════════════════
+function saveSnapshot() {
+  const dateTag = G.maxDate.replace(/-/g,'');
+  const defaultName = `OpenOrders_Dashboard_${dateTag}`;
+
+  // 파일명 입력 모달 표시
+  showFilenameDialog(defaultName, (userInput) => {
+    if (!userInput) return;
+    const fileName = userInput.endsWith('.html') ? userInput : userInput + '.html';
+
+    const btn = document.getElementById('btnSave');
+    btn.textContent = '⏳ 생성 중…';
+    btn.disabled = true;
+
+    setTimeout(() => {
+      try {
+        const html = buildSnapshotHTML();
+        const blob = new Blob([html], {type:'text/html;charset=utf-8'});
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = fileName;
+        a.click();
+        URL.revokeObjectURL(url);
+        btn.textContent = '✅ 저장 완료';
+        setTimeout(()=>{ btn.textContent='💾 HTML로 저장'; btn.disabled=false; }, 2000);
+      } catch(e) {
+        btn.textContent = '❌ 오류 발생';
+        btn.disabled = false;
+        console.error(e);
+      }
+    }, 50);
+  });
+}
+
+function showFilenameDialog(defaultName, callback) {
+  // 기존 다이얼로그 제거
+  const existing = document.getElementById('filenameDialog');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'filenameDialog';
+  overlay.style.cssText = `
+    position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:2000;
+    display:flex;align-items:center;justify-content:center;padding:20px;
+  `;
+
+  overlay.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;
+      padding:28px 28px 24px;width:100%;max-width:440px;box-shadow:0 24px 64px rgba(0,0,0,.6)">
+      <div style="font-size:14px;font-weight:700;margin-bottom:6px">💾 파일명 입력</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:18px">
+        저장할 파일명을 입력하세요. <code style="color:var(--blue)">.html</code> 확장자는 자동으로 추가됩니다.
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="filenameInput" type="text" value="${defaultName}"
+          style="flex:1;background:var(--surface2);border:1px solid var(--blue);color:var(--text);
+            padding:8px 12px;border-radius:7px;font-size:13px;font-family:var(--font-mono);
+            outline:none;"
+          onkeydown="if(event.key==='Enter')document.getElementById('filenameConfirm').click();
+                     if(event.key==='Escape')document.getElementById('filenameDialog').remove();">
+        <span style="font-size:12px;color:var(--muted);white-space:nowrap">.html</span>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:18px;justify-content:flex-end">
+        <button onclick="document.getElementById('filenameDialog').remove()"
+          style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);
+            padding:7px 16px;border-radius:7px;font-size:12px;cursor:pointer;font-family:var(--font-ui)">
+          취소
+        </button>
+        <button id="filenameConfirm"
+          style="background:rgba(79,142,247,.2);border:1px solid rgba(79,142,247,.5);color:var(--blue);
+            padding:7px 20px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font-ui)"
+          onclick="
+            const v = document.getElementById('filenameInput').value.trim();
+            document.getElementById('filenameDialog').remove();
+            if(v) __filenameCallback(v);
+          ">
+          저장
+        </button>
+      </div>
+    </div>
+  `;
+
+  // callback을 전역에 임시 저장 (onclick 문자열에서 접근)
+  window.__filenameCallback = callback;
+
+  document.body.appendChild(overlay);
+
+  // 배경 클릭 시 닫기
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  // 입력 필드 전체 선택
+  setTimeout(() => {
+    const input = document.getElementById('filenameInput');
+    if (input) { input.focus(); input.select(); }
+  }, 50);
+}
+
+function buildSnapshotHTML() {
+  const { dates, maxDate, minDate, daily, kpi, progressDist, progressOrders,
+    fulfilStats, weekLabels, wtVals, weVals, top15, ohDetail, overdue,
+    avgLT, pct7, alerts, finalizedSlow, fileName } = G;
+
+  // Serialize all data needed by the snapshot
+  const DATA = {
+    dates, maxDate, minDate, daily, kpi, progressDist,
+    // progressOrders: convert row objects to plain serializable form
+    progressOrders: Object.fromEntries(
+      Object.entries(progressOrders).map(([k,rows]) => [k, rows.map(r => ({
+        orderNum: r.orderNum, customer: r.customer, branch: r.branch,
+        orderDateStr: r.orderDateStr, status: r.status,
+        qty: r.qty, total: r.total, leadTime: r.leadTime,
+      }))])
+    ),
+    fulfilStats, weekLabels, wtVals, weVals,
+    top15,
+    ohDetail: ohDetail.map(r=>({orderNum:r.orderNum,customer:r.customer,branch:r.branch,orderDateStr:r.orderDateStr,qty:r.qty,total:r.total,leadTime:r.leadTime})),
+    overdue:  overdue.map(r=>({orderNum:r.orderNum,customer:r.customer,branch:r.branch,orderDateStr:r.orderDateStr,progress:r.progress,qty:r.qty,total:r.total,leadTime:r.leadTime})),
+    avgLT, pct7, alerts,
+    finalizedSlow: finalizedSlow.map(r=>({orderNum:r.orderNum,customer:r.customer,branch:r.branch,orderDateStr:r.orderDateStr,qty:r.qty,total:r.total,leadTime:r.leadTime,branchAvgLT:r.branchAvgLT,excessDays:r.excessDays})),
+    fileName,
+  };
+
+  // Get current page's full CSS + structure, swap upload screen for nothing,
+  // inject data as JS const and skip file-handling code entirely.
+  const currentHTML = document.documentElement.outerHTML;
+
+  // Extract <style> block
+  const styleMatch = currentHTML.match(/<style>([\s\S]*?)<\/style>/);
+  const styleBlock = styleMatch ? styleMatch[1] : '';
+
+  // Extract Chart.js and SheetJS script tags (keep Chart.js, drop SheetJS)
+  const chartjsCDN = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
+
+  const snap = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Asung Trading — Open Orders Dashboard ${maxDate}</title>
+<script src="${chartjsCDN}"><\/script>
+<style>${styleBlock}<\/style>
+</head>
+<body>
+<div id="dashboard" style="display:block">
+  <header>
+    <div>
+      <h1>📦 Asung Trading — Open Orders Dashboard</h1>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">
+        캐나다 뷰티·헤어케어 유통 | 최신 스냅샷: <strong style="color:var(--text)">${maxDate}</strong>
+        | 분석 범위: <span>${minDate} ~ ${maxDate} (${dates.length}일)</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="header-meta">${fileName}</div>
+      <div style="font-size:11px;color:var(--muted);padding:5px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px">📸 스냅샷 파일</div>
+    </div>
+  </header>
+  <div class="tabs">
+    <div class="tab active" onclick="showTab(0)">📊 Overview</div>
+    <div class="tab" onclick="showTab(1)">📈 추이 분석</div>
+    <div class="tab" onclick="showTab(2)">⏸ On Hold</div>
+    <div class="tab" onclick="showTab(3)">⏱ Fulfilment Time</div>
+    <div class="tab" onclick="showTab(4)">👥 고객별</div>
+    <div class="tab" onclick="showTab(5)">🏙 Location</div>
+  </div>
+  ${document.getElementById('pane0').outerHTML.replace('class="pane active"','class="pane active" id="pane0"')}
+  ${document.getElementById('pane1').outerHTML}
+  ${document.getElementById('pane2').outerHTML}
+  ${document.getElementById('pane3').outerHTML}
+  ${document.getElementById('pane4').outerHTML}
+  ${document.getElementById('pane5').outerHTML}
+</div>
+${document.getElementById('progressModal').outerHTML}
+<script>
+const G_SNAP = ${JSON.stringify(DATA)};
+const C = {t:'#4f8ef7',e:'#f7934f',g:'#4ff79e',y:'#f7d94f',r:'#f74f6e',m:'#6b738a'};
+const PCOLORS = {'1.New':C.g,'2.Release to WMS':C.y,'3.Finalized':C.t,'On Hold':C.r};
+const charts = {};
+const sortState = {};
+let _modalAllRows = [];
+
+const fmt  = n => '$' + Number(n).toLocaleString('en-CA',{minimumFractionDigits:0,maximumFractionDigits:0});
+const fmtN = n => Number(n).toLocaleString('en-CA');
+const mmdd = s => s.slice(5);
+const gridColor = '#252a38';
+
+function baseOpts(yLabel, y2Label, yFmt) {
+  return {
+    responsive:true,maintainAspectRatio:false,animation:{duration:500},
+    plugins:{legend:{labels:{color:C.m,font:{size:10},boxWidth:10}},tooltip:{callbacks:{label:ctx=>\`\${ctx.dataset.label}: \${yFmt?yFmt(ctx.parsed.y):fmtN(ctx.parsed.y)}\`}}},
+    scales:{
+      x:{ticks:{color:C.m,font:{size:9},maxRotation:45,autoSkip:true,maxTicksLimit:10},grid:{color:gridColor}},
+      y:{ticks:{color:C.m,font:{size:9},...(yFmt?{callback:yFmt}:{})},grid:{color:gridColor},title:{display:!!yLabel,text:yLabel,color:C.m,font:{size:9}}},
+    }
+  };
+}
+function dualOpts() {
+  const o = baseOpts('오더수');
+  o.scales.y2 = {position:'right',ticks:{color:C.m,font:{size:9},callback:v=>fmt(v)},grid:{display:false},title:{display:true,text:'금액($)',color:C.m,font:{size:9}}};
+  o.plugins.tooltip = {callbacks:{label:ctx=>ctx.dataset.yAxisID==='y2'?\`\${ctx.dataset.label}: \${fmt(ctx.parsed.y)}\`:\`\${ctx.dataset.label}: \${fmtN(ctx.parsed.y)}건\`}};
+  return o;
+}
+function ld(label,data,color,fill=false,yAxisID='y'){return{label,data,borderColor:color,backgroundColor:fill?color+'22':'transparent',borderWidth:2,pointRadius:2,pointHoverRadius:5,tension:.3,fill,yAxisID};}
+function bd(label,data,color){return{label,data,backgroundColor:color+'99',borderColor:color,borderWidth:1,borderRadius:3};}
+function mkChart(id,type,data,opts){if(charts[id])charts[id].destroy();charts[id]=new Chart(document.getElementById(id),{type,data,options:opts});}
+
+function sortTable(id,col){
+  const tbody=document.getElementById(id).querySelector('tbody');
+  const rows=Array.from(tbody.querySelectorAll('tr'));
+  const key=id+'-'+col;
+  sortState[key]=!sortState[key];
+  rows.sort((a,b)=>{
+    const av=a.cells[col]?.textContent.trim().replace(/[$,건일개%+]/g,'')||'';
+    const bv=b.cells[col]?.textContent.trim().replace(/[$,건일개%+]/g,'')||'';
+    const an=parseFloat(av),bn=parseFloat(bv);
+    if(!isNaN(an)&&!isNaN(bn))return sortState[key]?an-bn:bn-an;
+    return sortState[key]?av.localeCompare(bv,'ko'):bv.localeCompare(av,'ko');
+  });
+  rows.forEach(r=>tbody.appendChild(r));
+}
+
+const panes=document.querySelectorAll('.pane');
+const tabs=document.querySelectorAll('.tab');
+function showTab(i){panes.forEach((p,j)=>p.classList.toggle('active',j===i));tabs.forEach((t,j)=>t.classList.toggle('active',j===i));}
+
+// Modal
+function openProgressModal(key) {
+  const rows = G_SNAP.progressOrders[key] || [];
+  _modalAllRows = rows;
+  const color = PCOLORS[key]||C.m;
+  const tC=rows.filter(r=>r.branch==='Toronto').length, eC=rows.filter(r=>r.branch==='Edmonton').length;
+  const totalQty=rows.reduce((s,r)=>s+r.qty,0), totalAmt=rows.reduce((s,r)=>s+r.total,0);
+  const maxLT=rows.length?Math.max(...rows.map(r=>r.leadTime)):0;
+  const uniqOrders=new Set(rows.map(r=>r.orderNum)).size;
+  document.getElementById('modalTitle').innerHTML=\`<span style="color:\${color}">● \${key}</span> — 오더 상세 목록\`;
+  document.getElementById('modalMeta').textContent=\`\${G_SNAP.maxDate} 기준 · 총 \${uniqOrders}건\`;
+  document.getElementById('modalSummary').innerHTML=\`
+    <div class="modal-stat"><div class="modal-stat-label">총 오더수</div><div class="modal-stat-val" style="color:\${color}">\${uniqOrders}</div></div>
+    <div class="modal-stat"><div class="modal-stat-label">총 수량</div><div class="modal-stat-val">\${fmtN(totalQty)}</div></div>
+    <div class="modal-stat"><div class="modal-stat-label">총 금액</div><div class="modal-stat-val">\${fmt(totalAmt)}</div></div>
+    <div class="modal-stat"><div class="modal-stat-label">Toronto / Edmonton</div><div class="modal-stat-val" style="font-size:16px"><span style="color:\${C.t}">\${tC}</span> / <span style="color:\${C.e}">\${eC}</span></div></div>
+    <div class="modal-stat"><div class="modal-stat-label">최장 리드타임</div><div class="modal-stat-val" style="color:\${maxLT>=14?C.r:'inherit'}">\${maxLT}일</div></div>\`;
+  document.getElementById('modalSearch').value='';
+  document.getElementById('modalBranch').value='';
+  renderModalTable(rows);
+  document.getElementById('progressModal').classList.add('open');
+}
+function renderModalTable(rows){
+  const tbody=document.getElementById('tbodyModal');
+  const empty=document.getElementById('modalEmpty');
+  if(!rows.length){tbody.innerHTML='';empty.style.display='block';return;}
+  empty.style.display='none';
+  const sColor={'Backordered':'tag-hold','Ordered':'tag-new','Packed':'tag-fin','Invoicing':'tag-wms'};
+  tbody.innerHTML=rows.map(r=>\`<tr>
+    <td style="font-family:var(--font-mono);white-space:nowrap">\${r.orderNum}</td>
+    <td>\${r.customer}</td>
+    <td><span class="tag \${r.branch==='Toronto'?'tag-t':'tag-e'}">\${r.branch}</span></td>
+    <td style="white-space:nowrap">\${r.orderDateStr}</td>
+    <td><span class="tag \${sColor[r.status]||''}">\${r.status}</span></td>
+    <td>\${fmtN(r.qty)}</td>
+    <td style="white-space:nowrap">\${fmt(r.total)}</td>
+    <td class="\${r.leadTime>=60?'overdue-high':r.leadTime>=14?'overdue-med':''}" style="text-align:center">\${r.leadTime}일</td>
+  </tr>\`).join('');
+}
+function filterModalTable(){
+  const q=document.getElementById('modalSearch').value.toLowerCase();
+  const br=document.getElementById('modalBranch').value;
+  renderModalTable(_modalAllRows.filter(r=>(!q||r.customer.toLowerCase().includes(q)||r.orderNum.toLowerCase().includes(q))&&(!br||r.branch===br)));
+}
+function closeModalOverlay(e){if(e.target===document.getElementById('progressModal'))document.getElementById('progressModal').classList.remove('open');}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.getElementById('progressModal').classList.remove('open');});
+
+// Init charts from embedded data
+window.addEventListener('load', () => {
+  const { dates, daily, kpi, progressDist, progressOrders, fulfilStats,
+    weekLabels, wtVals, weVals, top15, ohDetail, overdue, avgLT, pct7,
+    alerts, finalizedSlow } = G_SNAP;
+
+  const LABELS = dates.map(mmdd);
+  const tOrders=dates.map(d=>daily[d].t.orders), eOrders=dates.map(d=>daily[d].e.orders);
+  const tAmount=dates.map(d=>daily[d].t.amount), eAmount=dates.map(d=>daily[d].e.amount);
+  const ohTQty=dates.map(d=>daily[d].ohT.qty), ohEQty=dates.map(d=>daily[d].ohE.qty);
+  const ohTOrd=dates.map(d=>daily[d].ohT.orders), ohEOrd=dates.map(d=>daily[d].ohE.orders);
+  const ohTAmt=dates.map(d=>daily[d].ohT.amount), ohEAmt=dates.map(d=>daily[d].ohE.amount);
+  const allOrders=dates.map(d=>daily[d].orders), allAmount=dates.map(d=>daily[d].amount);
+  const allQty=dates.map(d=>daily[d].qty), boQty=dates.map(d=>daily[d].boQty);
+  const avgOrd=allOrders.reduce((s,v)=>s+v,0)/allOrders.length;
+  const avgAmt=allAmount.reduce((s,v)=>s+v,0)/allAmount.length;
+
+  mkChart('chartOverviewMain','line',{labels:LABELS,datasets:[
+    ld('Toronto 오더수',tOrders,C.t,false,'y'),ld('Edmonton 오더수',eOrders,C.e,false,'y'),
+    {...ld('Toronto 금액',tAmount,C.t+'88',false,'y2'),borderDash:[3,3],yAxisID:'y2'},
+    {...ld('Edmonton 금액',eAmount,C.e+'88',false,'y2'),borderDash:[3,3],yAxisID:'y2'},
+  ]},dualOpts());
+
+  const pKeys=Object.keys(progressDist);
+  mkChart('chartDonut','doughnut',{labels:pKeys,datasets:[{data:pKeys.map(k=>progressDist[k]),backgroundColor:pKeys.map(k=>PCOLORS[k]||C.m),borderWidth:0,hoverOffset:6}]},
+    {responsive:true,maintainAspectRatio:false,cutout:'65%',plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>\`\${ctx.label}: \${ctx.parsed}건\`}}},
+    onClick:(evt,els)=>{if(els.length)openProgressModal(pKeys[els[0].index]);}});
+  document.getElementById('donutLegend').innerHTML=pKeys.map(k=>\`
+    <div class="legend-item" style="cursor:\${progressOrders[k]?'pointer':'default'}" onclick="openProgressModal('\${k.replace(/'/g,\"\\\\\\'\")}')">
+      <div class="legend-dot" style="background:\${PCOLORS[k]||C.m}"></div>
+      <span>\${k}: <strong>\${progressDist[k]}</strong>건\${progressOrders[k]?' <span style="font-size:9px;color:var(--muted)">(클릭)</span>':''}</span>
+    </div>\`).join('');
+
+  mkChart('chartOverviewOH','line',{labels:LABELS,datasets:[ld('Toronto',ohTQty,C.t,true),ld('Edmonton',ohEQty,C.e,true)]},baseOpts('수량',null,v=>fmtN(v)));
+  mkChart('chartTrendOrders','line',{labels:LABELS,datasets:[ld('Toronto',tOrders,C.t),ld('Edmonton',eOrders,C.e),{...ld('전체 평균',dates.map(()=>+avgOrd.toFixed(1)),C.m),borderDash:[5,5],pointRadius:0}]},baseOpts('오더수'));
+  mkChart('chartTrendAmount','line',{labels:LABELS,datasets:[ld('Toronto',tAmount,C.t),ld('Edmonton',eAmount,C.e),{...ld('전체 평균',dates.map(()=>+avgAmt.toFixed(0)),C.m),borderDash:[5,5],pointRadius:0}]},baseOpts('금액($)',null,v=>fmt(v)));
+  mkChart('chartTrendQty','line',{labels:LABELS,datasets:[ld('Toronto',dates.map(d=>daily[d].t.qty),C.t),ld('Edmonton',dates.map(d=>daily[d].e.qty),C.e)]},baseOpts('수량'));
+  mkChart('chartOHT','line',{labels:LABELS,datasets:[ld('Toronto On Hold 수량',ohTQty,C.t,true)]},baseOpts('수량'));
+  mkChart('chartOHE','line',{labels:LABELS,datasets:[ld('Edmonton On Hold 수량',ohEQty,C.e,true)]},baseOpts('수량'));
+  mkChart('chartOHOverlay','line',{labels:LABELS,datasets:[ld('Toronto',ohTQty,C.t),ld('Edmonton',ohEQty,C.e)]},baseOpts('수량'));
+  mkChart('chartOHOrders','line',{labels:LABELS,datasets:[ld('Toronto',ohTOrd,C.t),ld('Edmonton',ohEOrd,C.e)]},baseOpts('건수'));
+  mkChart('chartOHAmount','line',{labels:LABELS,datasets:[ld('Toronto',ohTAmt,C.t),ld('Edmonton',ohEAmt,C.e)]},baseOpts('금액($)',null,v=>fmt(v)));
+
+  const buckets=['0-2일','3-5일','6-10일','11일+'];
+  mkChart('chartFulfilBucket','bar',{labels:buckets,datasets:[bd('Toronto',buckets.map(b=>fulfilStats.Toronto?.buckets[b]||0),C.t),bd('Edmonton',buckets.map(b=>fulfilStats.Edmonton?.buckets[b]||0),C.e)]},baseOpts('건수'));
+  mkChart('chartFulfilWeekly','line',{labels:weekLabels,datasets:[ld('Toronto',wtVals,C.t),ld('Edmonton',weVals,C.e)]},baseOpts('평균 소요일'));
+
+  const custNames=top15.map(c=>c.customer.length>22?c.customer.slice(0,22)+'…':c.customer);
+  const hOpts=yLabel=>{const o=baseOpts(yLabel);o.indexAxis='y';o.scales.x.ticks.callback=yLabel.includes('$')?v=>fmt(v):v=>fmtN(v);return o;};
+  mkChart('chartCustAmount','bar',{labels:custNames,datasets:[bd('총금액',top15.map(c=>c.amount),C.t)]},hOpts('금액($)'));
+  mkChart('chartCustQty','bar',{labels:custNames,datasets:[bd('수량',top15.map(c=>c.qty),C.e)]},hOpts('수량'));
+  mkChart('chartLocOrders','line',{labels:LABELS,datasets:[ld('Toronto',tOrders,C.t),ld('Edmonton',eOrders,C.e)]},baseOpts('오더수'));
+  mkChart('chartLocAmount','line',{labels:LABELS,datasets:[ld('Toronto',tAmount,C.t),ld('Edmonton',eAmount,C.e)]},baseOpts('금액($)',null,v=>fmt(v)));
+
+  const tO=kpi.Toronto.orders,eO=kpi.Edmonton.orders;
+  mkChart('chartLocDonut','doughnut',{labels:['Toronto','Edmonton'],datasets:[{data:[tO,eO],backgroundColor:[C.t,C.e],borderWidth:0}]},
+    {responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>\`\${ctx.label}: \${ctx.parsed}건 (\${(ctx.parsed/(tO+eO)*100).toFixed(1)}%)\`}}}});
+  document.getElementById('locDonutLegend').innerHTML=\`
+    <div class="legend-item"><div class="legend-dot" style="background:\${C.t}"></div><span>Toronto: <strong>\${tO}</strong>건 (\${(tO/(tO+eO)*100).toFixed(1)}%)</span></div>
+    <div class="legend-item"><div class="legend-dot" style="background:\${C.e}"></div><span>Edmonton: <strong>\${eO}</strong>건 (\${(eO/(tO+eO)*100).toFixed(1)}%)</span></div>\`;
+});
+<\/script>
+</body>
+</html>`;
+  return snap;
+}
+
+function resetDashboard() {
+  Object.values(charts).forEach(c=>c.destroy());
+  Object.keys(charts).forEach(k=>delete charts[k]);
+  G = {};
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('uploadScreen').style.display = 'flex';
+  document.getElementById('uploadError').style.display = 'none';
+  document.getElementById('loadingBar').style.display = 'none';
+  document.getElementById('fileInput').value = '';
+  showTab(0);
+}
+</script>
+</body>
+</html>
