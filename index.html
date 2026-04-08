@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Urgent Order Dashboard — Asung Trading</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0f1117; --surface:#181c25; --surface2:#1e2330;
+  --border:rgba(255,255,255,0.08); --border2:rgba(255,255,255,0.15);
+  --text:#e8eaf0; --text2:#8b90a0; --text3:#5a5f70;
+  --red:#e05c5c; --red-bg:rgba(224,92,92,0.1); --red-border:rgba(224,92,92,0.25);
+  --amber:#e8a030; --amber-bg:rgba(232,160,48,0.1); --amber-border:rgba(232,160,48,0.25);
+  --blue:#4d9ceb; --blue-bg:rgba(77,156,235,0.1); --blue-border:rgba(77,156,235,0.25);
+  --pink:#d46fa0; --pink-bg:rgba(212,111,160,0.1); --pink-border:rgba(212,111,160,0.25);
+  --green:#5cb87a; --green-bg:rgba(92,184,122,0.1); --green-border:rgba(92,184,122,0.25);
+  --mono:'IBM Plex Mono',monospace; --sans:'IBM Plex Sans KR',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.6;min-height:100vh;}
+
+.screen{display:none;}
+.screen.active{display:flex;flex-direction:column;min-height:100vh;}
+
+/* ══════════════════════════
+   SCREEN 1 · 파일 업로드
+══════════════════════════ */
+#screen-upload {
+  align-items:center; justify-content:center; padding:40px 20px;
+  background: radial-gradient(ellipse at 50% 0%, rgba(77,156,235,0.06) 0%, transparent 60%);
+}
+
+.upload-card {
+  width:100%; max-width:600px;
+  background:var(--surface); border:1px solid var(--border2); border-radius:16px;
+  overflow:hidden;
+}
+.upload-card-header {
+  padding:28px 32px 22px; border-bottom:1px solid var(--border);
+}
+.upload-logo { font-family:var(--mono); font-size:11px; color:var(--text3); letter-spacing:.1em; text-transform:uppercase; }
+.upload-title { font-size:20px; font-weight:500; margin-top:6px; }
+.upload-sub { font-size:12px; color:var(--text2); margin-top:4px; }
+
+.upload-card-body { padding:28px 32px; }
+
+/* 드롭존 */
+.dropzone {
+  border:1.5px dashed var(--border2); border-radius:12px;
+  padding:48px 24px; text-align:center; cursor:pointer;
+  transition:all .2s; position:relative;
+}
+.dropzone:hover, .dropzone.drag-over {
+  border-color:var(--blue); background:var(--blue-bg);
+}
+.dropzone input[type=file] {
+  position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%;
+}
+.dz-icon { font-size:36px; margin-bottom:14px; display:block; }
+.dz-title { font-size:15px; font-weight:500; color:var(--text); margin-bottom:6px; }
+.dz-hint { font-size:12px; color:var(--text2); }
+.dz-format { font-family:var(--mono); font-size:11px; color:var(--text3); margin-top:10px; }
+
+/* 파일 선택됨 */
+.file-selected {
+  display:none; margin-top:16px;
+  background:var(--surface2); border:1px solid var(--border2); border-radius:8px;
+  padding:12px 16px; align-items:center; justify-content:space-between; gap:12px;
+}
+.file-selected.visible { display:flex; }
+.file-name { font-size:13px; font-weight:500; }
+.file-meta { font-size:11px; font-family:var(--mono); color:var(--text3); margin-top:2px; }
+.file-clear { padding:4px 10px; border-radius:5px; border:1px solid var(--border2); background:none; font-family:var(--sans); font-size:11px; color:var(--text2); cursor:pointer; }
+.file-clear:hover { color:var(--red); border-color:var(--red-border); }
+
+/* 기준일 / 파일명 */
+.upload-row { display:flex; gap:12px; margin-top:18px; flex-wrap:wrap; }
+.upload-group { display:flex; flex-direction:column; gap:5px; flex:1; min-width:150px; }
+.upload-label { font-size:10px; font-family:var(--mono); color:var(--text3); letter-spacing:.08em; text-transform:uppercase; }
+.upload-input {
+  background:var(--surface2); border:1px solid var(--border2); border-radius:7px;
+  padding:8px 11px; font-family:var(--sans); font-size:13px; color:var(--text); outline:none;
+  transition:border-color .15s;
+}
+.upload-input:focus { border-color:rgba(255,255,255,.3); }
+.upload-input::placeholder { color:var(--text3); }
+
+/* 버튼 */
+.upload-actions { display:flex; gap:8px; margin-top:20px; }
+.btn {
+  padding:10px 22px; border-radius:8px; border:1px solid var(--border2);
+  background:none; font-family:var(--sans); font-size:13px; color:var(--text2);
+  cursor:pointer; transition:all .15s;
+}
+.btn:hover { background:var(--surface2); color:var(--text); }
+.btn.primary { background:var(--text); color:var(--bg); border-color:var(--text); font-weight:500; }
+.btn.primary:hover { background:#c8cad4; }
+.btn:disabled { opacity:.35; cursor:not-allowed; }
+
+/* 로딩 */
+.loading-bar {
+  display:none; margin-top:16px; height:3px;
+  background:var(--surface2); border-radius:2px; overflow:hidden;
+}
+.loading-bar.active { display:block; }
+.loading-fill {
+  height:100%; width:0%; background:var(--blue);
+  border-radius:2px; transition:width .4s ease;
+  animation: loading-pulse 1.2s ease-in-out infinite;
+}
+@keyframes loading-pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+/* 에러 */
+.upload-error {
+  display:none; margin-top:12px; padding:10px 14px;
+  background:var(--red-bg); border:1px solid var(--red-border); border-radius:8px;
+  font-size:12px; color:var(--red);
+}
+
+/* 저장된 목록 */
+.saved-section { margin-top:24px; padding-top:20px; border-top:1px solid var(--border); }
+.saved-label { font-size:10px; font-family:var(--mono); color:var(--text3); letter-spacing:.08em; text-transform:uppercase; margin-bottom:10px; display:block; }
+.saved-list { display:flex; flex-direction:column; gap:6px; max-height:200px; overflow-y:auto; }
+.saved-item {
+  display:flex; align-items:center; justify-content:space-between;
+  background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+  padding:9px 13px; transition:border-color .15s;
+}
+.saved-item:hover { border-color:var(--border2); }
+.saved-item-name { font-size:13px; font-weight:500; }
+.saved-item-meta { font-size:10px; font-family:var(--mono); color:var(--text3); margin-top:1px; }
+.saved-item-btns { display:flex; gap:5px; }
+.saved-btn { padding:3px 9px; border-radius:5px; border:1px solid var(--border2); background:none; font-size:11px; font-family:var(--sans); color:var(--text2); cursor:pointer; }
+.saved-btn:hover { background:var(--surface); color:var(--text); }
+.saved-btn.del:hover { border-color:var(--red-border); color:var(--red); }
+.no-saved { font-size:12px; color:var(--text3); padding:12px 0; text-align:center; }
+
+/* ══════════════════════════════════════
+   SCREEN 2 · DASHBOARD (기존 스타일 그대로)
+══════════════════════════════════════ */
+.header{border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:rgba(15,17,23,0.96);backdrop-filter:blur(12px);z-index:100;}
+.header-left{display:flex;align-items:baseline;gap:14px;}
+.logo{font-family:var(--mono);font-size:11px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;}
+.header-title{font-size:15px;font-weight:500;}
+.header-date{font-family:var(--mono);font-size:11px;color:var(--text3);}
+.header-actions{display:flex;align-items:center;gap:10px;}
+.view-toggle{display:flex;gap:2px;background:var(--surface2);border-radius:7px;padding:3px;}
+.view-btn{padding:5px 14px;border-radius:5px;border:none;background:none;font-family:var(--sans);font-size:12px;color:var(--text2);cursor:pointer;transition:all .15s;}
+.view-btn.active{background:var(--surface);color:var(--text);}
+.view-btn:hover:not(.active){color:var(--text);}
+.icon-btn{padding:5px 12px;border-radius:6px;border:1px solid var(--border2);background:none;font-size:12px;color:var(--text2);cursor:pointer;transition:all .15s;font-family:var(--sans);}
+.icon-btn:hover{background:var(--surface2);color:var(--text);}
+
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border-bottom:1px solid var(--border);}
+.kpi-card{background:var(--surface);padding:16px 22px;}
+.kpi-label{font-size:10px;font-family:var(--mono);color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px;}
+.kpi-num{font-size:28px;font-weight:600;line-height:1;margin-bottom:3px;}
+.kpi-sub{font-size:11px;color:var(--text2);}
+.kpi-card.red .kpi-num{color:var(--red);}
+.kpi-card.amber .kpi-num{color:var(--amber);}
+.kpi-card.pink .kpi-num{color:var(--pink);}
+
+.main{display:flex;}
+.sidebar{width:210px;flex-shrink:0;border-right:1px solid var(--border);padding:16px 0;position:sticky;top:99px;height:calc(100vh - 99px);overflow-y:auto;}
+.sidebar-section{padding:0 12px;margin-bottom:20px;}
+.sidebar-label{font-size:10px;font-family:var(--mono);color:var(--text3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px;display:block;}
+.filter-btn{display:flex;align-items:center;gap:8px;width:100%;padding:6px 9px;border-radius:6px;border:none;background:none;color:var(--text2);font-family:var(--sans);font-size:12px;cursor:pointer;text-align:left;transition:all .15s;margin-bottom:1px;}
+.filter-btn:hover{background:var(--surface2);color:var(--text);}
+.filter-btn.active{background:var(--surface2);color:var(--text);}
+.filter-btn.active.red{color:var(--red);}
+.filter-btn.active.amber{color:var(--amber);}
+.filter-btn.active.blue{color:var(--blue);}
+.filter-btn.active.pink{color:var(--pink);}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.dot.red{background:var(--red);}
+.dot.amber{background:var(--amber);}
+.dot.blue{background:var(--blue);}
+.dot.pink{background:var(--pink);}
+.dot.green{background:var(--green);}
+.count-badge{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--text3);background:rgba(255,255,255,.05);padding:1px 5px;border-radius:3px;}
+.search-wrap{padding:0 12px;margin-bottom:16px;}
+.search-input{width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:6px 9px;font-family:var(--sans);font-size:12px;color:var(--text);outline:none;}
+.search-input::placeholder{color:var(--text3);}
+.search-input:focus{border-color:rgba(255,255,255,.25);}
+
+.content{flex:1;min-width:0;padding:20px 22px;}
+.view-panel{display:none;}
+.view-panel.active{display:block;}
+
+.tier-section{margin-bottom:26px;}
+.tier-header{display:flex;align-items:center;gap:9px;margin-bottom:9px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+.tier-dot{width:8px;height:8px;border-radius:50%;}
+.tier-title{font-size:13px;font-weight:500;}
+.tier-count{font-family:var(--mono);font-size:11px;color:var(--text3);}
+.supplier-card{border:1px solid var(--border);border-radius:8px;margin-bottom:6px;overflow:hidden;}
+.supplier-card:hover{border-color:var(--border2);}
+.supplier-card.red{border-left:3px solid var(--red);}
+.supplier-card.amber{border-left:3px solid var(--amber);}
+.supplier-card.blue{border-left:3px solid var(--blue);}
+.supplier-card.pink{border-left:3px solid var(--pink);}
+.supplier-card.has_po{border-left:3px solid var(--green);}
+.card-header{display:flex;align-items:center;justify-content:space-between;padding:10px 13px;cursor:pointer;background:var(--surface);user-select:none;}
+.card-header:hover{background:var(--surface2);}
+.brand-name{font-size:14px;font-weight:500;}
+.supplier-name-small{font-size:11px;color:var(--text3);margin-top:1px;}
+.card-meta{display:flex;align-items:center;gap:16px;}
+.meta-item{text-align:right;}
+.meta-val{font-family:var(--mono);font-size:12px;font-weight:500;}
+.meta-val.red{color:var(--red);}
+.meta-lbl{font-size:10px;color:var(--text3);}
+.chevron-icon{color:var(--text3);font-size:10px;transition:transform .2s;margin-left:5px;}
+.chevron-icon.open{transform:rotate(180deg);}
+.sku-wrap{display:none;}
+.sku-wrap.open{display:block;}
+
+.tier-pill{display:inline-block;font-size:10px;font-family:var(--mono);padding:2px 7px;border-radius:4px;font-weight:500;margin-right:6px;}
+.tier-pill.red,.tier-pill.tier1{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border);}
+.tier-pill.amber,.tier-pill.tier2{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-border);}
+.tier-pill.blue,.tier-pill.tier3{background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-border);}
+.tier-pill.pink,.tier-pill.overdue{background:var(--pink-bg);color:var(--pink);border:1px solid var(--pink-border);}
+.tier-pill.has_po{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border);}
+.tier-pill.other{background:rgba(255,255,255,.05);color:var(--text2);border:1px solid var(--border2);}
+
+table.inner-tbl{width:100%;border-collapse:collapse;}
+table.inner-tbl thead tr{background:rgba(255,255,255,.03);border-top:1px solid var(--border);}
+table.inner-tbl thead th{padding:6px 13px;text-align:left;font-size:10px;font-family:var(--mono);color:var(--text3);letter-spacing:.07em;text-transform:uppercase;font-weight:400;}
+table.inner-tbl thead th.right{text-align:right;}
+table.inner-tbl tbody tr{border-top:1px solid var(--border);}
+table.inner-tbl tbody tr:hover{background:rgba(255,255,255,.03);}
+table.inner-tbl tbody td{padding:7px 13px;font-size:12px;vertical-align:middle;}
+.cover-val{font-family:var(--mono);font-size:12px;font-weight:500;text-align:right;}
+.cover-val.neg{color:var(--red);}
+.cover-val.low{color:var(--amber);}
+.cover-val.ok{color:var(--blue);}
+.bo-val{font-family:var(--mono);text-align:right;}
+.bo-val.nonzero{color:var(--red);font-weight:500;}
+.bo-val.zero{color:var(--text3);}
+.sales-val{font-family:var(--mono);text-align:right;color:var(--text2);}
+.po-cell{text-align:right;}
+.po-none{color:var(--red);font-family:var(--mono);font-size:11px;font-weight:500;}
+.po-tag{display:inline-block;font-family:var(--mono);font-size:10px;padding:1px 5px;border-radius:3px;background:var(--green-bg);color:var(--green);border:1px solid var(--green-border);margin-right:3px;}
+.eta-tag{display:inline-block;font-family:var(--mono);font-size:10px;padding:1px 5px;border-radius:3px;background:var(--pink-bg);color:var(--pink);border:1px solid var(--pink-border);}
+
+.sku-view-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:10px;flex-wrap:wrap;}
+.sku-view-title{font-size:13px;color:var(--text2);}
+.sku-sort-bar{display:flex;gap:4px;flex-wrap:wrap;}
+.sort-btn{padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--text2);font-family:var(--sans);font-size:11px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:3px;}
+.sort-btn:hover{background:var(--surface2);color:var(--text);}
+.sort-btn.active{background:var(--surface2);color:var(--text);border-color:var(--border2);}
+.sku-table-wrap{overflow-x:auto;border-radius:8px;border:1px solid var(--border);}
+.sku-master-table{width:100%;border-collapse:collapse;min-width:900px;}
+.sku-master-table thead tr{background:var(--surface2);}
+.sku-master-table thead th{padding:8px 12px;text-align:left;font-size:10px;font-family:var(--mono);color:var(--text3);letter-spacing:.07em;text-transform:uppercase;font-weight:400;border-bottom:1px solid var(--border2);white-space:nowrap;}
+.sku-master-table tbody tr{border-bottom:1px solid var(--border);transition:background .1s;}
+.sku-master-table tbody tr:last-child{border-bottom:none;}
+.sku-master-table tbody tr:hover{background:var(--surface2);}
+.sku-master-table tbody td{padding:8px 12px;vertical-align:middle;}
+.urgency-bar-wrap{display:flex;align-items:center;gap:5px;}
+.urgency-bar{height:4px;border-radius:2px;background:var(--surface2);flex:1;min-width:40px;overflow:hidden;}
+.urgency-fill{height:100%;border-radius:2px;}
+.prod-cell{max-width:240px;}
+.prod-name{font-size:12px;color:var(--text);line-height:1.4;}
+.prod-option{font-size:10px;color:var(--text3);margin-top:1px;}
+.brand-cell{font-size:12px;color:var(--text2);white-space:nowrap;}
+.cv-cell{font-family:var(--mono);font-size:12px;font-weight:500;text-align:right;white-space:nowrap;}
+.cv-cell.neg{color:var(--red);}
+.cv-cell.low{color:var(--amber);}
+.cv-cell.mid{color:var(--amber);}
+.cv-cell.ok{color:var(--blue);}
+.num-cell{font-family:var(--mono);font-size:12px;text-align:right;color:var(--text2);white-space:nowrap;}
+.num-cell.danger{color:var(--red);font-weight:500;}
+.num-cell.muted{color:var(--text3);}
+.num-cell.positive{color:var(--green);}
+.num-cell.negative{color:var(--red);}
+.po-cell-sku{text-align:right;white-space:nowrap;}
+.po-none-s{font-family:var(--mono);font-size:11px;color:var(--red);font-weight:500;}
+.po-tag-s{display:inline-block;font-family:var(--mono);font-size:10px;padding:1px 5px;border-radius:3px;background:var(--green-bg);color:var(--green);border:1px solid var(--green-border);margin-right:3px;}
+.eta-tag-s{display:inline-block;font-family:var(--mono);font-size:10px;padding:1px 5px;border-radius:3px;background:var(--pink-bg);color:var(--pink);border:1px solid var(--pink-border);}
+.empty-msg{padding:40px;text-align:center;color:var(--text3);font-size:13px;}
+
+.footer{border-top:1px solid var(--border);padding:13px 24px;display:flex;align-items:center;justify-content:space-between;background:var(--surface);}
+.footer-text{font-size:11px;color:var(--text3);font-family:var(--mono);}
+
+/* 다운로드 모달 */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:none;align-items:center;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:24px;width:360px;max-width:92vw;}
+.modal-title{font-size:14px;font-weight:500;margin-bottom:14px;}
+.modal-lbl{font-size:10px;font-family:var(--mono);color:var(--text3);letter-spacing:.07em;text-transform:uppercase;margin-bottom:5px;display:block;}
+.modal-input{width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;padding:8px 11px;font-family:var(--sans);font-size:13px;color:var(--text);outline:none;margin-bottom:16px;}
+.modal-input:focus{border-color:rgba(255,255,255,.3);}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;}
+.modal-btn{padding:7px 16px;border-radius:7px;border:1px solid var(--border2);background:none;font-family:var(--sans);font-size:12px;color:var(--text2);cursor:pointer;transition:all .15s;}
+.modal-btn:hover{background:var(--surface2);color:var(--text);}
+.modal-btn.primary{background:var(--text);color:var(--bg);border-color:var(--text);font-weight:500;}
+.modal-btn.primary:hover{background:#c8cad4;}
+
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════
+     SCREEN 1 · 파일 업로드
+══════════════════════════════ -->
+<div class="screen active" id="screen-upload">
+  <div class="upload-card">
+    <div class="upload-card-header">
+      <div class="upload-logo">Asung Trading Inc.</div>
+      <div class="upload-title">Urgent Order Dashboard</div>
+      <div class="upload-sub">Weekly_Status.xlsx 파일을 드래그하거나 클릭해서 업로드하세요</div>
+    </div>
+
+    <div class="upload-card-body">
+      <!-- 드롭존 -->
+      <div class="dropzone" id="dropzone">
+        <input type="file" id="fileInput" accept=".xlsx,.xls" onchange="onFileSelect(this.files[0])">
+        <span class="dz-icon">📂</span>
+        <div class="dz-title">파일을 여기에 드래그하거나 클릭해서 선택</div>
+        <div class="dz-hint">매주 Easy Insight에서 내보낸 Weekly_Status.xlsx</div>
+        <div class="dz-format">지원 형식: .xlsx · .xls</div>
+      </div>
+
+      <!-- 선택된 파일 표시 -->
+      <div class="file-selected" id="fileSelected">
+        <div>
+          <div class="file-name" id="fileName"></div>
+          <div class="file-meta" id="fileMeta"></div>
+        </div>
+        <button class="file-clear" onclick="clearFile()">✕ 취소</button>
+      </div>
+
+      <!-- 기준일 / 저장 파일명 -->
+      <div class="upload-row">
+        <div class="upload-group">
+          <label class="upload-label">기준일</label>
+          <input class="upload-input" type="date" id="refDate">
+        </div>
+        <div class="upload-group" style="flex:2">
+          <label class="upload-label">저장 파일명 (선택)</label>
+          <input class="upload-input" type="text" id="reportName" placeholder="예: 20260401_Urgent_Order">
+        </div>
+      </div>
+
+      <!-- 에러 -->
+      <div class="upload-error" id="uploadError"></div>
+
+      <!-- 로딩바 -->
+      <div class="loading-bar" id="loadingBar">
+        <div class="loading-fill" id="loadingFill"></div>
+      </div>
+
+      <!-- 액션 -->
+      <div class="upload-actions">
+        <button class="btn primary" id="generateBtn" onclick="generateDashboard()" disabled>대시보드 생성 →</button>
+      </div>
+
+      <!-- 저장된 보고서 -->
+      <div class="saved-section">
+        <span class="saved-label">저장된 보고서</span>
+        <div class="saved-list" id="savedList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════
+     SCREEN 2 · DASHBOARD
+══════════════════════════════ -->
+<div class="screen" id="screen-dashboard">
+  <header class="header">
+    <div class="header-left">
+      <span class="logo">Asung Trading Inc.</span>
+      <span class="header-title">주간 긴급 발주 현황</span>
+    </div>
+    <div class="header-actions">
+      <div class="view-toggle">
+        <button class="view-btn active" id="vbrand" onclick="switchView('brand',this)">브랜드별</button>
+        <button class="view-btn" id="vsku" onclick="switchView('sku',this)">개별 SKU</button>
+      </div>
+      <button class="icon-btn" onclick="openDlModal()">⬇ 저장</button>
+      <button class="icon-btn" onclick="goUpload()">← 파일 변경</button>
+      <span class="header-date" id="dashDate"></span>
+    </div>
+  </header>
+
+  <div class="kpi-grid">
+    <div class="kpi-card red"><div class="kpi-label">즉시 오더 필요</div><div class="kpi-num" id="kpi1">–</div><div class="kpi-sub">BO 발생 + PO 없음</div></div>
+    <div class="kpi-card amber"><div class="kpi-label">긴급 오더</div><div class="kpi-num" id="kpi2">–</div><div class="kpi-sub">Cover 0~2주 + PO 없음</div></div>
+    <div class="kpi-card pink"><div class="kpi-label">PO 입고 지연</div><div class="kpi-num" id="kpi3">–</div><div class="kpi-sub">ETA 경과 PO 건수</div></div>
+    <div class="kpi-card"><div class="kpi-label">위험 SKU 전체</div><div class="kpi-num" id="kpi4">–</div><div class="kpi-sub">Cover 4주 미만 전체</div></div>
+  </div>
+
+  <div class="main">
+    <aside class="sidebar">
+      <div class="search-wrap">
+        <input class="search-input" type="text" placeholder="브랜드 / 제품 검색..." id="searchInput" oninput="handleSearch()">
+      </div>
+      <div class="sidebar-section">
+        <span class="sidebar-label">티어 필터</span>
+        <button class="filter-btn active" onclick="setFilter('all',this)"><span class="dot" style="background:linear-gradient(135deg,var(--red),var(--amber))"></span>전체<span class="count-badge" id="cnt-all"></span></button>
+        <button class="filter-btn red" onclick="setFilter('tier1',this)"><span class="dot red"></span>즉시 오더<span class="count-badge" id="cnt-tier1"></span></button>
+        <button class="filter-btn amber" onclick="setFilter('tier2',this)"><span class="dot amber"></span>긴급<span class="count-badge" id="cnt-tier2"></span></button>
+        <button class="filter-btn blue" onclick="setFilter('tier3',this)"><span class="dot blue"></span>주의 (Top100)<span class="count-badge" id="cnt-tier3"></span></button>
+        <button class="filter-btn pink" onclick="setFilter('overdue',this)"><span class="dot pink"></span>PO 지연<span class="count-badge" id="cnt-overdue"></span></button>
+        <button class="filter-btn" onclick="setFilter('has_po',this)"><span class="dot green"></span>PO 진행중<span class="count-badge" id="cnt-has_po"></span></button>
+      </div>
+      <div class="sidebar-section" id="sort-section">
+        <span class="sidebar-label">정렬</span>
+        <button class="filter-btn active" onclick="setSort('cover',this)"><span style="font-size:11px">↑</span>Cover 낮은순</button>
+        <button class="filter-btn" onclick="setSort('sales',this)"><span style="font-size:11px">↓</span>3M판매 높은순</button>
+        <button class="filter-btn" onclick="setSort('bo',this)"><span style="font-size:11px">↓</span>BO 많은순</button>
+      </div>
+      <div class="sidebar-section" id="sku-hint" style="display:none;">
+        <span class="sidebar-label">SKU 뷰 정렬</span>
+        <span style="font-size:11px;color:var(--text3);line-height:1.6">상단 버튼으로<br>열 기준 정렬 가능</span>
+      </div>
+    </aside>
+
+    <div class="content">
+      <div class="view-panel active" id="panel-brand"><div id="mainContent"></div></div>
+      <div class="view-panel" id="panel-sku">
+        <div class="sku-view-header">
+          <span class="sku-view-title" id="skuViewTitle"></span>
+          <div class="sku-sort-bar">
+            <button class="sort-btn active" onclick="skuSort('urgency',this)"><span>↓</span>긴급도</button>
+            <button class="sort-btn" onclick="skuSort('cover',this)"><span>↑</span>Cover 낮은순</button>
+            <button class="sort-btn" onclick="skuSort('sales3m',this)"><span>↓</span>3M판매 높은순</button>
+            <button class="sort-btn" onclick="skuSort('bo',this)"><span>↓</span>BO 많은순</button>
+            <button class="sort-btn" onclick="skuSort('perform',this)"><span>↑</span>Perform 낮은순</button>
+          </div>
+        </div>
+        <div class="sku-table-wrap">
+          <table class="sku-master-table">
+            <thead><tr>
+              <th style="width:32px">#</th>
+              <th>제품명</th><th>브랜드</th>
+              <th style="width:90px">긴급도</th>
+              <th style="width:70px">Cover W.</th>
+              <th style="width:50px">BO</th>
+              <th style="width:80px">3M주간판매</th>
+              <th style="width:76px">월판매수량</th>
+              <th style="width:66px">Perform</th>
+              <th style="width:60px">재고</th>
+              <th style="width:150px">PO 현황</th>
+              <th style="width:70px">티어</th>
+            </tr></thead>
+            <tbody id="skuTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <span class="footer-text" id="footerLeft">Asung Trading Inc. · Cin7 Core / Easy Insight</span>
+    <span class="footer-text">Cover W. = 재고÷3M주간평균 &nbsp;|&nbsp; 긴급도 = 판매량×(1−Cover/4주) &nbsp;|&nbsp; Perform = 이번주−3M평균</span>
+  </footer>
+</div>
+
+<!-- 다운로드 모달 -->
+<div class="modal-overlay" id="dlModal">
+  <div class="modal">
+    <div class="modal-title">HTML 파일로 저장</div>
+    <label class="modal-lbl">파일명</label>
+    <input class="modal-input" type="text" id="dlName" placeholder="예: 20260401_Urgent_Order">
+    <div class="modal-actions">
+      <button class="modal-btn" onclick="closeDlModal()">취소</button>
+      <button class="modal-btn primary" onclick="confirmDownload()">다운로드</button>
+    </div>
+  </div>
+</div>
+
+<!-- SheetJS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+/* ════════════════════════
+   STATE
+════════════════════════ */
+let SUPPLIERS = [], SKU_DATA = [];
+let currentView='brand', currentFilter='all', currentSort='cover';
+let searchQuery='', skuSortKey='urgency', skuSortDir=-1;
+let currentRefDate='', currentFileName='';
+
+const SHEET_NAMES = [
+  'Hair & Skin Care','Electrical Tools & Attachment','Braids & Hair Extentions',
+  'Combs, Brushes & Piks','Caps, Durags & Headwears','Beauty Tools & Salon Supplies','Hair Accessories'
+];
+const TIER_CONFIG = {
+  tier1:   {label:'🔴 즉시 오더 필요 — 백오더 발생, PO 없음', color:'red'},
+  tier2:   {label:'🟡 긴급 오더 — Cover 0~2주, PO 없음',      color:'amber'},
+  tier3:   {label:'🔵 사전 발주 권장 — Cover 2~4주 (Top100)', color:'blue'},
+  overdue: {label:'🟣 PO 입고 지연 — ETA 경과, 상태 확인',    color:'pink'},
+  has_po:  {label:'🟢 PO 진행 중 — 고위험 SKU 포함',          color:'has_po'},
+};
+const SKU_SD = {urgency:-1, cover:1, sales3m:-1, bo:-1, perform:1};
+
+/* ════════════════════════
+   SCREEN
+════════════════════════ */
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+function goUpload(){ showScreen('screen-upload'); renderSavedList(); }
+
+/* ════════════════════════
+   DRAG & DROP / FILE SELECT
+════════════════════════ */
+const dz = document.getElementById('dropzone');
+dz.addEventListener('dragover', e=>{e.preventDefault(); dz.classList.add('drag-over');});
+dz.addEventListener('dragleave', ()=>dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e=>{
+  e.preventDefault(); dz.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if(f) onFileSelect(f);
+});
+
+let selectedFile = null;
+function onFileSelect(f){
+  if(!f) return;
+  if(!f.name.match(/\.xlsx?$/i)){
+    showError('xlsx 또는 xls 파일만 지원합니다.'); return;
+  }
+  selectedFile = f;
+  document.getElementById('fileName').textContent = f.name;
+  document.getElementById('fileMeta').textContent =
+    (f.size/1024).toFixed(0) + ' KB · ' + new Date(f.lastModified).toLocaleDateString('ko');
+  document.getElementById('fileSelected').classList.add('visible');
+  document.getElementById('generateBtn').disabled = false;
+  document.getElementById('uploadError').style.display = 'none';
+
+  // 파일명에서 날짜 자동 추출 (YYYYMMDD_...)
+  const m = f.name.match(/^(\d{4})(\d{2})(\d{2})/);
+  if(m){
+    document.getElementById('refDate').value = `${m[1]}-${m[2]}-${m[3]}`;
+    document.getElementById('reportName').value = f.name.replace(/\.xlsx?$/i,'');
+  }
+}
+
+function clearFile(){
+  selectedFile = null;
+  document.getElementById('fileInput').value = '';
+  document.getElementById('fileSelected').classList.remove('visible');
+  document.getElementById('generateBtn').disabled = true;
+  document.getElementById('uploadError').style.display = 'none';
+}
+
+function showError(msg){
+  const el = document.getElementById('uploadError');
+  el.textContent = '⚠ ' + msg;
+  el.style.display = 'block';
+}
+
+/* ════════════════════════
+   EXCEL PARSING
+════════════════════════ */
+function generateDashboard(){
+  if(!selectedFile){ showError('파일을 먼저 선택해주세요.'); return; }
+  document.getElementById('loadingBar').classList.add('active');
+  document.getElementById('generateBtn').disabled = true;
+  document.getElementById('uploadError').style.display = 'none';
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, {type:'array', cellDates:true});
+      parseWorkbook(wb);
+    } catch(err){
+      showError('파일 파싱 오류: ' + err.message);
+      document.getElementById('loadingBar').classList.remove('active');
+      document.getElementById('generateBtn').disabled = false;
+    }
+  };
+  reader.readAsArrayBuffer(selectedFile);
+}
+
+function excelDateToStr(val){
+  if(!val) return '';
+  if(val instanceof Date){
+    if(isNaN(val)) return '';
+    return val.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  }
+  if(typeof val === 'number'){
+    const d = XLSX.SSF.parse_date_code(val);
+    if(!d) return '';
+    return new Date(d.y, d.m-1, d.d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  }
+  return String(val);
+}
+
+function n(v){ return (typeof v === 'number' && !isNaN(v)) ? v : null; }
+
+function parseWorkbook(wb){
+  currentRefDate = document.getElementById('refDate').value || new Date().toISOString().slice(0,10);
+  currentFileName = document.getElementById('reportName').value ||
+    (selectedFile ? selectedFile.name.replace(/\.xlsx?$/i,'') : 'Urgent_Order');
+
+  const refTs = new Date(currentRefDate).getTime();
+  const allRows = [];
+
+  for(const sheetName of SHEET_NAMES){
+    const ws = wb.Sheets[sheetName];
+    if(!ws) continue;
+
+    // header row = row 1 (index 0), data starts row 4 (index 3) — skip legend rows 2,3
+    const raw = XLSX.utils.sheet_to_json(ws, {header:1, defval:null});
+
+    // find header row (contains 'Rank')
+    let headerIdx = 0;
+    for(let i=0;i<Math.min(5,raw.length);i++){
+      if(raw[i] && raw[i].some(c=>String(c||'').trim()==='Rank')){ headerIdx=i; break; }
+    }
+    const headers = raw[headerIdx].map(h=>String(h||'').trim());
+
+    const col = name => headers.indexOf(name);
+    const iRank=col('Rank'), iBrand=col('Brand'), iProduct=col('Product'),
+          iOpt=col('Option1'), iSupplier=col('Supplier'),
+          i3M=col('W with 3M'), iSales=col('Sales'), iWS=col('W. Sales'),
+          iPerf=col('Perform'), iBO=col('Current BO'), iAvail=col('Available'),
+          iCover=col('Cover W.'), iPO=col('PO'), iETA=col('ETA');
+
+    for(let i=headerIdx+1; i<raw.length; i++){
+      const row = raw[i];
+      if(!row) continue;
+      const rank = n(row[iRank]);
+      if(rank===null || isNaN(rank)) continue; // skip legend / empty rows
+
+      const cover  = n(row[iCover]) ?? 0;
+      const sales3m = n(row[i3M]) ?? 0;
+      const bo     = n(row[iBO]) ?? 0;
+      const avail  = n(row[iAvail]) ?? 0;
+      const po     = n(row[iPO]) ?? 0;
+      const sales  = n(row[iSales]) ?? 0;
+      const ws_    = n(row[iWS]) ?? 0;
+      const perf   = n(row[iPerf]) ?? 0;
+
+      // ETA
+      let etaStr = '', etaTs = null;
+      const rawEta = row[iETA];
+      if(rawEta){
+        if(rawEta instanceof Date && !isNaN(rawEta)){
+          etaTs = rawEta.getTime();
+          etaStr = rawEta.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+        } else if(typeof rawEta==='number'){
+          const d=XLSX.SSF.parse_date_code(rawEta);
+          if(d){ const dt=new Date(d.y,d.m-1,d.d); etaTs=dt.getTime(); etaStr=dt.toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
+        }
+      }
+
+      // Tier classification
+      const hasPO = po > 0;
+      const etaOverdue = hasPO && etaTs !== null && etaTs < refTs;
+      let tier = null;
+      if(sales3m > 0 && cover < 4){
+        if(etaOverdue)                                 tier = 'overdue';
+        else if(cover <= 0 && !hasPO)                 tier = 'tier1';
+        else if(cover > 0 && cover <= 2 && !hasPO)    tier = 'tier2';
+        else if(cover > 2 && cover <= 4 && !hasPO && rank <= 100) tier = 'tier3';
+        else if(hasPO && !etaOverdue)                  tier = 'has_po';
+      }
+      if(!tier) continue;
+
+      allRows.push({
+        rank: Math.round(rank),
+        brand: String(row[iBrand]||'').trim(),
+        product: String(row[iProduct]||'').trim(),
+        option: String(row[iOpt]||'').trim(),
+        supplier: String(row[iSupplier]||'').trim(),
+        category: sheetName,
+        cover, bo, sales3m, salesMonth: Math.round(sales),
+        perform: perf, available: Math.round(avail),
+        po: Math.round(po), eta: etaStr,
+        tier,
+      });
+    }
+  }
+
+  if(!allRows.length){
+    showError('조건에 맞는 데이터가 없습니다. 파일 형식을 확인하거나 기준일을 조정해보세요.');
+    document.getElementById('loadingBar').classList.remove('active');
+    document.getElementById('generateBtn').disabled = false;
+    return;
+  }
+
+  // Urgency score
+  const maxSales = Math.max(...allRows.map(r=>r.sales3m), 0.001);
+  allRows.forEach(r=>{
+    r.urgency = (r.sales3m/maxSales) * (1 - Math.max(r.cover,0)/4);
+  });
+
+  // Build SUPPLIERS (brand view) — group by supplier+brand+tier
+  const suppMap = {};
+  allRows.forEach((r,i)=>{
+    const key = `${r.tier}||${r.supplier}||${r.brand}`;
+    if(!suppMap[key]){
+      suppMap[key]={
+        id:'s'+i, tier:r.tier,
+        tierLabel: {tier1:'즉시 오더',tier2:'긴급 오더',tier3:'주의(Top100)',overdue:'PO 지연',has_po:'PO 진행중'}[r.tier]||r.tier,
+        tierColor: {tier1:'red',tier2:'amber',tier3:'blue',overdue:'pink',has_po:'has_po'}[r.tier]||'other',
+        brand:r.brand, supplier:r.supplier, category:r.category, skus:[]
+      };
+    }
+    suppMap[key].skus.push({
+      name: r.product + (r.option ? ` (${r.option})` : ''),
+      cover:r.cover, bo:r.bo, sales:r.sales3m, po:r.po, eta:r.eta||null
+    });
+  });
+  SUPPLIERS = Object.values(suppMap);
+
+  // SKU_DATA sorted by urgency desc
+  SKU_DATA = [...allRows].sort((a,b)=>b.urgency-a.urgency);
+
+  // Save to localStorage
+  saveSession(currentFileName, currentRefDate, allRows);
+
+  // Render
+  initDashboard();
+  document.getElementById('loadingBar').classList.remove('active');
+  showScreen('screen-dashboard');
+}
+
+/* ════════════════════════
+   DASHBOARD INIT
+════════════════════════ */
+function initDashboard(){
+  document.getElementById('dashDate').textContent = '기준일: ' + currentRefDate;
+  document.getElementById('footerLeft').textContent =
+    'Asung Trading Inc. · ' + currentFileName + ' · ' + currentRefDate;
+
+  const t1skus = SUPPLIERS.filter(s=>s.tier==='tier1').reduce((a,s)=>a+s.skus.length,0);
+  const t2skus = SUPPLIERS.filter(s=>s.tier==='tier2').reduce((a,s)=>a+s.skus.length,0);
+  const odskus = SUPPLIERS.filter(s=>s.tier==='overdue').reduce((a,s)=>a+s.skus.length,0);
+  document.getElementById('kpi1').textContent = t1skus;
+  document.getElementById('kpi2').textContent = t2skus;
+  document.getElementById('kpi3').textContent = odskus;
+  document.getElementById('kpi4').textContent = SKU_DATA.length;
+
+  currentFilter='all'; currentSort='cover'; searchQuery='';
+  skuSortKey='urgency'; skuSortDir=-1;
+  document.getElementById('searchInput').value='';
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelector('.filter-btn[onclick*="all"]').classList.add('active');
+  document.getElementById('sort-section').style.display='';
+  document.getElementById('sku-hint').style.display='none';
+  document.querySelectorAll('.view-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('vbrand').classList.add('active');
+  document.querySelectorAll('.view-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-brand').classList.add('active');
+  renderBrand();
+}
+
+/* ════════════════════════
+   VIEW / FILTER / SORT
+════════════════════════ */
+function switchView(v,btn){
+  currentView=v;
+  document.querySelectorAll('.view-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
+  document.querySelectorAll('.view-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-'+v).classList.add('active');
+  document.getElementById('sort-section').style.display=v==='brand'?'':'none';
+  document.getElementById('sku-hint').style.display=v==='sku'?'':'none';
+  v==='sku'?renderSkuTable():renderBrand();
+}
+function setFilter(t,btn){
+  currentFilter=t;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
+  renderBrand(); if(currentView==='sku') renderSkuTable();
+}
+function setSort(s,btn){
+  currentSort=s;
+  document.querySelectorAll('#sort-section .filter-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
+  renderBrand();
+}
+function handleSearch(){
+  searchQuery=document.getElementById('searchInput').value.toLowerCase();
+  renderBrand(); if(currentView==='sku') renderSkuTable();
+}
+
+/* ════════════════════════
+   BRAND VIEW
+════════════════════════ */
+const gmc=s=>Math.min(...s.skus.map(x=>x.cover));
+const gts=s=>s.skus.reduce((a,x)=>a+x.sales,0);
+const gbo=s=>s.skus.reduce((a,x)=>a+(x.bo||0),0);
+
+function matchesBrand(s){
+  if(currentFilter!=='all'&&s.tier!==currentFilter) return false;
+  if(!searchQuery) return true;
+  return (s.brand+' '+s.supplier+' '+s.skus.map(x=>x.name).join(' ')).toLowerCase().includes(searchQuery);
+}
+function renderCard(s){
+  const mc=gmc(s), tbo=gbo(s), ts=gts(s).toFixed(0);
+  const rows=s.skus.map(sk=>{
+    const cv=sk.cover<=0?'neg':sk.cover<=2?'low':'ok';
+    const po=sk.po>0
+      ?`<span class="po-tag">PO ${sk.po.toLocaleString()}</span><span class="eta-tag">${sk.eta||''}</span>`
+      :'<span class="po-none">없음</span>';
+    return`<tr>
+      <td style="color:var(--text);font-size:12px">${sk.name}</td>
+      <td class="right"><span class="cover-val ${cv}">${sk.cover.toFixed(1)}주</span></td>
+      <td class="right"><span class="bo-val ${sk.bo>0?'nonzero':'zero'}">${sk.bo>0?sk.bo:'–'}</span></td>
+      <td class="right"><span class="sales-val">${sk.sales.toFixed(0)}</span></td>
+      <td class="po-cell">${po}</td></tr>`;
+  }).join('');
+  return`<div class="supplier-card ${s.tierColor}" id="${s.id}">
+    <div class="card-header" onclick="toggle('${s.id}')">
+      <div>
+        <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-bottom:2px;">
+          <span class="tier-pill ${s.tierColor}">${s.tierLabel}</span>
+          <span class="brand-name">${s.brand}</span>
+        </div>
+        <div class="supplier-name-small">${s.supplier} · ${s.category} · ${s.skus.length}개 SKU</div>
+      </div>
+      <div class="card-meta">
+        <div class="meta-item"><div class="meta-val ${mc<=0?'red':''}">${mc.toFixed(1)}주</div><div class="meta-lbl">최저 Cover</div></div>
+        <div class="meta-item"><div class="meta-val ${tbo>0?'red':''}">${tbo>0?tbo:'–'}</div><div class="meta-lbl">총 BO</div></div>
+        <div class="meta-item"><div class="meta-val">${ts}</div><div class="meta-lbl">3M 주간판매</div></div>
+        <span class="chevron-icon" id="chev-${s.id}">▼</span>
+      </div>
+    </div>
+    <div class="sku-wrap" id="wrap-${s.id}">
+      <table class="inner-tbl"><thead><tr>
+        <th>제품명</th><th class="right">Cover W.</th><th class="right">현재 BO</th><th class="right">3M 주간판매</th><th class="right">PO 현황</th>
+      </tr></thead><tbody>${rows}</tbody></table>
+    </div>
+  </div>`;
+}
+function toggle(id){
+  document.getElementById('wrap-'+id).classList.toggle('open');
+  document.getElementById('chev-'+id).classList.toggle('open');
+}
+function renderBrand(){
+  if(!SUPPLIERS.length) return;
+  const tiers=currentFilter==='all'?['tier1','tier2','tier3','overdue','has_po']:[currentFilter];
+  ['tier1','tier2','tier3','overdue','has_po'].forEach(t=>{
+    const el=document.getElementById('cnt-'+t);
+    if(el) el.textContent=SUPPLIERS.filter(s=>s.tier===t&&matchesBrand(s)).length;
+  });
+  const ae=document.getElementById('cnt-all');
+  if(ae) ae.textContent=SUPPLIERS.filter(matchesBrand).length;
+  let html='';
+  for(const tier of tiers){
+    let list=SUPPLIERS.filter(s=>s.tier===tier&&matchesBrand(s));
+    if(!list.length) continue;
+    list=[...list].sort((a,b)=>{
+      if(currentSort==='cover') return gmc(a)-gmc(b);
+      if(currentSort==='sales') return gts(b)-gts(a);
+      if(currentSort==='bo')    return gbo(b)-gbo(a);
+      return 0;
+    });
+    const cfg=TIER_CONFIG[tier]||{label:tier,color:'other'};
+    const dc=cfg.color==='has_po'?'var(--green)':cfg.color==='other'?'var(--text3)':`var(--${cfg.color})`;
+    html+=`<div class="tier-section">
+      <div class="tier-header">
+        <span class="tier-dot" style="background:${dc}"></span>
+        <span class="tier-title">${cfg.label}</span>
+        <span class="tier-count">${list.length}개 서플라이어</span>
+      </div>${list.map(renderCard).join('')}</div>`;
+  }
+  document.getElementById('mainContent').innerHTML=html||'<div class="empty-msg">검색 결과가 없습니다.</div>';
+}
+
+/* ════════════════════════
+   SKU TABLE VIEW
+════════════════════════ */
+const TLABELS={tier1:'즉시오더',tier2:'긴급',tier3:'주의',overdue:'PO지연',has_po:'PO진행',other:'기타'};
+const TCOLORS={tier1:'tier1',tier2:'tier2',tier3:'tier3',overdue:'overdue',has_po:'has_po',other:'other'};
+function uColor(u){return u>=0.15?'#e05c5c':u>=0.07?'#e8a030':u>=0.03?'#4d9ceb':'#5a5f70';}
+function skuSort(key,btn){
+  skuSortDir=skuSortKey===key?skuSortDir*-1:(SKU_SD[key]||-1);
+  skuSortKey=key;
+  document.querySelectorAll('.sort-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active');
+  renderSkuTable();
+}
+function renderSkuTable(){
+  if(!SKU_DATA.length) return;
+  let list=SKU_DATA.filter(d=>{
+    if(currentFilter!=='all'&&d.tier!==currentFilter) return false;
+    if(!searchQuery) return true;
+    return(d.brand+' '+d.product+' '+(d.option||'')+' '+d.supplier).toLowerCase().includes(searchQuery);
+  });
+  list=[...list].sort((a,b)=>skuSortDir*(a[skuSortKey]-b[skuSortKey]));
+  const maxU=Math.max(...SKU_DATA.map(d=>d.urgency),0.001);
+  document.getElementById('skuViewTitle').textContent=`판매량×재고 긴급도 순 — ${list.length}개 SKU`;
+  const rows=list.map((d,i)=>{
+    const cv=d.cover<=0?'neg':d.cover<=1?'low':d.cover<=2?'mid':'ok';
+    const pct=Math.round(d.urgency/maxU*100);
+    const uc=uColor(d.urgency);
+    const po=d.po>0
+      ?`<span class="po-tag-s">PO ${d.po.toLocaleString()}</span>${d.eta?`<span class="eta-tag-s">${d.eta}</span>`:''}`
+      :'<span class="po-none-s">없음</span>';
+    return`<tr>
+      <td style="font-family:var(--mono);font-size:11px;color:var(--text3);text-align:right">${i+1}</td>
+      <td class="prod-cell"><div class="prod-name">${d.product}</div>${d.option?`<div class="prod-option">${d.option}</div>`:''}</td>
+      <td class="brand-cell">${d.brand}</td>
+      <td style="padding:8px 12px">
+        <div class="urgency-bar-wrap">
+          <div class="urgency-bar"><div class="urgency-fill" style="width:${pct}%;background:${uc}"></div></div>
+          <span style="font-family:var(--mono);font-size:10px;color:${uc};min-width:28px;text-align:right">${(d.urgency*100).toFixed(1)}</span>
+        </div>
+      </td>
+      <td class="cv-cell ${cv}">${d.cover.toFixed(1)}주</td>
+      <td class="num-cell ${d.bo>0?'danger':'muted'}">${d.bo>0?d.bo:'–'}</td>
+      <td class="num-cell">${d.sales3m.toFixed(0)}</td>
+      <td class="num-cell">${(d.salesMonth||0).toLocaleString()}</td>
+      <td class="num-cell ${(d.perform||0)>=0?'positive':'negative'}">${(d.perform||0)>=0?'+':''}${(d.perform||0).toFixed(0)}</td>
+      <td class="num-cell ${(d.available||0)<0?'danger':''}">${(d.available||0).toLocaleString()}</td>
+      <td class="po-cell-sku">${po}</td>
+      <td><span class="tier-pill ${TCOLORS[d.tier]||'other'}">${TLABELS[d.tier]||d.tier}</span></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('skuTbody').innerHTML=rows||'<tr><td colspan="12" class="empty-msg">검색 결과 없음</td></tr>';
+}
+
+/* ════════════════════════
+   LOCALSTORAGE (세션 저장)
+   — 파일 자체가 아니라 파싱 결과만 저장
+════════════════════════ */
+const LS_KEY='asung_urgent_sessions';
+function getSessions(){ try{ return JSON.parse(localStorage.getItem(LS_KEY)||'[]'); }catch{return[];} }
+function setSessions(arr){ localStorage.setItem(LS_KEY,JSON.stringify(arr)); }
+
+function saveSession(name, date, rows){
+  const sessions=getSessions();
+  const idx=sessions.findIndex(s=>s.name===name);
+  const entry={name, date, rows, savedAt:new Date().toISOString()};
+  if(idx>=0) sessions[idx]=entry; else sessions.unshift(entry);
+  setSessions(sessions.slice(0,15));
+}
+
+function renderSavedList(){
+  const sessions=getSessions();
+  const el=document.getElementById('savedList');
+  if(!sessions.length){
+    el.innerHTML='<div class="no-saved">저장된 보고서가 없습니다<br><span style="font-size:10px;color:var(--text3)">파일을 업로드하면 자동 저장됩니다</span></div>';
+    return;
+  }
+  el.innerHTML=sessions.map((s,i)=>`
+    <div class="saved-item">
+      <div>
+        <div class="saved-item-name">${s.name}</div>
+        <div class="saved-item-meta">${s.date} · ${new Date(s.savedAt).toLocaleString('ko')} · ${s.rows.length}개 SKU</div>
+      </div>
+      <div class="saved-item-btns">
+        <button class="saved-btn" onclick="loadSession(${i})">불러오기</button>
+        <button class="saved-btn del" onclick="deleteSession(${i})">삭제</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function loadSession(i){
+  const s=getSessions()[i];
+  if(!s) return;
+  currentRefDate=s.date;
+  currentFileName=s.name;
+  document.getElementById('refDate').value=s.date;
+  document.getElementById('reportName').value=s.name;
+
+  const maxSales=Math.max(...s.rows.map(r=>r.sales3m),0.001);
+  s.rows.forEach(r=>{ if(r.urgency===undefined) r.urgency=(r.sales3m/maxSales)*(1-Math.max(r.cover,0)/4); });
+
+  // rebuild SUPPLIERS & SKU_DATA from saved rows
+  const suppMap={};
+  s.rows.forEach((r,i)=>{
+    const key=`${r.tier}||${r.supplier}||${r.brand}`;
+    if(!suppMap[key]) suppMap[key]={
+      id:'s'+i, tier:r.tier,
+      tierLabel:{tier1:'즉시 오더',tier2:'긴급 오더',tier3:'주의(Top100)',overdue:'PO 지연',has_po:'PO 진행중'}[r.tier]||r.tier,
+      tierColor:{tier1:'red',tier2:'amber',tier3:'blue',overdue:'pink',has_po:'has_po'}[r.tier]||'other',
+      brand:r.brand, supplier:r.supplier, category:r.category, skus:[]
+    };
+    suppMap[key].skus.push({name:r.product+(r.option?` (${r.option})`:''),cover:r.cover,bo:r.bo,sales:r.sales3m,po:r.po,eta:r.eta||null});
+  });
+  SUPPLIERS=Object.values(suppMap);
+  SKU_DATA=[...s.rows].sort((a,b)=>b.urgency-a.urgency);
+
+  initDashboard();
+  showScreen('screen-dashboard');
+}
+
+function deleteSession(i){
+  const sessions=getSessions();
+  if(!confirm(`"${sessions[i].name}"을 삭제하시겠습니까?`)) return;
+  sessions.splice(i,1); setSessions(sessions); renderSavedList();
+}
+
+/* ════════════════════════
+   DOWNLOAD MODAL
+════════════════════════ */
+function openDlModal(){
+  document.getElementById('dlName').value=currentFileName||'Urgent_Order_Dashboard';
+  document.getElementById('dlModal').classList.add('open');
+}
+function closeDlModal(){ document.getElementById('dlModal').classList.remove('open'); }
+function confirmDownload(){
+  let fname=document.getElementById('dlName').value.trim()||'Urgent_Order_Dashboard';
+  if(!fname.endsWith('.html')) fname+='.html';
+  closeDlModal();
+  downloadHtml(fname);
+}
+
+function downloadHtml(filename){
+  const suppJson=JSON.stringify(SUPPLIERS);
+  const skuJson=JSON.stringify(SKU_DATA);
+  const date=currentRefDate;
+  const fname=currentFileName;
+
+  // 현재 페이지 HTML에서 불필요한 업로드 화면을 제거하고
+  // 데이터를 하드코딩한 standalone 파일 생성
+  const tmpl=document.documentElement.outerHTML;
+  const injected=tmpl.replace('</body>',`
+<script>
+(function(){
+  var S=${suppJson};
+  var K=${skuJson};
+  SUPPLIERS=S; SKU_DATA=K;
+  currentRefDate='${date}'; currentFileName='${fname}';
+  document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
+  document.getElementById('screen-dashboard').classList.add('active');
+  initDashboard();
+})();
+<\/script>
+</body>`);
+
+  const blob=new Blob([injected],{type:'text/html;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download=filename; a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/* ════════════════════════
+   INIT
+════════════════════════ */
+document.getElementById('refDate').value=new Date().toISOString().slice(0,10);
+renderSavedList();
+</script>
+</body>
+</html>
