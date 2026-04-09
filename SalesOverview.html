@@ -19,9 +19,9 @@
   --yellow: #f0c040;
   --purple: #9b7ff4;
   --teal: #3dcfc0;
-  --text: #e8eaf0;
-  --mid: #9aa0b8;
-  --dim: #5a607a;
+  --text: #f0f2fa;
+  --mid: #c0c6d8;
+  --dim: #8890aa;
   --gold: #f0a500;
   --grid: #1e2333;
 }
@@ -567,11 +567,15 @@ function processData(salesRows, detailRows) {
     name, sale: v.sale, qty: v.qty, orders: v.orders.size
   }));
 
-  // ── Sales weekly/monthly (Overview - Invoice date) ──
-  const salesWkMap = {}, salesMoMap = {};
+  // ── Sales weekly/monthly/daily (Overview - Invoice date) ──
+  const salesWkMap = {}, salesMoMap = {}, salesDayMap = {};
   sales.forEach(r => {
     if (!r.invoiceDate) return;
     const dt2 = r.invoiceDate;
+    // daily
+    const dk2 = dt2.toISOString().slice(0,10);
+    salesDayMap[dk2] = (salesDayMap[dk2]||0) + r.sale;
+    // weekly
     const dow = dt2.getDay();
     const mon2 = new Date(dt2); mon2.setDate(dt2.getDate() - (dow===0?6:dow-1));
     const wk2 = mon2.toISOString().slice(5,10);
@@ -579,7 +583,8 @@ function processData(salesRows, detailRows) {
     salesWkMap[wk2].sale += r.sale;
     salesWkMap[wk2].paid += r.paid;
     salesWkMap[wk2].due += r.due;
-    const mo2 = r.invoiceDate.toISOString().slice(0,7);
+    // monthly
+    const mo2 = dt2.toISOString().slice(0,7);
     if (!salesMoMap[mo2]) salesMoMap[mo2] = { sale:0, paid:0, due:0 };
     salesMoMap[mo2].sale += r.sale;
     salesMoMap[mo2].paid += r.paid;
@@ -587,6 +592,7 @@ function processData(salesRows, detailRows) {
   });
   S.salesWeekly = Object.entries(salesWkMap).sort((a,b)=>a[0]>b[0]?1:-1).map(([lbl,v])=>({lbl,...v}));
   S.salesMonthly = Object.entries(salesMoMap).sort((a,b)=>a[0]>b[0]?1:-1).map(([lbl,v])=>({lbl,...v}));
+  S.salesDayMap = salesDayMap;
 
   // ── Header ──
   const invoiceDates = sales.map(r => r.invoiceDate).filter(Boolean).sort((a,b)=>a-b);
@@ -612,7 +618,7 @@ function baseOpts(rot) {
   return {
     responsive:true, maintainAspectRatio:false,
     plugins:{ legend:{ labels:{ color:'#9aa0b8', font:{size:11} } }, tooltip:TOOLTIP },
-    scales:{ x:{ grid:{color:'#1e2333'}, ticks:{color:'#5a607a',font:{size:10},maxRotation:rot||0} }, y:{ grid:{color:'#1e2333'}, ticks:{color:'#5a607a',font:{size:10}} } }
+    scales:{ x:{ grid:{color:'#1e2333'}, ticks:{color:'#8890aa',font:{size:10},maxRotation:rot||0} }, y:{ grid:{color:'#1e2333'}, ticks:{color:'#8890aa',font:{size:10}} } }
   };
 }
 
@@ -659,66 +665,72 @@ function initOverview() {
   $('bedm-pct').textContent = (k.edmSale/k.totalSale*100).toFixed(1)+'%';
 
   const PROG_COLORS = ['#3dd68c','#4f8ef7','#f05a5a','#3dcfc0','#f0c040','#f7824f','#9b7ff4','#5a607a','#b8bece'];
-  mkChart('cProg', { type:'doughnut', data:{ labels:S.prog.map(p=>p[0]), datasets:[{ data:S.prog.map(p=>p[1]), backgroundColor:PROG_COLORS, borderWidth:1, borderColor:'#0b0d12' }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'right',labels:{color:'#9aa0b8',font:{size:10},boxWidth:12}}, tooltip:TOOLTIP } } });
+  mkChart('cProg', { type:'doughnut', data:{ labels:S.prog.map(p=>p[0]), datasets:[{ data:S.prog.map(p=>p[1]), backgroundColor:PROG_COLORS, borderWidth:1, borderColor:'#0b0d12' }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'right',labels:{color:'#c0c6d8',font:{size:10},boxWidth:12}}, tooltip:TOOLTIP } } });
 
   const PAY_COLORS = ['#f05a5a','#3dd68c','#f0c040','#9b7ff4','#4f8ef7','#3dcfc0'];
-  mkChart('cPay', { type:'doughnut', data:{ labels:S.pay.map(p=>p[0]), datasets:[{ data:S.pay.map(p=>p[1]), backgroundColor:PAY_COLORS, borderWidth:1, borderColor:'#0b0d12' }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'right',labels:{color:'#9aa0b8',font:{size:10},boxWidth:12}}, tooltip:TOOLTIP } } });
+  mkChart('cPay', { type:'doughnut', data:{ labels:S.pay.map(p=>p[0]), datasets:[{ data:S.pay.map(p=>p[1]), backgroundColor:PAY_COLORS, borderWidth:1, borderColor:'#0b0d12' }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'right',labels:{color:'#c0c6d8',font:{size:10},boxWidth:12}}, tooltip:TOOLTIP } } });
 }
 
 // ── TAB 1 ──
 let trendPeriod = 'daily';
 let trendBranch = 'all';
 
+function aggregateDetailsByBranch(branch, keyFn) {
+  const map = {};
+  (S._details || []).forEach(r => {
+    if (!r.orderDate) return;
+    if (branch === 'tor' && r.location !== 'Asung Trading Inc.') return;
+    if (branch === 'edm' && r.location !== 'Asung - Edmonton') return;
+    const key = keyFn(r.orderDate);
+    if (!map[key]) map[key] = { sale:0, qty:0, orders:new Set() };
+    map[key].sale += r.sale;
+    map[key].qty += r.qty;
+    map[key].orders.add(r.order);
+  });
+  return Object.entries(map).sort((a,b)=>a[0]>b[0]?1:-1).map(([k,v])=>({
+    key:k, sale:v.sale, qty:v.qty, orders:v.orders.size
+  }));
+}
+
+function getInvoiceSaleByPeriod(period, labels) {
+  // Invoice date 기준 매출을 Order labels에 맞춰 반환
+  const dm = S.salesDayMap || {};
+  const wm = {}; (S.salesWeekly||[]).forEach(w => { wm[w.lbl] = w.sale; });
+  const mm = {}; (S.salesMonthly||[]).forEach(m => { mm[m.lbl] = m.sale; });
+  if (period === 'daily') return labels.map(l => dm['2026-'+l] || dm[Object.keys(dm).find(k=>k.slice(5)===l)] || 0);
+  if (period === 'weekly') return labels.map(l => wm[l] || 0);
+  return labels.map(l => mm[l] || 0);
+}
+
 function getPeriodData(period, branch) {
   branch = branch || trendBranch;
 
-  // Branch별 일별 데이터 계산
-  let dailySale, dailyLabels;
-  if (branch === 'tor') {
-    dailySale = S.torDaily;
-  } else if (branch === 'edm') {
-    dailySale = S.edmDaily;
-  } else {
-    dailySale = S.torDaily.map((v,i) => v + S.edmDaily[i]);
-  }
-  dailyLabels = S.dailyLabels;
-
-  // Branch별 주간/월별 집계
-  function aggregateByBranch(details, periodFn, keyFn) {
-    const map = {};
-    (S._details || []).forEach(r => {
-      if (!r.orderDate) return;
-      if (branch === 'tor' && r.location !== 'Asung Trading Inc.') return;
-      if (branch === 'edm' && r.location !== 'Asung - Edmonton') return;
-      const key = keyFn(r.orderDate);
-      if (!map[key]) map[key] = { sale:0, qty:0, orders:new Set() };
-      map[key].sale += r.sale;
-      map[key].qty += r.qty;
-      map[key].orders.add(r.order);
-    });
-    return Object.entries(map).sort((a,b)=>a[0]>b[0]?1:-1).map(([k,v])=>({
-      key:k, sale:v.sale, qty:v.qty, orders:v.orders.size
-    }));
-  }
-
+  let orderData;
   if (period === 'daily') {
-    return { labels: dailyLabels, sale: dailySale, orders: S.dailyOrders, qty: S.dailyQty, labelStr: '일별' };
+    let dailySale;
+    if (branch === 'tor') dailySale = S.torDaily;
+    else if (branch === 'edm') dailySale = S.edmDaily;
+    else dailySale = S.torDaily.map((v,i) => v + S.edmDaily[i]);
+    orderData = { labels: S.dailyLabels, sale: dailySale, orders: S.dailyOrders, qty: S.dailyQty };
   } else if (period === 'weekly') {
     if (branch === 'all') {
-      return { labels: S.weekly.map(w=>w.wk), sale: S.weekly.map(w=>w.sale), orders: S.weekly.map(w=>w.orders), qty: S.weekly.map(w=>w.qty), labelStr: '주별' };
+      orderData = { labels: S.weekly.map(w=>w.wk), sale: S.weekly.map(w=>w.sale), orders: S.weekly.map(w=>w.orders), qty: S.weekly.map(w=>w.qty) };
+    } else {
+      const data = aggregateDetailsByBranch(branch, d => { const dow=d.getDay(); const mon=new Date(d); mon.setDate(d.getDate()-(dow===0?6:dow-1)); return mon.toISOString().slice(5,10); });
+      orderData = { labels: data.map(d=>d.key), sale: data.map(d=>d.sale), orders: data.map(d=>d.orders), qty: data.map(d=>d.qty) };
     }
-    const data = aggregateByBranch(null, null, d => {
-      const dow = d.getDay(); const mon = new Date(d); mon.setDate(d.getDate()-(dow===0?6:dow-1));
-      return mon.toISOString().slice(5,10);
-    });
-    return { labels: data.map(d=>d.key), sale: data.map(d=>d.sale), orders: data.map(d=>d.orders), qty: data.map(d=>d.qty), labelStr: '주별' };
   } else {
     if (branch === 'all') {
-      return { labels: S.monthly.map(m=>m.mo), sale: S.monthly.map(m=>m.sale), orders: S.monthly.map(m=>m.orders), qty: S.monthly.map(m=>m.qty), labelStr: '월별' };
+      orderData = { labels: S.monthly.map(m=>m.mo), sale: S.monthly.map(m=>m.sale), orders: S.monthly.map(m=>m.orders), qty: S.monthly.map(m=>m.qty) };
+    } else {
+      const data = aggregateDetailsByBranch(branch, d => d.toISOString().slice(0,7));
+      orderData = { labels: data.map(d=>d.key), sale: data.map(d=>d.sale), orders: data.map(d=>d.orders), qty: data.map(d=>d.qty) };
     }
-    const data = aggregateByBranch(null, null, d => d.toISOString().slice(0,7));
-    return { labels: data.map(d=>d.key), sale: data.map(d=>d.sale), orders: data.map(d=>d.orders), qty: data.map(d=>d.qty), labelStr: '월별' };
   }
+
+  const invoiceSale = getInvoiceSaleByPeriod(period, orderData.labels);
+  const labelStr = period === 'daily' ? '일별' : period === 'weekly' ? '주별' : '월별';
+  return { ...orderData, invoiceSale, labelStr };
 }
 
 function setTrendPeriod(period, el) {
@@ -727,8 +739,15 @@ function setTrendPeriod(period, el) {
   if (el) el.classList.add('active');
   else { const btns = document.querySelectorAll('#trendToggle .tgl'); if(btns[['daily','weekly','monthly'].indexOf(period)]) btns[['daily','weekly','monthly'].indexOf(period)].classList.add('active'); }
   const d = getPeriodData(period);
-  $('trendSaleLabel').textContent = d.labelStr + ' · Order Details 기준';
-  mkChart('cWeeklySale', { type:'bar', data:{ labels:d.labels, datasets:[{ label:'매출 ($)', data:d.sale, backgroundColor:'rgba(79,142,247,0.7)', borderRadius:5 }] }, options:{ ...baseOpts(), plugins:{ ...baseOpts().plugins, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } } } });
+  $('trendSaleLabel').textContent = d.labelStr + ' · Order(파랑) vs Invoice(초록)';
+  mkChart('cWeeklySale', {
+    type:'bar',
+    data:{ labels:d.labels, datasets:[
+      { label:'Order date 기준', data:d.sale, backgroundColor:'rgba(79,142,247,0.75)', borderRadius:4 },
+      { label:'Invoice date 기준', data:d.invoiceSale, backgroundColor:'rgba(61,214,140,0.75)', borderRadius:4 },
+    ]},
+    options:{ ...baseOpts(), plugins:{ ...baseOpts().plugins, tooltip:{ ...TOOLTIP, mode:'index', callbacks:{ label:ctx=>' '+ctx.dataset.label+': '+fmt(ctx.raw) } } } }
+  });
   mkChart('cWeeklyOrders', { type:'bar', data:{ labels:d.labels, datasets:[{ label:'오더수', data:d.orders, backgroundColor:'rgba(61,207,192,0.7)', borderRadius:4 }] }, options:baseOpts() });
   mkChart('cWeeklyQty', { type:'bar', data:{ labels:d.labels, datasets:[{ label:'수량', data:d.qty, backgroundColor:'rgba(155,127,244,0.7)', borderRadius:4 }] }, options:baseOpts() });
 }
@@ -783,7 +802,7 @@ function initDue() {
 
   setDuePeriod('weekly');
 
-  mkChart('cDueCust', { type:'bar', indexAxis:'y', data:{ labels:S.dueCust.map(([n])=>n.length>24?n.slice(0,24)+'\u2026':n), datasets:[{ label:'Due ($)', data:S.dueCust.map(([,v])=>v), backgroundColor:'rgba(240,90,90,0.7)', borderRadius:4 }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } }, scales:{ x:{ grid:{color:'#1e2333'}, ticks:{color:'#5a607a',font:{size:10}} }, y:{ grid:{color:'#1e2333'}, ticks:{color:'#9aa0b8',font:{size:9}} } } } });
+  mkChart('cDueCust', { type:'bar', indexAxis:'y', data:{ labels:S.dueCust.map(([n])=>n.length>24?n.slice(0,24)+'\u2026':n), datasets:[{ label:'Due ($)', data:S.dueCust.map(([,v])=>v), backgroundColor:'rgba(240,90,90,0.7)', borderRadius:4 }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } }, scales:{ x:{ grid:{color:'#1e2333'}, ticks:{color:'#8890aa',font:{size:10}} }, y:{ grid:{color:'#1e2333'}, ticks:{color:'#c0c6d8',font:{size:9}} } } } });
 
   const total = Object.values(S.aging).reduce((a,b)=>a+b,0);
   const agingColors = ['#3dd68c','#f0c040','#f7824f','#e05a5a','#f05a5a'];
@@ -824,8 +843,8 @@ function initBO() {
 // ── TAB 4 ──
 function initBranch() {
   const k = S.kpi;
-  mkChart('cBranchPie', { type:'doughnut', data:{ labels:['Toronto','Edmonton'], datasets:[{ data:[k.torSale,k.edmSale], backgroundColor:['rgba(79,142,247,0.8)','rgba(247,130,79,0.8)'], borderWidth:1, borderColor:'#0b0d12' }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'bottom',labels:{color:'#9aa0b8',font:{size:11}}}, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } } } });
-  mkChart('cBranchDue', { type:'doughnut', data:{ labels:['Toronto','Edmonton'], datasets:[{ data:[k.torDue,k.edmDue], backgroundColor:['rgba(240,90,90,0.8)','rgba(240,192,64,0.8)'], borderWidth:1, borderColor:'#0b0d12' }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'bottom',labels:{color:'#9aa0b8',font:{size:11}}}, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } } } });
+  mkChart('cBranchPie', { type:'doughnut', data:{ labels:['Toronto','Edmonton'], datasets:[{ data:[k.torSale,k.edmSale], backgroundColor:['rgba(79,142,247,0.8)','rgba(247,130,79,0.8)'], borderWidth:1, borderColor:'#0b0d12' }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'bottom',labels:{color:'#c0c6d8',font:{size:11}}}, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } } } });
+  mkChart('cBranchDue', { type:'doughnut', data:{ labels:['Toronto','Edmonton'], datasets:[{ data:[k.torDue,k.edmDue], backgroundColor:['rgba(240,90,90,0.8)','rgba(240,192,64,0.8)'], borderWidth:1, borderColor:'#0b0d12' }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'bottom',labels:{color:'#c0c6d8',font:{size:11}}}, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } } } });
   mkChart('cBranchDaily2', { type:'line', data:{ labels:S.dailyLabels, datasets:[
     { label:'Toronto', data:S.torDaily, borderColor:'#4f8ef7', backgroundColor:'rgba(79,142,247,0.1)', fill:true, borderWidth:2, pointRadius:3 },
     { label:'Edmonton', data:S.edmDaily, borderColor:'#f7824f', backgroundColor:'rgba(247,130,79,0.1)', fill:true, borderWidth:2, pointRadius:3 }
@@ -839,13 +858,13 @@ function initBranch() {
 
 // ── TAB 5 ──
 function initBrand() {
-  mkChart('cBrand', { type:'bar', indexAxis:'y', data:{ labels:S.brands.map(b=>b.name), datasets:[{ label:'매출 ($)', data:S.brands.map(b=>b.sale), backgroundColor:'rgba(61,214,140,0.7)', borderRadius:4 }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } }, scales:{ x:{ grid:{color:'#1e2333'}, ticks:{color:'#5a607a',font:{size:10}} }, y:{ grid:{color:'#1e2333'}, ticks:{color:'#9aa0b8',font:{size:10}} } } } });
+  mkChart('cBrand', { type:'bar', indexAxis:'y', data:{ labels:S.brands.map(b=>b.name), datasets:[{ label:'매출 ($)', data:S.brands.map(b=>b.sale), backgroundColor:'rgba(61,214,140,0.7)', borderRadius:4 }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } }, scales:{ x:{ grid:{color:'#1e2333'}, ticks:{color:'#8890aa',font:{size:10}} }, y:{ grid:{color:'#1e2333'}, ticks:{color:'#c0c6d8',font:{size:10}} } } } });
 
   const bTbody = $('brandTblBody');
   bTbody.innerHTML = '';
   S.brands.forEach(b => { bTbody.innerHTML += `<tr><td>${b.name}</td><td class="num" style="color:var(--green)">${fmt(b.sale)}</td><td class="num">${b.qty.toLocaleString()}</td><td class="num">${b.orders}</td></tr>`; });
 
-  mkChart('cCust', { type:'bar', indexAxis:'y', data:{ labels:S.customers.map(c=>c.name.length>28?c.name.slice(0,28)+'…':c.name), datasets:[{ label:'매출 ($)', data:S.customers.map(c=>c.sale), backgroundColor:'rgba(79,142,247,0.7)', borderRadius:4 }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } }, scales:{ x:{ grid:{color:'#1e2333'}, ticks:{color:'#5a607a',font:{size:10}} }, y:{ grid:{color:'#1e2333'}, ticks:{color:'#9aa0b8',font:{size:9}} } } } });
+  mkChart('cCust', { type:'bar', indexAxis:'y', data:{ labels:S.customers.map(c=>c.name.length>28?c.name.slice(0,28)+'…':c.name), datasets:[{ label:'매출 ($)', data:S.customers.map(c=>c.sale), backgroundColor:'rgba(79,142,247,0.7)', borderRadius:4 }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } }, scales:{ x:{ grid:{color:'#1e2333'}, ticks:{color:'#8890aa',font:{size:10}} }, y:{ grid:{color:'#1e2333'}, ticks:{color:'#c0c6d8',font:{size:9}} } } } });
 
   const cTbody = $('custTblBody');
   cTbody.innerHTML = '';
