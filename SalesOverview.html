@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sales Overview — Asung Trading</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #0b0d12;
+  --surface: #12151e;
+  --surface2: #181c28;
+  --surface3: #1e2333;
+  --border: #252a3a;
+  --blue: #4f8ef7;
+  --orange: #f7824f;
+  --green: #3dd68c;
+  --red: #f05a5a;
+  --yellow: #f0c040;
+  --purple: #9b7ff4;
+  --teal: #3dcfc0;
+  --text: #e8eaf0;
+  --mid: #9aa0b8;
+  --dim: #5a607a;
+  --gold: #f0a500;
+  --grid: #1e2333;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: 'DM Sans','Segoe UI',sans-serif; font-size: 13px; min-height: 100vh; }
+body::before { content:''; position:fixed; inset:0; background-image: linear-gradient(rgba(79,142,247,.03) 1px,transparent 1px), linear-gradient(90deg,rgba(79,142,247,.03) 1px,transparent 1px); background-size:48px 48px; pointer-events:none; z-index:0; }
+
+/* LOCK SCREEN */
+#lockScreen { position:fixed; inset:0; background:var(--bg); z-index:9999; display:flex; align-items:center; justify-content:center; }
+.lock-box { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:40px; width:320px; text-align:center; }
+.lock-logo { font-size:11px; font-weight:700; letter-spacing:2px; color:var(--gold); text-transform:uppercase; margin-bottom:8px; }
+.lock-title { font-size:18px; font-weight:700; margin-bottom:24px; }
+.lock-input { width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:12px 16px; color:var(--text); font-size:14px; text-align:center; letter-spacing:4px; outline:none; margin-bottom:12px; }
+.lock-input:focus { border-color:var(--blue); }
+.lock-btn { width:100%; background:var(--blue); color:#fff; border:none; border-radius:8px; padding:12px; font-size:13px; font-weight:600; cursor:pointer; transition:opacity .2s; }
+.lock-btn:hover { opacity:.85; }
+.lock-err { color:var(--red); font-size:12px; margin-top:8px; min-height:18px; }
+
+/* LOADING */
+#loadingScreen { position:fixed; inset:0; background:var(--bg); z-index:9998; display:none; align-items:center; justify-content:center; flex-direction:column; gap:16px; }
+.spinner { width:36px; height:36px; border:3px solid var(--border); border-top-color:var(--blue); border-radius:50%; animation:spin .8s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.loading-text { font-size:12px; color:var(--dim); }
+
+/* HEADER */
+.hdr { position:sticky; top:0; z-index:100; background:rgba(11,13,18,.95); backdrop-filter:blur(12px); border-bottom:1px solid var(--border); padding:0 24px; display:flex; align-items:center; justify-content:space-between; height:52px; }
+.hdr-left { display:flex; align-items:center; gap:12px; }
+.hdr-logo { font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--gold); }
+.hdr-title { font-size:14px; font-weight:500; }
+.hdr-date { font-size:11px; color:var(--dim); font-family:'DM Mono',monospace; }
+.hdr-right { font-size:11px; color:var(--dim); font-family:'DM Mono',monospace; }
+
+/* TABS */
+.tabs { display:flex; align-items:center; gap:2px; padding:0 24px; background:var(--surface); border-bottom:1px solid var(--border); position:sticky; top:52px; z-index:99; overflow-x:auto; }
+.tab { padding:12px 16px; font-size:12px; font-weight:500; color:var(--dim); cursor:pointer; border-bottom:2px solid transparent; transition:all .2s; white-space:nowrap; }
+.tab:hover { color:var(--text); }
+.tab.active { color:var(--blue); border-bottom-color:var(--blue); }
+
+/* PANELS */
+.panels { position:relative; z-index:1; }
+.panel { display:none; padding:24px; }
+.panel.active { display:block; }
+
+/* KPI */
+.kpi-strip { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:20px; }
+.kpi { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px 18px; position:relative; overflow:hidden; }
+.kpi::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; }
+.kpi.blue::before { background:var(--blue); }
+.kpi.green::before { background:var(--green); }
+.kpi.red::before { background:var(--red); }
+.kpi.orange::before { background:var(--orange); }
+.kpi.yellow::before { background:var(--yellow); }
+.kpi.purple::before { background:var(--purple); }
+.kpi.teal::before { background:var(--teal); }
+.kpi-lbl { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:1px; color:var(--dim); margin-bottom:6px; }
+.kpi-val { font-size:22px; font-weight:700; font-family:'DM Mono',monospace; line-height:1; }
+.kpi.blue .kpi-val { color:var(--blue); }
+.kpi.green .kpi-val { color:var(--green); }
+.kpi.red .kpi-val { color:var(--red); }
+.kpi.orange .kpi-val { color:var(--orange); }
+.kpi.yellow .kpi-val { color:var(--yellow); }
+.kpi.purple .kpi-val { color:var(--purple); }
+.kpi.teal .kpi-val { color:var(--teal); }
+.kpi-sub { font-size:10px; color:var(--dim); margin-top:5px; }
+
+/* GRID */
+.g2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+.g3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:16px; }
+.g21 { display:grid; grid-template-columns:2fr 1fr; gap:16px; margin-bottom:16px; }
+.full { margin-bottom:16px; }
+
+/* CARD */
+.card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:18px 20px; }
+.card-title { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:1px; color:var(--mid); margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+.card-title span { color:var(--dim); font-weight:400; text-transform:none; letter-spacing:0; font-size:11px; }
+.chart-box { height:220px; position:relative; }
+.chart-box.tall { height:300px; }
+
+/* BRANCH CARDS */
+.branch-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+.branch-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:20px; }
+.branch-card.tor { border-top:3px solid var(--blue); }
+.branch-card.edm { border-top:3px solid var(--orange); }
+.branch-name { font-size:13px; font-weight:700; margin-bottom:14px; }
+.branch-card.tor .branch-name { color:var(--blue); }
+.branch-card.edm .branch-name { color:var(--orange); }
+.branch-stats { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.branch-stat-lbl { font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:.8px; margin-bottom:3px; }
+.branch-stat-val { font-size:18px; font-weight:700; font-family:'DM Mono',monospace; }
+
+/* TABLE */
+.tbl-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; font-size:12px; }
+thead th { text-align:left; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.8px; color:var(--dim); padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; cursor:pointer; user-select:none; }
+thead th:hover { color:var(--mid); }
+tbody tr { border-bottom:1px solid var(--border); transition:background .15s; }
+tbody tr:hover { background:var(--surface2); }
+tbody td { padding:9px 10px; color:var(--mid); }
+tbody td:first-child { color:var(--text); font-weight:500; }
+.num { text-align:right; font-family:'DM Mono',monospace; }
+.tag { display:inline-block; font-size:10px; font-weight:600; padding:2px 7px; border-radius:4px; }
+.tag-tor { background:rgba(79,142,247,.15); color:var(--blue); }
+.tag-edm { background:rgba(247,130,79,.15); color:var(--orange); }
+.tag-red { background:rgba(240,90,90,.15); color:var(--red); }
+.tag-green { background:rgba(61,214,140,.15); color:var(--green); }
+.tag-yellow { background:rgba(240,192,64,.15); color:var(--yellow); }
+
+/* AGING */
+.aging-row { margin-bottom:12px; }
+.aging-label { display:flex; justify-content:space-between; margin-bottom:4px; font-size:11px; }
+.aging-label span:first-child { color:var(--mid); }
+.aging-label span:last-child { font-family:'DM Mono',monospace; color:var(--text); }
+.aging-bar-bg { background:var(--surface2); border-radius:3px; height:6px; overflow:hidden; }
+.aging-bar-fill { height:100%; border-radius:3px; transition:width .6s ease; }
+
+/* SECTION TITLE */
+.section-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1.5px; color:var(--dim); margin-bottom:14px; margin-top:6px; display:flex; align-items:center; gap:10px; }
+.section-title::after { content:''; flex:1; height:1px; background:var(--border); }
+
+.note { font-size:11px; color:var(--dim); padding:8px 12px; background:var(--surface2); border-radius:6px; border-left:2px solid var(--border); margin-bottom:16px; }
+
+@media (max-width:900px) {
+  .kpi-strip { grid-template-columns:repeat(3,1fr); }
+  .g2,.g3,.g21,.branch-grid { grid-template-columns:1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- LOCK -->
+<div id="lockScreen">
+  <div class="lock-box">
+    <div class="lock-logo">Asung Trading</div>
+    <div class="lock-title">Sales Overview</div>
+    <input type="password" class="lock-input" id="pwInput" placeholder="• • • • • •" maxlength="10">
+    <button class="lock-btn" onclick="checkPw()">Enter</button>
+    <div class="lock-err" id="lockErr"></div>
+  </div>
+</div>
+
+<!-- LOADING -->
+<div id="loadingScreen">
+  <div class="spinner"></div>
+  <div class="loading-text">데이터 로딩 중...</div>
+</div>
+
+<!-- MAIN -->
+<div id="mainApp" style="display:none">
+
+<div class="hdr">
+  <div class="hdr-left">
+    <span class="hdr-logo">Asung Trading</span>
+    <span class="hdr-title">Sales Overview</span>
+    <span class="hdr-date" id="hdrDate">—</span>
+  </div>
+  <div class="hdr-right" id="hdrStats">—</div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="showTab(0)">📊 Overview</div>
+  <div class="tab" onclick="showTab(1)">📈 Sales Trend</div>
+  <div class="tab" onclick="showTab(2)">💰 미결제 현황</div>
+  <div class="tab" onclick="showTab(3)">⚠️ BO / On Hold</div>
+  <div class="tab" onclick="showTab(4)">🏙 Branch 비교</div>
+  <div class="tab" onclick="showTab(5)">🏷 Brand / 고객</div>
+</div>
+
+<div class="panels">
+
+<!-- TAB 0: OVERVIEW -->
+<div class="panel active" id="panel0">
+  <div class="kpi-strip">
+    <div class="kpi blue"><div class="kpi-lbl">총 매출 (Sale)</div><div class="kpi-val" id="k0">—</div><div class="kpi-sub" id="k0s">Invoice 기준</div></div>
+    <div class="kpi green"><div class="kpi-lbl">수금 완료 (Paid)</div><div class="kpi-val" id="k1">—</div><div class="kpi-sub">실제 수령 금액</div></div>
+    <div class="kpi red"><div class="kpi-lbl">미수금 (Due)</div><div class="kpi-val" id="k2">—</div><div class="kpi-sub">미결제 잔액</div></div>
+    <div class="kpi yellow"><div class="kpi-lbl">연체 금액</div><div class="kpi-val" id="k3">—</div><div class="kpi-sub">Due date 초과</div></div>
+    <div class="kpi orange"><div class="kpi-lbl">BO / On Hold</div><div class="kpi-val" id="k4">—</div><div class="kpi-sub">처리 필요 오더</div></div>
+  </div>
+  <div class="g2">
+    <div class="card"><div class="card-title">Order Progress 분포</div><div class="chart-box"><canvas id="cProg"></canvas></div></div>
+    <div class="card"><div class="card-title">결제 상태 분포</div><div class="chart-box"><canvas id="cPay"></canvas></div></div>
+  </div>
+  <div class="branch-grid">
+    <div class="branch-card tor">
+      <div class="branch-name">🏢 Toronto (Asung Trading Inc.)</div>
+      <div class="branch-stats">
+        <div><div class="branch-stat-lbl">오더 수</div><div class="branch-stat-val" style="color:var(--blue)" id="btor-orders">—</div></div>
+        <div><div class="branch-stat-lbl">총 매출</div><div class="branch-stat-val" style="color:var(--blue)" id="btor-sale">—</div></div>
+        <div><div class="branch-stat-lbl">미수금</div><div class="branch-stat-val" style="color:var(--red)" id="btor-due">—</div></div>
+        <div><div class="branch-stat-lbl">매출 비중</div><div class="branch-stat-val" style="color:var(--mid)" id="btor-pct">—</div></div>
+      </div>
+    </div>
+    <div class="branch-card edm">
+      <div class="branch-name">🏢 Edmonton (Asung - Edmonton)</div>
+      <div class="branch-stats">
+        <div><div class="branch-stat-lbl">오더 수</div><div class="branch-stat-val" style="color:var(--orange)" id="bedm-orders">—</div></div>
+        <div><div class="branch-stat-lbl">총 매출</div><div class="branch-stat-val" style="color:var(--orange)" id="bedm-sale">—</div></div>
+        <div><div class="branch-stat-lbl">미수금</div><div class="branch-stat-val" style="color:var(--red)" id="bedm-due">—</div></div>
+        <div><div class="branch-stat-lbl">매출 비중</div><div class="branch-stat-val" style="color:var(--mid)" id="bedm-pct">—</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 1: TREND -->
+<div class="panel" id="panel1">
+  <div class="note">📌 Sales Trend는 Order Details 기준 (Order date) · 미결제/결제는 Overview 기준 (Invoice date)</div>
+  <div class="full card"><div class="card-title">주간 매출 추이 <span>Order Details 기준</span></div><div class="chart-box tall"><canvas id="cWeeklySale"></canvas></div></div>
+  <div class="g2">
+    <div class="card"><div class="card-title">주간 오더 건수</div><div class="chart-box"><canvas id="cWeeklyOrders"></canvas></div></div>
+    <div class="card"><div class="card-title">주간 수량</div><div class="chart-box"><canvas id="cWeeklyQty"></canvas></div></div>
+  </div>
+  <div class="full card"><div class="card-title">일별 매출 — Toronto vs Edmonton <span>Order Details 기준</span></div><div class="chart-box tall"><canvas id="cDailyBranch"></canvas></div></div>
+</div>
+
+<!-- TAB 2: 미결제 -->
+<div class="panel" id="panel2">
+  <div class="kpi-strip" style="grid-template-columns:repeat(4,1fr)">
+    <div class="kpi red"><div class="kpi-lbl">총 미수금</div><div class="kpi-val" id="k-due">—</div><div class="kpi-sub">전체 Due 합계</div></div>
+    <div class="kpi yellow"><div class="kpi-lbl">연체 금액</div><div class="kpi-val" id="k-overdue">—</div><div class="kpi-sub">Due date 초과</div></div>
+    <div class="kpi orange"><div class="kpi-lbl">미결제 오더수</div><div class="kpi-val" id="k-unpaid">—</div><div class="kpi-sub">Unpaid 건수</div></div>
+    <div class="kpi green"><div class="kpi-lbl">수금 완료</div><div class="kpi-val" id="k-paid2">—</div><div class="kpi-sub">Paid 금액</div></div>
+  </div>
+  <div class="g21">
+    <div class="card"><div class="card-title">고객별 미수금 Top 15</div><div class="chart-box tall"><canvas id="cDueCust"></canvas></div></div>
+    <div class="card"><div class="card-title">연령 분석 (Aging)</div><div id="agingRows" style="margin-top:8px"></div></div>
+  </div>
+  <div class="full card">
+    <div class="card-title">고객별 미수금 상세</div>
+    <div class="tbl-wrap"><table><thead><tr><th>고객명</th><th class="num">미수금 (Due)</th></tr></thead><tbody id="dueTblBody"></tbody></table></div>
+  </div>
+</div>
+
+<!-- TAB 3: BO/OnHold -->
+<div class="panel" id="panel3">
+  <div class="kpi-strip" style="grid-template-columns:repeat(3,1fr)">
+    <div class="kpi red"><div class="kpi-lbl">Backordered</div><div class="kpi-val" id="k-bo">—</div><div class="kpi-sub">재고 부족 오더</div></div>
+    <div class="kpi orange"><div class="kpi-lbl">On Hold</div><div class="kpi-val" id="k-oh">—</div><div class="kpi-sub">보류 중 오더</div></div>
+    <div class="kpi yellow"><div class="kpi-lbl">합계</div><div class="kpi-val" id="k-booh">—</div><div class="kpi-sub">처리 필요 총 건수</div></div>
+  </div>
+  <div class="section-title">⚠️ On Hold 오더</div>
+  <div class="full card">
+    <div class="tbl-wrap"><table><thead><tr><th>Order #</th><th>고객</th><th>Branch</th><th>Invoice Date</th><th class="num">Sale</th><th class="num">Due</th></tr></thead><tbody id="ohTblBody"></tbody></table></div>
+  </div>
+  <div class="section-title">🔴 Backordered 오더</div>
+  <div class="full card">
+    <div class="tbl-wrap"><table><thead><tr><th>Order #</th><th>고객</th><th>Branch</th><th>Invoice Date</th><th class="num">Sale</th><th class="num">Due</th></tr></thead><tbody id="boTblBody"></tbody></table></div>
+  </div>
+</div>
+
+<!-- TAB 4: BRANCH -->
+<div class="panel" id="panel4">
+  <div class="g2">
+    <div class="card"><div class="card-title">Branch별 매출 비중 <span>Invoice 기준</span></div><div class="chart-box"><canvas id="cBranchPie"></canvas></div></div>
+    <div class="card"><div class="card-title">Branch별 미수금 비중</div><div class="chart-box"><canvas id="cBranchDue"></canvas></div></div>
+  </div>
+  <div class="full card"><div class="card-title">일별 매출 비교 <span>Order Details 기준</span></div><div class="chart-box tall"><canvas id="cBranchDaily2"></canvas></div></div>
+  <div class="g2">
+    <div class="card"><div class="card-title">Toronto 상세</div><div class="tbl-wrap"><table><thead><tr><th>항목</th><th class="num">수치</th></tr></thead><tbody id="torDetail"></tbody></table></div></div>
+    <div class="card"><div class="card-title">Edmonton 상세</div><div class="tbl-wrap"><table><thead><tr><th>항목</th><th class="num">수치</th></tr></thead><tbody id="edmDetail"></tbody></table></div></div>
+  </div>
+</div>
+
+<!-- TAB 5: BRAND/고객 -->
+<div class="panel" id="panel5">
+  <div class="note">📌 브랜드 / 고객 매출은 Order Details 기준 (Order date)</div>
+  <div class="full card"><div class="card-title">브랜드별 매출 Top 15</div><div class="chart-box tall"><canvas id="cBrand"></canvas></div></div>
+  <div class="full card">
+    <div class="card-title">브랜드별 상세</div>
+    <div class="tbl-wrap"><table><thead><tr><th>브랜드</th><th class="num">매출</th><th class="num">수량</th><th class="num">오더수</th></tr></thead><tbody id="brandTblBody"></tbody></table></div>
+  </div>
+  <div class="full card" style="margin-top:16px"><div class="card-title">고객별 매출 Top 15 <span>Order Details 기준</span></div><div class="chart-box tall"><canvas id="cCust"></canvas></div></div>
+  <div class="full card">
+    <div class="card-title">고객별 상세</div>
+    <div class="tbl-wrap"><table><thead><tr><th>고객</th><th class="num">매출</th><th class="num">수량</th><th class="num">오더수</th></tr></thead><tbody id="custTblBody"></tbody></table></div>
+  </div>
+</div>
+
+</div><!-- /panels -->
+</div><!-- /mainApp -->
+
+<script>
+// ══════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════
+const PASSWORD = '002298';
+const BASE_URL = 'https://asungtrading.github.io/tools/';
+const SALES_URL = BASE_URL + 'data_sales.json';
+const DETAILS_URL = BASE_URL + 'data_order_details.json';
+
+// ══════════════════════════════════════
+// LOCK
+// ══════════════════════════════════════
+document.getElementById('pwInput').addEventListener('keydown', e => { if (e.key === 'Enter') checkPw(); });
+
+function checkPw() {
+  const val = document.getElementById('pwInput').value;
+  if (val === PASSWORD) {
+    document.getElementById('lockScreen').style.display = 'none';
+    loadData();
+  } else {
+    document.getElementById('lockErr').textContent = '비밀번호가 틀렸습니다.';
+    document.getElementById('pwInput').value = '';
+  }
+}
+
+// ══════════════════════════════════════
+// DATA LOAD
+// ══════════════════════════════════════
+let S = {}, D = {}; // Sales, Details
+
+async function loadData() {
+  document.getElementById('loadingScreen').style.display = 'flex';
+  try {
+    const [sRes, dRes] = await Promise.all([
+      fetch(SALES_URL + '?t=' + Date.now()),
+      fetch(DETAILS_URL + '?t=' + Date.now())
+    ]);
+    const sJson = await sRes.json();
+    const dJson = await dRes.json();
+    processData(sJson.rows, dJson.rows);
+    document.getElementById('loadingScreen').style.display = 'none';
+    document.getElementById('mainApp').style.display = 'block';
+    initTab(0);
+  } catch(e) {
+    document.getElementById('loadingScreen').innerHTML = `<div style="color:var(--red);text-align:center">데이터 로드 실패<br><small>${e.message}</small></div>`;
+  }
+}
+
+// ══════════════════════════════════════
+// PROCESS
+// ══════════════════════════════════════
+function processData(salesRows, detailRows) {
+  const today = new Date('2026-04-09');
+
+  // ── Sales (Overview) ──
+  const sales = salesRows.map(r => ({
+    order: r['Order #'],
+    progress: r['Order Progress'],
+    payStatus: r['Payment status'],
+    invoiceStatus: r['Invoice status'],
+    invoiceDate: r['Invoice date'] ? new Date(r['Invoice date']) : null,
+    dueDate: r['Due date'] ? new Date(r['Due date']) : null,
+    customer: r['Customer'],
+    status: r['Status'],
+    location: r['Location'],
+    sale: parseFloat(r['Sale']) || 0,
+    paid: parseFloat(r['Paid']) || 0,
+    due: parseFloat(r['Due']) || 0,
+  }));
+
+  // ── Details ──
+  const details = detailRows.map(r => ({
+    order: r['Order #'],
+    brand: r['Brand'],
+    sku: r['SKU'],
+    product: r['Product'],
+    orderDate: r['Order date'] ? new Date(r['Order date']) : null,
+    customer: r['Customer'],
+    location: r['Location'],
+    qty: parseFloat(r['Quantity']) || 0,
+    sale: parseFloat(r['Sale']) || 0,
+    total: parseFloat(r['Total']) || 0,
+  }));
+
+  // ── KPIs ──
+  const tor = sales.filter(r => r.location === 'Asung Trading Inc.');
+  const edm = sales.filter(r => r.location === 'Asung - Edmonton');
+  const totalSale = sales.reduce((a,r) => a+r.sale, 0);
+
+  S.kpi = {
+    totalSale, totalSale,
+    totalPaid: sales.reduce((a,r) => a+r.paid, 0),
+    totalDue: sales.reduce((a,r) => a+r.due, 0),
+    totalOrders: sales.length,
+    unpaidCnt: sales.filter(r => r.payStatus === 'Unpaid').length,
+    boCnt: sales.filter(r => r.status === 'Backordered').length,
+    onholdCnt: sales.filter(r => r.progress === 'On Hold').length,
+    overdueAmt: sales.filter(r => r.due > 0 && r.dueDate && r.dueDate < today).reduce((a,r) => a+r.due, 0),
+    torSale: tor.reduce((a,r) => a+r.sale, 0),
+    edmSale: edm.reduce((a,r) => a+r.sale, 0),
+    torDue: tor.reduce((a,r) => a+r.due, 0),
+    edmDue: edm.reduce((a,r) => a+r.due, 0),
+    torOrders: tor.length,
+    edmOrders: edm.length,
+  };
+
+  // ── Order Progress ──
+  const progMap = {};
+  sales.forEach(r => { progMap[r.progress] = (progMap[r.progress]||0)+1; });
+  S.prog = Object.entries(progMap).sort((a,b) => b[1]-a[1]);
+
+  // ── Payment ──
+  const payMap = {};
+  sales.forEach(r => { payMap[r.payStatus] = (payMap[r.payStatus]||0)+1; });
+  S.pay = Object.entries(payMap).sort((a,b) => b[1]-a[1]);
+
+  // ── Due by customer ──
+  const dueCustMap = {};
+  sales.filter(r => r.due > 0).forEach(r => { dueCustMap[r.customer] = (dueCustMap[r.customer]||0)+r.due; });
+  S.dueCust = Object.entries(dueCustMap).sort((a,b) => b[1]-a[1]).slice(0,15);
+
+  // ── Aging ──
+  const unpaidRows = sales.filter(r => r.payStatus === 'Unpaid');
+  const aging = { 'Current':0, '1-30 days':0, '31-60 days':0, '61-90 days':0, '90+ days':0 };
+  unpaidRows.forEach(r => {
+    if (!r.dueDate) return;
+    const d = Math.floor((today - r.dueDate) / 86400000);
+    if (d <= 0) aging['Current'] += r.due;
+    else if (d <= 30) aging['1-30 days'] += r.due;
+    else if (d <= 60) aging['31-60 days'] += r.due;
+    else if (d <= 90) aging['61-90 days'] += r.due;
+    else aging['90+ days'] += r.due;
+  });
+  S.aging = aging;
+
+  // ── On Hold / BO ──
+  S.ohRows = sales.filter(r => r.progress === 'On Hold');
+  S.boRows = sales.filter(r => r.status === 'Backordered').slice(0,30);
+
+  // ── Weekly trend (Details) ──
+  const weekMap = {};
+  details.forEach(r => {
+    if (!r.orderDate) return;
+    const d = r.orderDate;
+    const day = d.getDay();
+    const monday = new Date(d); monday.setDate(d.getDate() - (day === 0 ? 6 : day-1));
+    const wk = monday.toISOString().slice(0,10);
+    if (!weekMap[wk]) weekMap[wk] = { sale:0, qty:0, orders:new Set() };
+    weekMap[wk].sale += r.sale;
+    weekMap[wk].qty += r.qty;
+    weekMap[wk].orders.add(r.order);
+  });
+  S.weekly = Object.entries(weekMap).sort((a,b) => a[0]>b[0]?1:-1).map(([wk,v]) => ({
+    wk: wk.slice(5), sale: v.sale, qty: v.qty, orders: v.orders.size
+  }));
+
+  // ── Daily branch (Details) ──
+  const torDayMap = {}, edmDayMap = {};
+  details.forEach(r => {
+    if (!r.orderDate) return;
+    const d = r.orderDate.toISOString().slice(0,10);
+    if (r.location === 'Asung Trading Inc.') torDayMap[d] = (torDayMap[d]||0)+r.sale;
+    else edmDayMap[d] = (edmDayMap[d]||0)+r.sale;
+  });
+  const allDates = [...new Set([...Object.keys(torDayMap), ...Object.keys(edmDayMap)])].sort();
+  S.dailyLabels = allDates.map(d => d.slice(5));
+  S.torDaily = allDates.map(d => torDayMap[d]||0);
+  S.edmDaily = allDates.map(d => edmDayMap[d]||0);
+
+  // ── Brand ──
+  const brandMap = {};
+  details.forEach(r => {
+    if (!brandMap[r.brand]) brandMap[r.brand] = { sale:0, qty:0, orders:new Set() };
+    brandMap[r.brand].sale += r.sale;
+    brandMap[r.brand].qty += r.qty;
+    brandMap[r.brand].orders.add(r.order);
+  });
+  S.brands = Object.entries(brandMap).sort((a,b) => b[1].sale-a[1].sale).slice(0,15).map(([name,v]) => ({
+    name, sale: v.sale, qty: v.qty, orders: v.orders.size
+  }));
+
+  // ── Customer (Details) ──
+  const custMap = {};
+  details.forEach(r => {
+    if (!custMap[r.customer]) custMap[r.customer] = { sale:0, qty:0, orders:new Set() };
+    custMap[r.customer].sale += r.sale;
+    custMap[r.customer].qty += r.qty;
+    custMap[r.customer].orders.add(r.order);
+  });
+  S.customers = Object.entries(custMap).sort((a,b) => b[1].sale-a[1].sale).slice(0,15).map(([name,v]) => ({
+    name, sale: v.sale, qty: v.qty, orders: v.orders.size
+  }));
+
+  // ── Header ──
+  const dateStr = sales[0]?.invoiceDate ? sales[0].invoiceDate.toISOString().slice(0,7) : '—';
+  document.getElementById('hdrDate').textContent = dateStr + ' · As of ' + today.toISOString().slice(0,10);
+  document.getElementById('hdrStats').textContent = `${sales.length.toLocaleString()} orders · ${details.length.toLocaleString()} lines`;
+}
+
+// ══════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════
+const charts = {};
+const $ = id => document.getElementById(id);
+const fmtK = n => n >= 1000000 ? '$'+(n/1000000).toFixed(2)+'M' : n >= 1000 ? '$'+(n/1000).toFixed(1)+'K' : '$'+n.toFixed(0);
+const fmt = n => '$'+n.toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2});
+const TOOLTIP = { backgroundColor:'#181c28', titleColor:'#e8eaf0', bodyColor:'#9aa0b8', borderColor:'#252a3a', borderWidth:1 };
+
+function baseOpts(rot) {
+  return {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{ labels:{ color:'#9aa0b8', font:{size:11} } }, tooltip:TOOLTIP },
+    scales:{ x:{ grid:{color:'#1e2333'}, ticks:{color:'#5a607a',font:{size:10},maxRotation:rot||0} }, y:{ grid:{color:'#1e2333'}, ticks:{color:'#5a607a',font:{size:10}} } }
+  };
+}
+
+function mkChart(id, config) {
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart($(id), config);
+}
+
+// ══════════════════════════════════════
+// TABS
+// ══════════════════════════════════════
+const tabInited = {};
+function showTab(i) {
+  document.querySelectorAll('.tab').forEach((t,j) => t.classList.toggle('active', i===j));
+  document.querySelectorAll('.panel').forEach((p,j) => p.classList.toggle('active', i===j));
+  if (!tabInited[i]) { tabInited[i] = true; initTab(i); }
+}
+
+function initTab(i) {
+  if (i===0) initOverview();
+  if (i===1) initTrend();
+  if (i===2) initDue();
+  if (i===3) initBO();
+  if (i===4) initBranch();
+  if (i===5) initBrand();
+}
+
+// ── TAB 0 ──
+function initOverview() {
+  const k = S.kpi;
+  $('k0').textContent = fmtK(k.totalSale);
+  $('k1').textContent = fmtK(k.totalPaid);
+  $('k2').textContent = fmtK(k.totalDue);
+  $('k3').textContent = fmtK(k.overdueAmt);
+  $('k4').textContent = (k.boCnt + k.onholdCnt).toLocaleString();
+
+  $('btor-orders').textContent = k.torOrders.toLocaleString();
+  $('btor-sale').textContent = fmtK(k.torSale);
+  $('btor-due').textContent = fmtK(k.torDue);
+  $('btor-pct').textContent = (k.torSale/k.totalSale*100).toFixed(1)+'%';
+  $('bedm-orders').textContent = k.edmOrders.toLocaleString();
+  $('bedm-sale').textContent = fmtK(k.edmSale);
+  $('bedm-due').textContent = fmtK(k.edmDue);
+  $('bedm-pct').textContent = (k.edmSale/k.totalSale*100).toFixed(1)+'%';
+
+  const PROG_COLORS = ['#3dd68c','#4f8ef7','#f05a5a','#3dcfc0','#f0c040','#f7824f','#9b7ff4','#5a607a','#b8bece'];
+  mkChart('cProg', { type:'doughnut', data:{ labels:S.prog.map(p=>p[0]), datasets:[{ data:S.prog.map(p=>p[1]), backgroundColor:PROG_COLORS, borderWidth:1, borderColor:'#0b0d12' }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'right',labels:{color:'#9aa0b8',font:{size:10},boxWidth:12}}, tooltip:TOOLTIP } } });
+
+  const PAY_COLORS = ['#f05a5a','#3dd68c','#f0c040','#9b7ff4','#4f8ef7','#3dcfc0'];
+  mkChart('cPay', { type:'doughnut', data:{ labels:S.pay.map(p=>p[0]), datasets:[{ data:S.pay.map(p=>p[1]), backgroundColor:PAY_COLORS, borderWidth:1, borderColor:'#0b0d12' }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'right',labels:{color:'#9aa0b8',font:{size:10},boxWidth:12}}, tooltip:TOOLTIP } } });
+}
+
+// ── TAB 1 ──
+function initTrend() {
+  const wl = S.weekly.map(w=>w.wk);
+  mkChart('cWeeklySale', { type:'bar', data:{ labels:wl, datasets:[{ label:'주간 매출 ($)', data:S.weekly.map(w=>w.sale), backgroundColor:'rgba(79,142,247,0.7)', borderRadius:5 }] }, options:{ ...baseOpts(), plugins:{ ...baseOpts().plugins, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } } } });
+  mkChart('cWeeklyOrders', { type:'bar', data:{ labels:wl, datasets:[{ label:'오더수', data:S.weekly.map(w=>w.orders), backgroundColor:'rgba(61,207,192,0.7)', borderRadius:4 }] }, options:baseOpts() });
+  mkChart('cWeeklyQty', { type:'bar', data:{ labels:wl, datasets:[{ label:'수량', data:S.weekly.map(w=>w.qty), backgroundColor:'rgba(155,127,244,0.7)', borderRadius:4 }] }, options:baseOpts() });
+  mkChart('cDailyBranch', { type:'line', data:{ labels:S.dailyLabels, datasets:[
+    { label:'Toronto', data:S.torDaily, borderColor:'#4f8ef7', backgroundColor:'rgba(79,142,247,0.08)', fill:true, borderWidth:2, pointRadius:2 },
+    { label:'Edmonton', data:S.edmDaily, borderColor:'#f7824f', backgroundColor:'rgba(247,130,79,0.08)', fill:true, borderWidth:2, pointRadius:2 }
+  ]}, options:{ ...baseOpts(30), plugins:{ ...baseOpts(30).plugins, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } } } });
+}
+
+// ── TAB 2 ──
+function initDue() {
+  const k = S.kpi;
+  $('k-due').textContent = fmtK(k.totalDue);
+  $('k-overdue').textContent = fmtK(k.overdueAmt);
+  $('k-unpaid').textContent = k.unpaidCnt.toLocaleString();
+  $('k-paid2').textContent = fmtK(k.totalPaid);
+
+  mkChart('cDueCust', { type:'bar', indexAxis:'y', data:{ labels:S.dueCust.map(([n])=>n.length>24?n.slice(0,24)+'…':n), datasets:[{ label:'Due ($)', data:S.dueCust.map(([,v])=>v), backgroundColor:'rgba(240,90,90,0.7)', borderRadius:4 }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } }, scales:{ x:{ grid:{color:'#1e2333'}, ticks:{color:'#5a607a',font:{size:10}} }, y:{ grid:{color:'#1e2333'}, ticks:{color:'#9aa0b8',font:{size:9}} } } } });
+
+  const total = Object.values(S.aging).reduce((a,b)=>a+b,0);
+  const agingColors = ['#3dd68c','#f0c040','#f7824f','#e05a5a','#f05a5a'];
+  const agingEl = $('agingRows');
+  agingEl.innerHTML = '';
+  Object.entries(S.aging).forEach(([lbl,val],i) => {
+    const pct = total > 0 ? (val/total*100) : 0;
+    agingEl.innerHTML += `<div class="aging-row"><div class="aging-label"><span>${lbl}</span><span>${fmt(val)}</span></div><div class="aging-bar-bg"><div class="aging-bar-fill" style="width:${pct.toFixed(1)}%;background:${agingColors[i]}"></div></div></div>`;
+  });
+
+  const tbody = $('dueTblBody');
+  tbody.innerHTML = '';
+  S.dueCust.forEach(([name,val]) => {
+    tbody.innerHTML += `<tr><td>${name}</td><td class="num" style="color:var(--red)">${fmt(val)}</td></tr>`;
+  });
+}
+
+// ── TAB 3 ──
+function initBO() {
+  const k = S.kpi;
+  $('k-bo').textContent = k.boCnt.toLocaleString();
+  $('k-oh').textContent = k.onholdCnt.toLocaleString();
+  $('k-booh').textContent = (k.boCnt+k.onholdCnt).toLocaleString();
+
+  const makeTbl = (rows, id) => {
+    const tbody = $(id);
+    tbody.innerHTML = rows.length === 0 ? '<tr><td colspan="6" style="text-align:center;color:var(--dim);padding:20px">데이터 없음</td></tr>' : '';
+    rows.forEach(r => {
+      const loc = r.location === 'Asung Trading Inc.' ? '<span class="tag tag-tor">Toronto</span>' : '<span class="tag tag-edm">Edmonton</span>';
+      const dt = r.invoiceDate ? r.invoiceDate.toISOString().slice(0,10) : '—';
+      tbody.innerHTML += `<tr><td style="font-family:'DM Mono',monospace;font-size:11px">${r.order}</td><td>${r.customer}</td><td>${loc}</td><td>${dt}</td><td class="num">${r.sale>0?fmt(r.sale):'—'}</td><td class="num" style="color:var(--red)">${r.due>0?fmt(r.due):'—'}</td></tr>`;
+    });
+  };
+  makeTbl(S.ohRows, 'ohTblBody');
+  makeTbl(S.boRows, 'boTblBody');
+}
+
+// ── TAB 4 ──
+function initBranch() {
+  const k = S.kpi;
+  mkChart('cBranchPie', { type:'doughnut', data:{ labels:['Toronto','Edmonton'], datasets:[{ data:[k.torSale,k.edmSale], backgroundColor:['rgba(79,142,247,0.8)','rgba(247,130,79,0.8)'], borderWidth:1, borderColor:'#0b0d12' }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'bottom',labels:{color:'#9aa0b8',font:{size:11}}}, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } } } });
+  mkChart('cBranchDue', { type:'doughnut', data:{ labels:['Toronto','Edmonton'], datasets:[{ data:[k.torDue,k.edmDue], backgroundColor:['rgba(240,90,90,0.8)','rgba(240,192,64,0.8)'], borderWidth:1, borderColor:'#0b0d12' }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'bottom',labels:{color:'#9aa0b8',font:{size:11}}}, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } } } });
+  mkChart('cBranchDaily2', { type:'line', data:{ labels:S.dailyLabels, datasets:[
+    { label:'Toronto', data:S.torDaily, borderColor:'#4f8ef7', backgroundColor:'rgba(79,142,247,0.1)', fill:true, borderWidth:2, pointRadius:3 },
+    { label:'Edmonton', data:S.edmDaily, borderColor:'#f7824f', backgroundColor:'rgba(247,130,79,0.1)', fill:true, borderWidth:2, pointRadius:3 }
+  ]}, options:{ ...baseOpts(30), plugins:{ ...baseOpts(30).plugins, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } } } });
+
+  const torRows = [['오더 수',k.torOrders.toLocaleString()],['총 매출',fmt(k.torSale)],['매출 비중',(k.torSale/k.totalSale*100).toFixed(1)+'%'],['미수금',fmt(k.torDue)],['Due 비중',(k.torDue/k.totalDue*100).toFixed(1)+'%']];
+  const edmRows = [['오더 수',k.edmOrders.toLocaleString()],['총 매출',fmt(k.edmSale)],['매출 비중',(k.edmSale/k.totalSale*100).toFixed(1)+'%'],['미수금',fmt(k.edmDue)],['Due 비중',(k.edmDue/k.totalDue*100).toFixed(1)+'%']];
+  $('torDetail').innerHTML = torRows.map(r=>`<tr><td>${r[0]}</td><td class="num">${r[1]}</td></tr>`).join('');
+  $('edmDetail').innerHTML = edmRows.map(r=>`<tr><td>${r[0]}</td><td class="num">${r[1]}</td></tr>`).join('');
+}
+
+// ── TAB 5 ──
+function initBrand() {
+  mkChart('cBrand', { type:'bar', indexAxis:'y', data:{ labels:S.brands.map(b=>b.name), datasets:[{ label:'매출 ($)', data:S.brands.map(b=>b.sale), backgroundColor:'rgba(61,214,140,0.7)', borderRadius:4 }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } }, scales:{ x:{ grid:{color:'#1e2333'}, ticks:{color:'#5a607a',font:{size:10}} }, y:{ grid:{color:'#1e2333'}, ticks:{color:'#9aa0b8',font:{size:10}} } } } });
+
+  const bTbody = $('brandTblBody');
+  bTbody.innerHTML = '';
+  S.brands.forEach(b => { bTbody.innerHTML += `<tr><td>${b.name}</td><td class="num" style="color:var(--green)">${fmt(b.sale)}</td><td class="num">${b.qty.toLocaleString()}</td><td class="num">${b.orders}</td></tr>`; });
+
+  mkChart('cCust', { type:'bar', indexAxis:'y', data:{ labels:S.customers.map(c=>c.name.length>28?c.name.slice(0,28)+'…':c.name), datasets:[{ label:'매출 ($)', data:S.customers.map(c=>c.sale), backgroundColor:'rgba(79,142,247,0.7)', borderRadius:4 }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } }, scales:{ x:{ grid:{color:'#1e2333'}, ticks:{color:'#5a607a',font:{size:10}} }, y:{ grid:{color:'#1e2333'}, ticks:{color:'#9aa0b8',font:{size:9}} } } } });
+
+  const cTbody = $('custTblBody');
+  cTbody.innerHTML = '';
+  S.customers.forEach(c => { cTbody.innerHTML += `<tr><td>${c.name}</td><td class="num" style="color:var(--blue)">${fmt(c.sale)}</td><td class="num">${c.qty.toLocaleString()}</td><td class="num">${c.orders}</td></tr>`; });
+}
+</script>
+</body>
+</html>
