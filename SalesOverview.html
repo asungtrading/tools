@@ -547,43 +547,6 @@ function processData(salesRows, detailRows) {
   }));
 
 
-  // ── Monthly trend (Details) ──
-  const monthMap = {};
-  details.forEach(r => {
-    if (!r.orderDate) return;
-    const mo = r.orderDate.toISOString().slice(0,7);
-    if (!monthMap[mo]) monthMap[mo] = { sale:0, qty:0, orders:new Set() };
-    monthMap[mo].sale += r.sale;
-    monthMap[mo].qty += r.qty;
-    monthMap[mo].orders.add(r.order);
-  });
-  S.monthly = Object.entries(monthMap).sort((a,b)=>a[0]>b[0]?1:-1).map(([mo,v]) => ({
-    mo, sale:v.sale, qty:v.qty, orders:v.orders.size
-  }));
-
-  // ── Sales weekly/monthly (Overview - Invoice date) ──
-  const salesWkMap = {}, salesMoMap = {};
-  sales.forEach(r => {
-    if (!r.invoiceDate) return;
-    // weekly
-    const d = r.invoiceDate;
-    const day = d.getDay();
-    const monday = new Date(d); monday.setDate(d.getDate() - (day===0?6:day-1));
-    const wk = monday.toISOString().slice(0,10).slice(5);
-    if (!salesWkMap[wk]) salesWkMap[wk] = { sale:0, paid:0, due:0 };
-    salesWkMap[wk].sale += r.sale;
-    salesWkMap[wk].paid += r.paid;
-    salesWkMap[wk].due += r.due;
-    // monthly
-    const mo = r.invoiceDate.toISOString().slice(0,7);
-    if (!salesMoMap[mo]) salesMoMap[mo] = { sale:0, paid:0, due:0 };
-    salesMoMap[mo].sale += r.sale;
-    salesMoMap[mo].paid += r.paid;
-    salesMoMap[mo].due += r.due;
-  });
-  S.salesWeekly = Object.entries(salesWkMap).sort((a,b)=>a[0]>b[0]?1:-1).map(([lbl,v])=>({lbl,...v}));
-  S.salesMonthly = Object.entries(salesMoMap).sort((a,b)=>a[0]>b[0]?1:-1).map(([lbl,v])=>({lbl,...v}));
-
   // ── Daily orders/qty (Details) ──
   const dailyOrderMap = {}, dailyQtyMap = {};
   details.forEach(r => {
