@@ -293,7 +293,8 @@ let D = {};
 function parseDate(s) {
   if(!s) return null;
   s = String(s).trim();
-  const m = s.match(/^(\d{2})-([A-Za-z]{3})-(\d{4})$/);
+  // "4-Mar-2026" 또는 "04-Mar-2026" 모두 처리
+  const m = s.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/);
   if(m){const mo={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};return new Date(parseInt(m[3]),mo[m[2]],parseInt(m[1]));}
   const d=new Date(s); return isNaN(d)?null:d;
 }
@@ -317,13 +318,17 @@ async function loadData() {
 }
 
 function processData(detailRows, salesRows) {
-  const details = detailRows.map(r => ({
+  const allDetails = detailRows.map(r => ({
     order: r['Order #'], brand: r['Brand']||'', progress: r['Order Progress']||'',
     orderDate: parseDate(r['Order date']),
+    invoiceDate: parseDate(r['Invoice date']),
     invoiceNo: r['Invoice #']||'',
     customer: r['Customer']||'', location: r['Location']||'',
     qty: parseFloat(r['Quantity'])||0, sale: parseFloat(r['Sale'])||0,
-  })).filter(r => r.order && r.orderDate && r.invoiceNo);
+  })).filter(r => r.order && r.orderDate);
+
+  // Invoice # 있는 것만 (매출 분석용)
+  const details = allDetails.filter(r => r.invoiceNo);
 
   const tor = details.filter(r => r.location==='Asung Trading Inc.');
   const edm = details.filter(r => r.location==='Asung - Edmonton');
@@ -333,23 +338,23 @@ function processData(detailRows, salesRows) {
     totalQty: details.reduce((a,r)=>a+r.qty,0),
     totalOrders: new Set(details.map(r=>r.order)).size,
     totalCust: new Set(details.map(r=>r.customer)).size,
-    boCnt: new Set(details.filter(r=>r.progress==='Backordered').map(r=>r.order)).size,
-    ohCnt: new Set(details.filter(r=>r.progress==='On Hold').map(r=>r.order)).size,
+    boCnt: new Set(allDetails.filter(r=>r.progress==='Backordered').map(r=>r.order)).size,
+    ohCnt: new Set(allDetails.filter(r=>r.progress==='On Hold').map(r=>r.order)).size,
     torSale: tor.reduce((a,r)=>a+r.sale,0), edmSale: edm.reduce((a,r)=>a+r.sale,0),
     torOrders: new Set(tor.map(r=>r.order)).size, edmOrders: new Set(edm.map(r=>r.order)).size,
     torCust: new Set(tor.map(r=>r.customer)).size, edmCust: new Set(edm.map(r=>r.customer)).size,
   };
 
   const progMap={};
-  details.forEach(r=>{if(!progMap[r.progress])progMap[r.progress]=new Set();progMap[r.progress].add(r.order);});
+  allDetails.forEach(r=>{if(!progMap[r.progress])progMap[r.progress]=new Set();progMap[r.progress].add(r.order);});
   D.prog = Object.entries(progMap).map(([k,v])=>([k,v.size])).sort((a,b)=>b[1]-a[1]);
 
   const ohMap={},boMap={};
-  details.filter(r=>r.progress==='On Hold').forEach(r=>{
+  allDetails.filter(r=>r.progress==='On Hold').forEach(r=>{
     if(!ohMap[r.order])ohMap[r.order]={customer:r.customer,location:r.location,date:r.orderDate,sale:0};
     ohMap[r.order].sale+=r.sale;
   });
-  details.filter(r=>r.progress==='Backordered').forEach(r=>{
+  allDetails.filter(r=>r.progress==='Backordered').forEach(r=>{
     if(!boMap[r.order])boMap[r.order]={customer:r.customer,location:r.location,date:r.orderDate,sale:0};
     boMap[r.order].sale+=r.sale;
   });
@@ -368,6 +373,21 @@ function processData(detailRows, salesRows) {
   D.daily  ={all:agg(details,dKey),tor:agg(tor,dKey),edm:agg(edm,dKey)};
   D.weekly ={all:agg(details,wKey),tor:agg(tor,wKey),edm:agg(edm,wKey)};
   D.monthly={all:agg(details,mKey),tor:agg(tor,mKey),edm:agg(edm,mKey)};
+
+  // Invoice date 기준 집계 (Invoice # 있는 것만, invoiceDate 기준)
+  function aggByInv(rows, keyFn) {
+    const m={};
+    rows.forEach(r=>{
+      if(!r.invoiceDate) return;
+      const k=keyFn(r.invoiceDate);
+      if(!m[k])m[k]={sale:0,qty:0,orders:new Set()};
+      m[k].sale+=r.sale;m[k].qty+=r.qty;m[k].orders.add(r.order);
+    });
+    return Object.entries(m).sort((a,b)=>a[0]>b[0]?1:-1).map(([k,v])=>({k,sale:v.sale,qty:v.qty,orders:v.orders.size}));
+  }
+  D.invDaily  ={all:aggByInv(details,dKey),tor:aggByInv(tor,dKey),edm:aggByInv(edm,dKey)};
+  D.invWeekly ={all:aggByInv(details,wKey),tor:aggByInv(tor,wKey),edm:aggByInv(edm,wKey)};
+  D.invMonthly={all:aggByInv(details,mKey),tor:aggByInv(tor,mKey),edm:aggByInv(edm,mKey)};
 
   const brandMap={},custMap={};
   details.forEach(r=>{
@@ -442,13 +462,34 @@ let curPeriod='daily',curBranch='all';
 function setPeriod(p,el){curPeriod=p;document.querySelectorAll('#periodToggle .tgl').forEach(b=>b.classList.remove('active'));if(el)el.classList.add('active');renderTrend();}
 function setBranch(b,el){curBranch=b;document.querySelectorAll('#branchToggle .tgl').forEach(btn=>btn.classList.remove('active'));if(el)el.classList.add('active');renderTrend();}
 function renderTrend(){
-  const data=(D[curPeriod]||D.daily)[curBranch]||(D[curPeriod]||D.daily).all;
-  const labels=data.map(d=>d.k);
+  const ordKey = 'inv'+curPeriod.charAt(0).toUpperCase()+curPeriod.slice(1);
+  const ordData = (D[curPeriod]||D.daily)[curBranch]||(D[curPeriod]||D.daily).all;
+  const invData = (D[ordKey]||D.invMonthly)[curBranch]||(D[ordKey]||D.invMonthly).all;
+
+  // 두 데이터셋 라벨 합치기
+  const allKeys = [...new Set([...ordData.map(d=>d.k),...invData.map(d=>d.k)])].sort();
+  const ordMap = Object.fromEntries(ordData.map(d=>[d.k,d]));
+  const invMap = Object.fromEntries(invData.map(d=>[d.k,d]));
+
   const rot=curPeriod==='daily'?30:0;
-  $('trendLabel').textContent={daily:'일별',weekly:'주별',monthly:'월별'}[curPeriod]+' · '+{all:'전체',tor:'Toronto',edm:'Edmonton'}[curBranch]+' · Order date 기준';
-  mkChart('cTrendSale',{type:'bar',data:{labels,datasets:[{label:'매출 ($)',data:data.map(d=>d.sale),backgroundColor:'rgba(79,142,247,0.7)',borderRadius:4}]},options:{...baseOpts(rot),plugins:{...baseOpts(rot).plugins,tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}}}});
-  mkChart('cTrendOrders',{type:'bar',data:{labels,datasets:[{label:'오더수',data:data.map(d=>d.orders),backgroundColor:'rgba(61,207,192,0.7)',borderRadius:4}]},options:baseOpts(rot)});
-  mkChart('cTrendQty',{type:'bar',data:{labels,datasets:[{label:'수량',data:data.map(d=>d.qty),backgroundColor:'rgba(155,127,244,0.7)',borderRadius:4}]},options:baseOpts(rot)});
+  const pStr={daily:'일별',weekly:'주별',monthly:'월별'}[curPeriod];
+  const bStr={all:'전체',tor:'Toronto',edm:'Edmonton'}[curBranch];
+  $('trendLabel').textContent=pStr+' · '+bStr+' · Order(파랑) vs Invoice(초록)';
+
+  mkChart('cTrendSale',{type:'bar',data:{labels:allKeys,datasets:[
+    {label:'Order date 기준',data:allKeys.map(k=>ordMap[k]?ordMap[k].sale:0),backgroundColor:'rgba(79,142,247,0.75)',borderRadius:4},
+    {label:'Invoice date 기준',data:allKeys.map(k=>invMap[k]?invMap[k].sale:0),backgroundColor:'rgba(61,214,140,0.75)',borderRadius:4},
+  ]},options:{...baseOpts(rot),plugins:{...baseOpts(rot).plugins,tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>' '+ctx.dataset.label+': '+fmt(ctx.raw)}}}}});
+
+  mkChart('cTrendOrders',{type:'bar',data:{labels:allKeys,datasets:[
+    {label:'Order date',data:allKeys.map(k=>ordMap[k]?ordMap[k].orders:0),backgroundColor:'rgba(79,142,247,0.7)',borderRadius:4},
+    {label:'Invoice date',data:allKeys.map(k=>invMap[k]?invMap[k].orders:0),backgroundColor:'rgba(61,214,140,0.7)',borderRadius:4},
+  ]},options:baseOpts(rot)});
+
+  mkChart('cTrendQty',{type:'bar',data:{labels:allKeys,datasets:[
+    {label:'Order date',data:allKeys.map(k=>ordMap[k]?ordMap[k].qty:0),backgroundColor:'rgba(155,127,244,0.7)',borderRadius:4},
+    {label:'Invoice date',data:allKeys.map(k=>invMap[k]?invMap[k].qty:0),backgroundColor:'rgba(61,207,192,0.7)',borderRadius:4},
+  ]},options:baseOpts(rot)});
 }
 function initTrend(){renderTrend();}
 
