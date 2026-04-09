@@ -238,12 +238,22 @@ tbody td:first-child { color:var(--text); font-weight:500; }
 <!-- TAB 1: TREND -->
 <div class="panel" id="panel1">
   <div class="note">📌 Sales Trend는 Order Details 기준 (Order date) · 미결제/결제는 Overview 기준 (Invoice date)</div>
-  <div class="toggle-bar">
-    <span class="toggle-lbl">기간 단위</span>
-    <div class="toggle-group" id="trendToggle">
-      <button class="tgl active" onclick="setTrendPeriod('daily',this)">일별</button>
-      <button class="tgl" onclick="setTrendPeriod('weekly',this)">주별</button>
-      <button class="tgl" onclick="setTrendPeriod('monthly',this)">월별</button>
+  <div class="toggle-bar" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+    <div style="display:flex;align-items:center;gap:12px">
+      <span class="toggle-lbl">기간 단위</span>
+      <div class="toggle-group" id="trendToggle">
+        <button class="tgl active" onclick="setTrendPeriod('daily',this)">일별</button>
+        <button class="tgl" onclick="setTrendPeriod('weekly',this)">주별</button>
+        <button class="tgl" onclick="setTrendPeriod('monthly',this)">월별</button>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <span class="toggle-lbl">Branch</span>
+      <div class="toggle-group" id="branchToggle">
+        <button class="tgl active" onclick="setTrendBranch('all',this)">전체</button>
+        <button class="tgl" onclick="setTrendBranch('tor',this)">Toronto</button>
+        <button class="tgl" onclick="setTrendBranch('edm',this)">Edmonton</button>
+      </div>
     </div>
   </div>
   <div class="full card">
@@ -412,7 +422,6 @@ function processData(salesRows, detailRows) {
     order: r['Order #'],
     progress: r['Order Progress'],
     payStatus: r['Payment status'],
-    invoiceStatus: r['Invoice status'],
     invoiceDate: parseDate(r['Invoice date']),
     dueDate: parseDate(r['Due date']),
     customer: r['Customer'],
@@ -436,14 +445,14 @@ function processData(salesRows, detailRows) {
     sale: parseFloat(r['Sale']) || 0,
     total: parseFloat(r['Total']) || 0,
   })).filter(r => r.order);
+  S._details = details; // branch 필터링용
 
   // ── KPIs ──
   const tor = sales.filter(r => r.location === 'Asung Trading Inc.');
   const edm = sales.filter(r => r.location === 'Asung - Edmonton');
   const totalSale = sales.reduce((a,r) => a+r.sale, 0);
-
   S.kpi = {
-    totalSale, totalSale,
+    totalSale,
     totalPaid: sales.reduce((a,r) => a+r.paid, 0),
     totalDue: sales.reduce((a,r) => a+r.due, 0),
     totalOrders: sales.length,
@@ -459,14 +468,13 @@ function processData(salesRows, detailRows) {
     edmOrders: edm.length,
   };
 
-  // ── Order Progress ──
-  const progMap = {};
-  sales.forEach(r => { progMap[r.progress] = (progMap[r.progress]||0)+1; });
+  // ── Order Progress / Payment ──
+  const progMap = {}, payMap = {};
+  sales.forEach(r => {
+    progMap[r.progress] = (progMap[r.progress]||0)+1;
+    payMap[r.payStatus] = (payMap[r.payStatus]||0)+1;
+  });
   S.prog = Object.entries(progMap).sort((a,b) => b[1]-a[1]);
-
-  // ── Payment ──
-  const payMap = {};
-  sales.forEach(r => { payMap[r.payStatus] = (payMap[r.payStatus]||0)+1; });
   S.pay = Object.entries(payMap).sort((a,b) => b[1]-a[1]);
 
   // ── Due by customer ──
@@ -475,15 +483,14 @@ function processData(salesRows, detailRows) {
   S.dueCust = Object.entries(dueCustMap).sort((a,b) => b[1]-a[1]).slice(0,15);
 
   // ── Aging ──
-  const unpaidRows = sales.filter(r => r.payStatus === 'Unpaid');
   const aging = { 'Current':0, '1-30 days':0, '31-60 days':0, '61-90 days':0, '90+ days':0 };
-  unpaidRows.forEach(r => {
+  sales.filter(r => r.payStatus === 'Unpaid').forEach(r => {
     if (!r.dueDate) return;
-    const d = Math.floor((today - r.dueDate) / 86400000);
-    if (d <= 0) aging['Current'] += r.due;
-    else if (d <= 30) aging['1-30 days'] += r.due;
-    else if (d <= 60) aging['31-60 days'] += r.due;
-    else if (d <= 90) aging['61-90 days'] += r.due;
+    const diff = Math.floor((today - r.dueDate) / 86400000);
+    if (diff <= 0) aging['Current'] += r.due;
+    else if (diff <= 30) aging['1-30 days'] += r.due;
+    else if (diff <= 60) aging['31-60 days'] += r.due;
+    else if (diff <= 90) aging['61-90 days'] += r.due;
     else aging['90+ days'] += r.due;
   });
   S.aging = aging;
@@ -496,108 +503,100 @@ function processData(salesRows, detailRows) {
   const weekMap = {};
   details.forEach(r => {
     if (!r.orderDate) return;
-    const d = r.orderDate;
-    const day = d.getDay();
-    const monday = new Date(d); monday.setDate(d.getDate() - (day === 0 ? 6 : day-1));
-    const wk = monday.toISOString().slice(0,10);
-    if (!weekMap[wk]) weekMap[wk] = { sale:0, qty:0, orders:new Set() };
-    weekMap[wk].sale += r.sale;
-    weekMap[wk].qty += r.qty;
-    weekMap[wk].orders.add(r.order);
+    const dt = r.orderDate;
+    const dayOfWeek = dt.getDay();
+    const mon = new Date(dt); mon.setDate(dt.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek-1));
+    const wkKey = mon.toISOString().slice(0,10);
+    if (!weekMap[wkKey]) weekMap[wkKey] = { sale:0, qty:0, orders:new Set() };
+    weekMap[wkKey].sale += r.sale;
+    weekMap[wkKey].qty += r.qty;
+    weekMap[wkKey].orders.add(r.order);
   });
-  S.weekly = Object.entries(weekMap).sort((a,b) => a[0]>b[0]?1:-1).map(([wk,v]) => ({
-    wk: wk.slice(5), sale: v.sale, qty: v.qty, orders: v.orders.size
+  S.weekly = Object.entries(weekMap).sort((a,b) => a[0]>b[0]?1:-1).map(([wkKey,v]) => ({
+    wk: wkKey.slice(5), sale: v.sale, qty: v.qty, orders: v.orders.size
   }));
 
-  // ── Daily branch (Details) ──
-  const torDayMap = {}, edmDayMap = {};
+  // ── Daily branch + orders + qty (Details) ──
+  const torDayMap = {}, edmDayMap = {}, dailyOrderMap = {}, dailyQtyMap = {};
   details.forEach(r => {
     if (!r.orderDate) return;
-    const d = r.orderDate.toISOString().slice(0,10);
-    if (r.location === 'Asung Trading Inc.') torDayMap[d] = (torDayMap[d]||0)+r.sale;
-    else edmDayMap[d] = (edmDayMap[d]||0)+r.sale;
+    const dk = r.orderDate.toISOString().slice(0,10);
+    if (r.location === 'Asung Trading Inc.') torDayMap[dk] = (torDayMap[dk]||0)+r.sale;
+    else edmDayMap[dk] = (edmDayMap[dk]||0)+r.sale;
+    if (!dailyOrderMap[dk]) dailyOrderMap[dk] = new Set();
+    dailyOrderMap[dk].add(r.order);
+    dailyQtyMap[dk] = (dailyQtyMap[dk]||0) + r.qty;
   });
   const allDates = [...new Set([...Object.keys(torDayMap), ...Object.keys(edmDayMap)])].sort();
-  S.dailyLabels = allDates.map(d => d.slice(5));
-  S.torDaily = allDates.map(d => torDayMap[d]||0);
-  S.edmDaily = allDates.map(d => edmDayMap[d]||0);
-
-  // ── Brand ──
-  const brandMap = {};
-  details.forEach(r => {
-    if (!brandMap[r.brand]) brandMap[r.brand] = { sale:0, qty:0, orders:new Set() };
-    brandMap[r.brand].sale += r.sale;
-    brandMap[r.brand].qty += r.qty;
-    brandMap[r.brand].orders.add(r.order);
-  });
-  S.brands = Object.entries(brandMap).sort((a,b) => b[1].sale-a[1].sale).slice(0,15).map(([name,v]) => ({
-    name, sale: v.sale, qty: v.qty, orders: v.orders.size
-  }));
-
-  // ── Customer (Details) ──
-  const custMap = {};
-  details.forEach(r => {
-    if (!custMap[r.customer]) custMap[r.customer] = { sale:0, qty:0, orders:new Set() };
-    custMap[r.customer].sale += r.sale;
-    custMap[r.customer].qty += r.qty;
-    custMap[r.customer].orders.add(r.order);
-  });
-  S.customers = Object.entries(custMap).sort((a,b) => b[1].sale-a[1].sale).slice(0,15).map(([name,v]) => ({
-    name, sale: v.sale, qty: v.qty, orders: v.orders.size
-  }));
-
-
-  // ── Daily orders/qty (Details) ──
-  const dailyOrderMap = {}, dailyQtyMap = {};
-  details.forEach(r => {
-    if (!r.orderDate) return;
-    const d = r.orderDate.toISOString().slice(0,10);
-    if (!dailyOrderMap[d]) dailyOrderMap[d] = new Set();
-    dailyOrderMap[d].add(r.order);
-    dailyQtyMap[d] = (dailyQtyMap[d]||0) + r.qty;
-  });
-  S.dailyOrders = allDates.map(d => dailyOrderMap[d] ? dailyOrderMap[d].size : 0);
-  S.dailyQty = allDates.map(d => dailyQtyMap[d]||0);
+  S.dailyLabels = allDates.map(dk => dk.slice(5));
+  S.torDaily = allDates.map(dk => torDayMap[dk]||0);
+  S.edmDaily = allDates.map(dk => edmDayMap[dk]||0);
+  S.dailyOrders = allDates.map(dk => dailyOrderMap[dk] ? dailyOrderMap[dk].size : 0);
+  S.dailyQty = allDates.map(dk => dailyQtyMap[dk]||0);
 
   // ── Monthly trend (Details) ──
   const monthMap = {};
   details.forEach(r => {
     if (!r.orderDate) return;
-    const mo = r.orderDate.toISOString().slice(0,7);
-    if (!monthMap[mo]) monthMap[mo] = { sale:0, qty:0, orders:new Set() };
-    monthMap[mo].sale += r.sale;
-    monthMap[mo].qty += r.qty;
-    monthMap[mo].orders.add(r.order);
+    const moKey = r.orderDate.toISOString().slice(0,7);
+    if (!monthMap[moKey]) monthMap[moKey] = { sale:0, qty:0, orders:new Set() };
+    monthMap[moKey].sale += r.sale;
+    monthMap[moKey].qty += r.qty;
+    monthMap[moKey].orders.add(r.order);
   });
-  S.monthly = Object.entries(monthMap).sort((a,b)=>a[0]>b[0]?1:-1).map(([mo,v]) => ({
-    mo, sale:v.sale, qty:v.qty, orders:v.orders.size
+  S.monthly = Object.entries(monthMap).sort((a,b)=>a[0]>b[0]?1:-1).map(([moKey,v]) => ({
+    mo: moKey, sale:v.sale, qty:v.qty, orders:v.orders.size
+  }));
+
+  // ── Brand / Customer (Details) ──
+  const brandMap = {}, custMap = {};
+  details.forEach(r => {
+    if (!brandMap[r.brand]) brandMap[r.brand] = { sale:0, qty:0, orders:new Set() };
+    brandMap[r.brand].sale += r.sale;
+    brandMap[r.brand].qty += r.qty;
+    brandMap[r.brand].orders.add(r.order);
+    if (!custMap[r.customer]) custMap[r.customer] = { sale:0, qty:0, orders:new Set() };
+    custMap[r.customer].sale += r.sale;
+    custMap[r.customer].qty += r.qty;
+    custMap[r.customer].orders.add(r.order);
+  });
+  S.brands = Object.entries(brandMap).sort((a,b) => b[1].sale-a[1].sale).slice(0,15).map(([name,v]) => ({
+    name, sale: v.sale, qty: v.qty, orders: v.orders.size
+  }));
+  S.customers = Object.entries(custMap).sort((a,b) => b[1].sale-a[1].sale).slice(0,15).map(([name,v]) => ({
+    name, sale: v.sale, qty: v.qty, orders: v.orders.size
   }));
 
   // ── Sales weekly/monthly (Overview - Invoice date) ──
   const salesWkMap = {}, salesMoMap = {};
   sales.forEach(r => {
     if (!r.invoiceDate) return;
-    const d = r.invoiceDate;
-    const day = d.getDay();
-    const monday = new Date(d); monday.setDate(d.getDate() - (day===0?6:day-1));
-    const wk = monday.toISOString().slice(5,10);
-    if (!salesWkMap[wk]) salesWkMap[wk] = { sale:0, paid:0, due:0 };
-    salesWkMap[wk].sale += r.sale;
-    salesWkMap[wk].paid += r.paid;
-    salesWkMap[wk].due += r.due;
-    const mo = r.invoiceDate.toISOString().slice(0,7);
-    if (!salesMoMap[mo]) salesMoMap[mo] = { sale:0, paid:0, due:0 };
-    salesMoMap[mo].sale += r.sale;
-    salesMoMap[mo].paid += r.paid;
-    salesMoMap[mo].due += r.due;
+    const dt2 = r.invoiceDate;
+    const dow = dt2.getDay();
+    const mon2 = new Date(dt2); mon2.setDate(dt2.getDate() - (dow===0?6:dow-1));
+    const wk2 = mon2.toISOString().slice(5,10);
+    if (!salesWkMap[wk2]) salesWkMap[wk2] = { sale:0, paid:0, due:0 };
+    salesWkMap[wk2].sale += r.sale;
+    salesWkMap[wk2].paid += r.paid;
+    salesWkMap[wk2].due += r.due;
+    const mo2 = r.invoiceDate.toISOString().slice(0,7);
+    if (!salesMoMap[mo2]) salesMoMap[mo2] = { sale:0, paid:0, due:0 };
+    salesMoMap[mo2].sale += r.sale;
+    salesMoMap[mo2].paid += r.paid;
+    salesMoMap[mo2].due += r.due;
   });
   S.salesWeekly = Object.entries(salesWkMap).sort((a,b)=>a[0]>b[0]?1:-1).map(([lbl,v])=>({lbl,...v}));
   S.salesMonthly = Object.entries(salesMoMap).sort((a,b)=>a[0]>b[0]?1:-1).map(([lbl,v])=>({lbl,...v}));
 
   // ── Header ──
-  const dateStr = sales[0]?.invoiceDate ? sales[0].invoiceDate.toISOString().slice(0,7) : '—';
-  document.getElementById('hdrDate').textContent = dateStr + ' · As of ' + today.toISOString().slice(0,10);
-  document.getElementById('hdrStats').textContent = sales.length.toLocaleString() + ' orders · ' + details.length.toLocaleString() + ' lines';
+  const invoiceDates = sales.map(r => r.invoiceDate).filter(Boolean).sort((a,b)=>a-b);
+  const orderDates = details.map(r => r.orderDate).filter(Boolean).sort((a,b)=>a-b);
+  const salesFrom = invoiceDates[0] ? invoiceDates[0].toISOString().slice(0,10) : '';
+  const salesTo = invoiceDates[invoiceDates.length-1] ? invoiceDates[invoiceDates.length-1].toISOString().slice(0,10) : '';
+  const detFrom = orderDates[0] ? orderDates[0].toISOString().slice(0,10) : '';
+  const detTo = orderDates[orderDates.length-1] ? orderDates[orderDates.length-1].toISOString().slice(0,10) : '';
+  document.getElementById('hdrDate').textContent = salesFrom + ' ~ ' + salesTo;
+  document.getElementById('hdrStats').textContent = sales.length.toLocaleString() + ' orders · ' + details.length.toLocaleString() + ' lines · Order Details: ' + detFrom + ' ~ ' + detTo;
 }
 
 // ══════════════════════════════════════
@@ -668,32 +667,57 @@ function initOverview() {
 
 // ── TAB 1 ──
 let trendPeriod = 'daily';
+let trendBranch = 'all';
 
-function getPeriodData(period) {
-  if (period === 'daily') {
-    return {
-      labels: S.dailyLabels,
-      sale: S.torDaily.map((v,i) => v + S.edmDaily[i]),
-      orders: S.dailyOrders,
-      qty: S.dailyQty,
-      labelStr: '일별'
-    };
-  } else if (period === 'weekly') {
-    return {
-      labels: S.weekly.map(w=>w.wk),
-      sale: S.weekly.map(w=>w.sale),
-      orders: S.weekly.map(w=>w.orders),
-      qty: S.weekly.map(w=>w.qty),
-      labelStr: '주별'
-    };
+function getPeriodData(period, branch) {
+  branch = branch || trendBranch;
+
+  // Branch별 일별 데이터 계산
+  let dailySale, dailyLabels;
+  if (branch === 'tor') {
+    dailySale = S.torDaily;
+  } else if (branch === 'edm') {
+    dailySale = S.edmDaily;
   } else {
-    return {
-      labels: S.monthly.map(m=>m.mo),
-      sale: S.monthly.map(m=>m.sale),
-      orders: S.monthly.map(m=>m.orders),
-      qty: S.monthly.map(m=>m.qty),
-      labelStr: '월별'
-    };
+    dailySale = S.torDaily.map((v,i) => v + S.edmDaily[i]);
+  }
+  dailyLabels = S.dailyLabels;
+
+  // Branch별 주간/월별 집계
+  function aggregateByBranch(details, periodFn, keyFn) {
+    const map = {};
+    (S._details || []).forEach(r => {
+      if (!r.orderDate) return;
+      if (branch === 'tor' && r.location !== 'Asung Trading Inc.') return;
+      if (branch === 'edm' && r.location !== 'Asung - Edmonton') return;
+      const key = keyFn(r.orderDate);
+      if (!map[key]) map[key] = { sale:0, qty:0, orders:new Set() };
+      map[key].sale += r.sale;
+      map[key].qty += r.qty;
+      map[key].orders.add(r.order);
+    });
+    return Object.entries(map).sort((a,b)=>a[0]>b[0]?1:-1).map(([k,v])=>({
+      key:k, sale:v.sale, qty:v.qty, orders:v.orders.size
+    }));
+  }
+
+  if (period === 'daily') {
+    return { labels: dailyLabels, sale: dailySale, orders: S.dailyOrders, qty: S.dailyQty, labelStr: '일별' };
+  } else if (period === 'weekly') {
+    if (branch === 'all') {
+      return { labels: S.weekly.map(w=>w.wk), sale: S.weekly.map(w=>w.sale), orders: S.weekly.map(w=>w.orders), qty: S.weekly.map(w=>w.qty), labelStr: '주별' };
+    }
+    const data = aggregateByBranch(null, null, d => {
+      const dow = d.getDay(); const mon = new Date(d); mon.setDate(d.getDate()-(dow===0?6:dow-1));
+      return mon.toISOString().slice(5,10);
+    });
+    return { labels: data.map(d=>d.key), sale: data.map(d=>d.sale), orders: data.map(d=>d.orders), qty: data.map(d=>d.qty), labelStr: '주별' };
+  } else {
+    if (branch === 'all') {
+      return { labels: S.monthly.map(m=>m.mo), sale: S.monthly.map(m=>m.sale), orders: S.monthly.map(m=>m.orders), qty: S.monthly.map(m=>m.qty), labelStr: '월별' };
+    }
+    const data = aggregateByBranch(null, null, d => d.toISOString().slice(0,7));
+    return { labels: data.map(d=>d.key), sale: data.map(d=>d.sale), orders: data.map(d=>d.orders), qty: data.map(d=>d.qty), labelStr: '월별' };
   }
 }
 
@@ -707,6 +731,14 @@ function setTrendPeriod(period, el) {
   mkChart('cWeeklySale', { type:'bar', data:{ labels:d.labels, datasets:[{ label:'매출 ($)', data:d.sale, backgroundColor:'rgba(79,142,247,0.7)', borderRadius:5 }] }, options:{ ...baseOpts(), plugins:{ ...baseOpts().plugins, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } } } });
   mkChart('cWeeklyOrders', { type:'bar', data:{ labels:d.labels, datasets:[{ label:'오더수', data:d.orders, backgroundColor:'rgba(61,207,192,0.7)', borderRadius:4 }] }, options:baseOpts() });
   mkChart('cWeeklyQty', { type:'bar', data:{ labels:d.labels, datasets:[{ label:'수량', data:d.qty, backgroundColor:'rgba(155,127,244,0.7)', borderRadius:4 }] }, options:baseOpts() });
+}
+
+function setTrendBranch(branch, el) {
+  trendBranch = branch;
+  document.querySelectorAll('#branchToggle .tgl').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  else { const btns = document.querySelectorAll('#branchToggle .tgl'); if(btns[['all','tor','edm'].indexOf(branch)]) btns[['all','tor','edm'].indexOf(branch)].classList.add('active'); }
+  setTrendPeriod(trendPeriod);
 }
 
 function initTrend() {
