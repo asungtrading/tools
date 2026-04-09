@@ -241,9 +241,9 @@ tbody td:first-child { color:var(--text); font-weight:500; }
   <div class="toggle-bar">
     <span class="toggle-lbl">기간 단위</span>
     <div class="toggle-group" id="trendToggle">
-      <button class="tgl active" onclick="setTrendPeriod('daily')">일별</button>
-      <button class="tgl" onclick="setTrendPeriod('weekly')">주별</button>
-      <button class="tgl" onclick="setTrendPeriod('monthly')">월별</button>
+      <button class="tgl active" onclick="setTrendPeriod('daily',this)">일별</button>
+      <button class="tgl" onclick="setTrendPeriod('weekly',this)">주별</button>
+      <button class="tgl" onclick="setTrendPeriod('monthly',this)">월별</button>
     </div>
   </div>
   <div class="full card">
@@ -271,8 +271,8 @@ tbody td:first-child { color:var(--text); font-weight:500; }
   <div class="toggle-bar">
     <span class="toggle-lbl">추이 단위</span>
     <div class="toggle-group" id="dueToggle">
-      <button class="tgl active" onclick="setDuePeriod('weekly')">주별</button>
-      <button class="tgl" onclick="setDuePeriod('monthly')">월별</button>
+      <button class="tgl active" onclick="setDuePeriod('weekly',this)">주별</button>
+      <button class="tgl" onclick="setDuePeriod('monthly',this)">월별</button>
     </div>
   </div>
   <div class="full card">
@@ -734,10 +734,11 @@ function getPeriodData(period) {
   }
 }
 
-function setTrendPeriod(period) {
+function setTrendPeriod(period, el) {
   trendPeriod = period;
   document.querySelectorAll('#trendToggle .tgl').forEach(b => b.classList.remove('active'));
-  event.target.classList.add('active');
+  if (el) el.classList.add('active');
+  else { const btns = document.querySelectorAll('#trendToggle .tgl'); if(btns[['daily','weekly','monthly'].indexOf(period)]) btns[['daily','weekly','monthly'].indexOf(period)].classList.add('active'); }
   const d = getPeriodData(period);
   $('trendSaleLabel').textContent = d.labelStr + ' · Order Details 기준';
   mkChart('cWeeklySale', { type:'bar', data:{ labels:d.labels, datasets:[{ label:'매출 ($)', data:d.sale, backgroundColor:'rgba(79,142,247,0.7)', borderRadius:5 }] }, options:{ ...baseOpts(), plugins:{ ...baseOpts().plugins, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } } } });
@@ -756,10 +757,11 @@ function initTrend() {
 // ── TAB 2 ──
 let duePeriod = 'weekly';
 
-function setDuePeriod(period) {
+function setDuePeriod(period, el) {
   duePeriod = period;
   document.querySelectorAll('#dueToggle .tgl').forEach(b => b.classList.remove('active'));
-  event.target.classList.add('active');
+  if (el) el.classList.add('active');
+  else { const btns = document.querySelectorAll('#dueToggle .tgl'); if(btns[['weekly','monthly'].indexOf(period)]) btns[['weekly','monthly'].indexOf(period)].classList.add('active'); }
   const labelStr = period === 'weekly' ? '주별' : '월별';
   $('duePeriodLabel').textContent = labelStr + ' · Invoice date 기준';
   const data = period === 'weekly' ? S.salesWeekly : S.salesMonthly;
