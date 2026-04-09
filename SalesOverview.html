@@ -7,160 +7,94 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 :root {
-  --bg: #0b0d12;
-  --surface: #12151e;
-  --surface2: #181c28;
-  --surface3: #1e2333;
-  --border: #252a3a;
-  --blue: #4f8ef7;
-  --orange: #f7824f;
-  --green: #3dd68c;
-  --red: #f05a5a;
-  --yellow: #f0c040;
-  --purple: #9b7ff4;
-  --teal: #3dcfc0;
-  --text: #f0f2fa;
-  --mid: #c0c6d8;
-  --dim: #8890aa;
-  --gold: #f0a500;
-  --grid: #1e2333;
+  --bg:#0b0d12;--surface:#12151e;--surface2:#181c28;--border:#252a3a;
+  --blue:#4f8ef7;--orange:#f7824f;--green:#3dd68c;--red:#f05a5a;
+  --yellow:#f0c040;--purple:#9b7ff4;--teal:#3dcfc0;
+  --text:#f0f2fa;--mid:#c0c6d8;--dim:#8890aa;--gold:#f0a500;--grid:#1e2333;
 }
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--text); font-family: 'DM Sans','Segoe UI',sans-serif; font-size: 13px; min-height: 100vh; }
-body::before { content:''; position:fixed; inset:0; background-image: linear-gradient(rgba(79,142,247,.03) 1px,transparent 1px), linear-gradient(90deg,rgba(79,142,247,.03) 1px,transparent 1px); background-size:48px 48px; pointer-events:none; z-index:0; }
-
-/* LOCK SCREEN */
-#lockScreen { position:fixed; inset:0; background:var(--bg); z-index:9999; display:flex; align-items:center; justify-content:center; }
-.lock-box { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:40px; width:320px; text-align:center; }
-.lock-logo { font-size:11px; font-weight:700; letter-spacing:2px; color:var(--gold); text-transform:uppercase; margin-bottom:8px; }
-.lock-title { font-size:18px; font-weight:700; margin-bottom:24px; }
-.lock-input { width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:12px 16px; color:var(--text); font-size:14px; text-align:center; letter-spacing:4px; outline:none; margin-bottom:12px; }
-.lock-input:focus { border-color:var(--blue); }
-.lock-btn { width:100%; background:var(--blue); color:#fff; border:none; border-radius:8px; padding:12px; font-size:13px; font-weight:600; cursor:pointer; transition:opacity .2s; }
-.lock-btn:hover { opacity:.85; }
-.lock-err { color:var(--red); font-size:12px; margin-top:8px; min-height:18px; }
-
-/* LOADING */
-#loadingScreen { position:fixed; inset:0; background:var(--bg); z-index:9998; display:none; align-items:center; justify-content:center; flex-direction:column; gap:16px; }
-.spinner { width:36px; height:36px; border:3px solid var(--border); border-top-color:var(--blue); border-radius:50%; animation:spin .8s linear infinite; }
-@keyframes spin { to { transform:rotate(360deg); } }
-.loading-text { font-size:12px; color:var(--dim); }
-
-/* HEADER */
-.hdr { position:sticky; top:0; z-index:100; background:rgba(11,13,18,.95); backdrop-filter:blur(12px); border-bottom:1px solid var(--border); padding:0 24px; display:flex; align-items:center; justify-content:space-between; height:52px; }
-.hdr-left { display:flex; align-items:center; gap:12px; }
-.hdr-logo { font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--gold); }
-.hdr-title { font-size:14px; font-weight:500; }
-.hdr-date { font-size:11px; color:var(--dim); font-family:'DM Mono',monospace; }
-.hdr-right { font-size:11px; color:var(--dim); font-family:'DM Mono',monospace; }
-
-/* TABS */
-.tabs { display:flex; align-items:center; gap:2px; padding:0 24px; background:var(--surface); border-bottom:1px solid var(--border); position:sticky; top:52px; z-index:99; overflow-x:auto; }
-.tab { padding:12px 16px; font-size:12px; font-weight:500; color:var(--dim); cursor:pointer; border-bottom:2px solid transparent; transition:all .2s; white-space:nowrap; }
-.tab:hover { color:var(--text); }
-.tab.active { color:var(--blue); border-bottom-color:var(--blue); }
-
-/* PANELS */
-.panels { position:relative; z-index:1; }
-.panel { display:none; padding:24px; }
-.panel.active { display:block; }
-
-/* KPI */
-.kpi-strip { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:20px; }
-.kpi { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px 18px; position:relative; overflow:hidden; }
-.kpi::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; }
-.kpi.blue::before { background:var(--blue); }
-.kpi.green::before { background:var(--green); }
-.kpi.red::before { background:var(--red); }
-.kpi.orange::before { background:var(--orange); }
-.kpi.yellow::before { background:var(--yellow); }
-.kpi.purple::before { background:var(--purple); }
-.kpi.teal::before { background:var(--teal); }
-.kpi-lbl { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:1px; color:var(--dim); margin-bottom:6px; }
-.kpi-val { font-size:22px; font-weight:700; font-family:'DM Mono',monospace; line-height:1; }
-.kpi.blue .kpi-val { color:var(--blue); }
-.kpi.green .kpi-val { color:var(--green); }
-.kpi.red .kpi-val { color:var(--red); }
-.kpi.orange .kpi-val { color:var(--orange); }
-.kpi.yellow .kpi-val { color:var(--yellow); }
-.kpi.purple .kpi-val { color:var(--purple); }
-.kpi.teal .kpi-val { color:var(--teal); }
-.kpi-sub { font-size:10px; color:var(--dim); margin-top:5px; }
-
-/* GRID */
-.g2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
-.g3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:16px; }
-.g21 { display:grid; grid-template-columns:2fr 1fr; gap:16px; margin-bottom:16px; }
-.full { margin-bottom:16px; }
-
-/* CARD */
-.card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:18px 20px; }
-.card-title { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:1px; color:var(--mid); margin-bottom:14px; display:flex; align-items:center; gap:8px; }
-.card-title span { color:var(--dim); font-weight:400; text-transform:none; letter-spacing:0; font-size:11px; }
-.chart-box { height:220px; position:relative; }
-.chart-box.tall { height:300px; }
-
-/* BRANCH CARDS */
-.branch-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
-.branch-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:20px; }
-.branch-card.tor { border-top:3px solid var(--blue); }
-.branch-card.edm { border-top:3px solid var(--orange); }
-.branch-name { font-size:13px; font-weight:700; margin-bottom:14px; }
-.branch-card.tor .branch-name { color:var(--blue); }
-.branch-card.edm .branch-name { color:var(--orange); }
-.branch-stats { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-.branch-stat-lbl { font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:.8px; margin-bottom:3px; }
-.branch-stat-val { font-size:18px; font-weight:700; font-family:'DM Mono',monospace; }
-
-/* TABLE */
-.tbl-wrap { overflow-x:auto; }
-table { width:100%; border-collapse:collapse; font-size:12px; }
-thead th { text-align:left; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.8px; color:var(--dim); padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; cursor:pointer; user-select:none; }
-thead th:hover { color:var(--mid); }
-tbody tr { border-bottom:1px solid var(--border); transition:background .15s; }
-tbody tr:hover { background:var(--surface2); }
-tbody td { padding:9px 10px; color:var(--mid); }
-tbody td:first-child { color:var(--text); font-weight:500; }
-.num { text-align:right; font-family:'DM Mono',monospace; }
-.tag { display:inline-block; font-size:10px; font-weight:600; padding:2px 7px; border-radius:4px; }
-.tag-tor { background:rgba(79,142,247,.15); color:var(--blue); }
-.tag-edm { background:rgba(247,130,79,.15); color:var(--orange); }
-.tag-red { background:rgba(240,90,90,.15); color:var(--red); }
-.tag-green { background:rgba(61,214,140,.15); color:var(--green); }
-.tag-yellow { background:rgba(240,192,64,.15); color:var(--yellow); }
-
-/* AGING */
-.aging-row { margin-bottom:12px; }
-.aging-label { display:flex; justify-content:space-between; margin-bottom:4px; font-size:11px; }
-.aging-label span:first-child { color:var(--mid); }
-.aging-label span:last-child { font-family:'DM Mono',monospace; color:var(--text); }
-.aging-bar-bg { background:var(--surface2); border-radius:3px; height:6px; overflow:hidden; }
-.aging-bar-fill { height:100%; border-radius:3px; transition:width .6s ease; }
-
-/* SECTION TITLE */
-.section-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1.5px; color:var(--dim); margin-bottom:14px; margin-top:6px; display:flex; align-items:center; gap:10px; }
-.section-title::after { content:''; flex:1; height:1px; background:var(--border); }
-
-.note { font-size:11px; color:var(--dim); padding:8px 12px; background:var(--surface2); border-radius:6px; border-left:2px solid var(--border); margin-bottom:16px; }
-
-
-/* TOGGLE */
-.toggle-bar { display:flex; align-items:center; gap:12px; margin-bottom:16px; }
-.toggle-lbl { font-size:11px; color:var(--dim); font-weight:600; text-transform:uppercase; letter-spacing:.8px; }
-.toggle-group { display:flex; gap:4px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:3px; }
-.tgl { background:transparent; border:none; color:var(--dim); font-size:11px; font-weight:600; padding:5px 14px; border-radius:6px; cursor:pointer; transition:all .2s; }
-.tgl:hover { color:var(--text); }
-.tgl.active { background:var(--blue); color:#fff; }
-
-@media (max-width:900px) {
-  .kpi-strip { grid-template-columns:repeat(3,1fr); }
-  .g2,.g3,.g21,.branch-grid { grid-template-columns:1fr; }
-}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans','Segoe UI',sans-serif;font-size:13px;min-height:100vh}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(79,142,247,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(79,142,247,.03) 1px,transparent 1px);background-size:48px 48px;pointer-events:none;z-index:0}
+#lockScreen{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center}
+.lock-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:40px;width:320px;text-align:center}
+.lock-logo{font-size:11px;font-weight:700;letter-spacing:2px;color:var(--gold);text-transform:uppercase;margin-bottom:8px}
+.lock-title{font-size:18px;font-weight:700;margin-bottom:24px}
+.lock-input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;color:var(--text);font-size:14px;text-align:center;letter-spacing:4px;outline:none;margin-bottom:12px}
+.lock-input:focus{border-color:var(--blue)}
+.lock-btn{width:100%;background:var(--blue);color:#fff;border:none;border-radius:8px;padding:12px;font-size:13px;font-weight:600;cursor:pointer;transition:opacity .2s}
+.lock-btn:hover{opacity:.85}
+.lock-err{color:var(--red);font-size:12px;margin-top:8px;min-height:18px}
+#loadingScreen{position:fixed;inset:0;background:var(--bg);z-index:9998;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px}
+.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{font-size:12px;color:var(--dim)}
+.hdr{position:sticky;top:0;z-index:100;background:rgba(11,13,18,.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:52px}
+.hdr-left{display:flex;align-items:center;gap:12px}
+.hdr-logo{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold)}
+.hdr-title{font-size:14px;font-weight:500}
+.hdr-date{font-size:11px;color:var(--dim);font-family:'DM Mono',monospace}
+.hdr-right{font-size:11px;color:var(--dim);font-family:'DM Mono',monospace}
+.tabs{display:flex;align-items:center;gap:2px;padding:0 24px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:52px;z-index:99;overflow-x:auto}
+.tab{padding:12px 16px;font-size:12px;font-weight:500;color:var(--dim);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;white-space:nowrap}
+.tab:hover{color:var(--text)}.tab.active{color:var(--blue);border-bottom-color:var(--blue)}
+.panels{position:relative;z-index:1}
+.panel{display:none;padding:24px}.panel.active{display:block}
+.kpi-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;position:relative;overflow:hidden}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.kpi.blue::before{background:var(--blue)}.kpi.green::before{background:var(--green)}
+.kpi.red::before{background:var(--red)}.kpi.orange::before{background:var(--orange)}
+.kpi.yellow::before{background:var(--yellow)}.kpi.purple::before{background:var(--purple)}
+.kpi.teal::before{background:var(--teal)}
+.kpi-lbl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin-bottom:6px}
+.kpi-val{font-size:22px;font-weight:700;font-family:'DM Mono',monospace;line-height:1}
+.kpi.blue .kpi-val{color:var(--blue)}.kpi.green .kpi-val{color:var(--green)}
+.kpi.red .kpi-val{color:var(--red)}.kpi.orange .kpi-val{color:var(--orange)}
+.kpi.yellow .kpi-val{color:var(--yellow)}.kpi.purple .kpi-val{color:var(--purple)}
+.kpi.teal .kpi-val{color:var(--teal)}
+.kpi-sub{font-size:10px;color:var(--dim);margin-top:5px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.g21{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px}
+.full{margin-bottom:16px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px}
+.card-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--mid);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.card-title span{color:var(--dim);font-weight:400;text-transform:none;letter-spacing:0;font-size:11px}
+.chart-box{height:220px;position:relative}.chart-box.tall{height:300px}
+.branch-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.branch-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px}
+.branch-card.tor{border-top:3px solid var(--blue)}.branch-card.edm{border-top:3px solid var(--orange)}
+.branch-name{font-size:13px;font-weight:700;margin-bottom:14px}
+.branch-card.tor .branch-name{color:var(--blue)}.branch-card.edm .branch-name{color:var(--orange)}
+.branch-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.branch-stat-lbl{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.8px;margin-bottom:3px}
+.branch-stat-val{font-size:18px;font-weight:700;font-family:'DM Mono',monospace}
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead th{text-align:left;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--dim);padding:8px 10px;border-bottom:1px solid var(--border);white-space:nowrap}
+tbody tr{border-bottom:1px solid var(--border);transition:background .15s}
+tbody tr:hover{background:var(--surface2)}
+tbody td{padding:9px 10px;color:var(--mid)}
+tbody td:first-child{color:var(--text);font-weight:500}
+.num{text-align:right;font-family:'DM Mono',monospace}
+.tag{display:inline-block;font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px}
+.tag-tor{background:rgba(79,142,247,.15);color:var(--blue)}.tag-edm{background:rgba(247,130,79,.15);color:var(--orange)}
+.toggle-bar{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.toggle-lbl{font-size:11px;color:var(--dim);font-weight:600;text-transform:uppercase;letter-spacing:.8px}
+.toggle-group{display:flex;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:3px}
+.tgl{background:transparent;border:none;color:var(--dim);font-size:11px;font-weight:600;padding:5px 14px;border-radius:6px;cursor:pointer;transition:all .2s}
+.tgl:hover{color:var(--text)}.tgl.active{background:var(--blue);color:#fff}
+.aging-row{margin-bottom:12px}
+.aging-label{display:flex;justify-content:space-between;margin-bottom:4px;font-size:11px}
+.aging-label span:first-child{color:var(--mid)}.aging-label span:last-child{font-family:'DM Mono',monospace;color:var(--text)}
+.aging-bar-bg{background:var(--surface2);border-radius:3px;height:6px;overflow:hidden}
+.aging-bar-fill{height:100%;border-radius:3px}
+.section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--dim);margin-bottom:14px;margin-top:6px;display:flex;align-items:center;gap:10px}
+.section-title::after{content:'';flex:1;height:1px;background:var(--border)}
+@media(max-width:900px){.kpi-strip{grid-template-columns:repeat(3,1fr)}.g2,.g21,.branch-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 
-<!-- LOCK -->
 <div id="lockScreen">
   <div class="lock-box">
     <div class="lock-logo">Asung Trading</div>
@@ -171,13 +105,11 @@ tbody td:first-child { color:var(--text); font-weight:500; }
   </div>
 </div>
 
-<!-- LOADING -->
 <div id="loadingScreen">
   <div class="spinner"></div>
   <div class="loading-text">데이터 로딩 중...</div>
 </div>
 
-<!-- MAIN -->
 <div id="mainApp" style="display:none">
 
 <div class="hdr">
@@ -192,26 +124,25 @@ tbody td:first-child { color:var(--text); font-weight:500; }
 <div class="tabs">
   <div class="tab active" onclick="showTab(0)">📊 Overview</div>
   <div class="tab" onclick="showTab(1)">📈 Sales Trend</div>
-  <div class="tab" onclick="showTab(2)">💰 미결제 현황</div>
-  <div class="tab" onclick="showTab(3)">⚠️ BO / On Hold</div>
-  <div class="tab" onclick="showTab(4)">🏙 Branch 비교</div>
-  <div class="tab" onclick="showTab(5)">🏷 Brand / 고객</div>
+  <div class="tab" onclick="showTab(2)">🏙 Branch 비교</div>
+  <div class="tab" onclick="showTab(3)">🏷 Brand / 고객</div>
+  <div class="tab" onclick="showTab(4)">⚠️ BO / On Hold</div>
+  <div class="tab" onclick="showTab(5)">💰 미수금</div>
 </div>
 
 <div class="panels">
 
-<!-- TAB 0: OVERVIEW -->
 <div class="panel active" id="panel0">
   <div class="kpi-strip">
-    <div class="kpi blue"><div class="kpi-lbl">총 매출 (Sale)</div><div class="kpi-val" id="k0">—</div><div class="kpi-sub" id="k0s">Invoice 기준</div></div>
-    <div class="kpi green"><div class="kpi-lbl">수금 완료 (Paid)</div><div class="kpi-val" id="k1">—</div><div class="kpi-sub">실제 수령 금액</div></div>
-    <div class="kpi red"><div class="kpi-lbl">미수금 (Due)</div><div class="kpi-val" id="k2">—</div><div class="kpi-sub">미결제 잔액</div></div>
-    <div class="kpi yellow"><div class="kpi-lbl">연체 금액</div><div class="kpi-val" id="k3">—</div><div class="kpi-sub">Due date 초과</div></div>
+    <div class="kpi blue"><div class="kpi-lbl">총 매출</div><div class="kpi-val" id="k0">—</div><div class="kpi-sub">Order date 기준</div></div>
+    <div class="kpi teal"><div class="kpi-lbl">총 수량</div><div class="kpi-val" id="k1">—</div><div class="kpi-sub">전체 판매 수량</div></div>
+    <div class="kpi green"><div class="kpi-lbl">유니크 오더</div><div class="kpi-val" id="k2">—</div><div class="kpi-sub">전체 주문 건수</div></div>
+    <div class="kpi purple"><div class="kpi-lbl">고객 수</div><div class="kpi-val" id="k3">—</div><div class="kpi-sub">활성 고객</div></div>
     <div class="kpi orange"><div class="kpi-lbl">BO / On Hold</div><div class="kpi-val" id="k4">—</div><div class="kpi-sub">처리 필요 오더</div></div>
   </div>
   <div class="g2">
     <div class="card"><div class="card-title">Order Progress 분포</div><div class="chart-box"><canvas id="cProg"></canvas></div></div>
-    <div class="card"><div class="card-title">결제 상태 분포</div><div class="chart-box"><canvas id="cPay"></canvas></div></div>
+    <div class="card"><div class="card-title">월별 매출 추이</div><div class="chart-box"><canvas id="cMonthly"></canvas></div></div>
   </div>
   <div class="branch-grid">
     <div class="branch-card tor">
@@ -219,8 +150,8 @@ tbody td:first-child { color:var(--text); font-weight:500; }
       <div class="branch-stats">
         <div><div class="branch-stat-lbl">오더 수</div><div class="branch-stat-val" style="color:var(--blue)" id="btor-orders">—</div></div>
         <div><div class="branch-stat-lbl">총 매출</div><div class="branch-stat-val" style="color:var(--blue)" id="btor-sale">—</div></div>
-        <div><div class="branch-stat-lbl">미수금</div><div class="branch-stat-val" style="color:var(--red)" id="btor-due">—</div></div>
         <div><div class="branch-stat-lbl">매출 비중</div><div class="branch-stat-val" style="color:var(--mid)" id="btor-pct">—</div></div>
+        <div><div class="branch-stat-lbl">고객 수</div><div class="branch-stat-val" style="color:var(--mid)" id="btor-cust">—</div></div>
       </div>
     </div>
     <div class="branch-card edm">
@@ -228,79 +159,71 @@ tbody td:first-child { color:var(--text); font-weight:500; }
       <div class="branch-stats">
         <div><div class="branch-stat-lbl">오더 수</div><div class="branch-stat-val" style="color:var(--orange)" id="bedm-orders">—</div></div>
         <div><div class="branch-stat-lbl">총 매출</div><div class="branch-stat-val" style="color:var(--orange)" id="bedm-sale">—</div></div>
-        <div><div class="branch-stat-lbl">미수금</div><div class="branch-stat-val" style="color:var(--red)" id="bedm-due">—</div></div>
         <div><div class="branch-stat-lbl">매출 비중</div><div class="branch-stat-val" style="color:var(--mid)" id="bedm-pct">—</div></div>
+        <div><div class="branch-stat-lbl">고객 수</div><div class="branch-stat-val" style="color:var(--mid)" id="bedm-cust">—</div></div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- TAB 1: TREND -->
 <div class="panel" id="panel1">
-  <div class="note">📌 Sales Trend는 Order Details 기준 (Order date) · 미결제/결제는 Overview 기준 (Invoice date)</div>
-  <div class="toggle-bar" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+  <div class="toggle-bar" style="justify-content:space-between">
     <div style="display:flex;align-items:center;gap:12px">
-      <span class="toggle-lbl">기간 단위</span>
-      <div class="toggle-group" id="trendToggle">
-        <button class="tgl active" onclick="setTrendPeriod('daily',this)">일별</button>
-        <button class="tgl" onclick="setTrendPeriod('weekly',this)">주별</button>
-        <button class="tgl" onclick="setTrendPeriod('monthly',this)">월별</button>
+      <span class="toggle-lbl">기간</span>
+      <div class="toggle-group" id="periodToggle">
+        <button class="tgl active" onclick="setPeriod('daily',this)">일별</button>
+        <button class="tgl" onclick="setPeriod('weekly',this)">주별</button>
+        <button class="tgl" onclick="setPeriod('monthly',this)">월별</button>
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:12px">
       <span class="toggle-lbl">Branch</span>
       <div class="toggle-group" id="branchToggle">
-        <button class="tgl active" onclick="setTrendBranch('all',this)">전체</button>
-        <button class="tgl" onclick="setTrendBranch('tor',this)">Toronto</button>
-        <button class="tgl" onclick="setTrendBranch('edm',this)">Edmonton</button>
+        <button class="tgl active" onclick="setBranch('all',this)">전체</button>
+        <button class="tgl" onclick="setBranch('tor',this)">Toronto</button>
+        <button class="tgl" onclick="setBranch('edm',this)">Edmonton</button>
       </div>
     </div>
   </div>
   <div class="full card">
-    <div class="card-title">매출 추이 <span id="trendSaleLabel">일별 · Order Details 기준</span></div>
-    <div class="chart-box tall"><canvas id="cWeeklySale"></canvas></div>
+    <div class="card-title">매출 추이 <span id="trendLabel">일별 · 전체 · Order date 기준</span></div>
+    <div class="chart-box tall"><canvas id="cTrendSale"></canvas></div>
   </div>
   <div class="g2">
-    <div class="card"><div class="card-title">오더 건수 <span id="trendOrderLabel"></span></div><div class="chart-box"><canvas id="cWeeklyOrders"></canvas></div></div>
-    <div class="card"><div class="card-title">수량 <span id="trendQtyLabel"></span></div><div class="chart-box"><canvas id="cWeeklyQty"></canvas></div></div>
-  </div>
-  <div class="full card">
-    <div class="card-title">매출 비교 — Toronto vs Edmonton <span>Order Details 기준</span></div>
-    <div class="chart-box tall"><canvas id="cDailyBranch"></canvas></div>
+    <div class="card"><div class="card-title">오더 건수</div><div class="chart-box"><canvas id="cTrendOrders"></canvas></div></div>
+    <div class="card"><div class="card-title">수량</div><div class="chart-box"><canvas id="cTrendQty"></canvas></div></div>
   </div>
 </div>
 
-<!-- TAB 2: 미결제 -->
 <div class="panel" id="panel2">
-  <div class="kpi-strip" style="grid-template-columns:repeat(4,1fr)">
-    <div class="kpi red"><div class="kpi-lbl">총 미수금</div><div class="kpi-val" id="k-due">—</div><div class="kpi-sub">전체 Due 합계</div></div>
-    <div class="kpi yellow"><div class="kpi-lbl">연체 금액</div><div class="kpi-val" id="k-overdue">—</div><div class="kpi-sub">Due date 초과</div></div>
-    <div class="kpi orange"><div class="kpi-lbl">미결제 오더수</div><div class="kpi-val" id="k-unpaid">—</div><div class="kpi-sub">Unpaid 건수</div></div>
-    <div class="kpi green"><div class="kpi-lbl">수금 완료</div><div class="kpi-val" id="k-paid2">—</div><div class="kpi-sub">Paid 금액</div></div>
-  </div>
-  <div class="toggle-bar">
-    <span class="toggle-lbl">추이 단위</span>
-    <div class="toggle-group" id="dueToggle">
-      <button class="tgl active" onclick="setDuePeriod('weekly',this)">주별</button>
-      <button class="tgl" onclick="setDuePeriod('monthly',this)">월별</button>
-    </div>
+  <div class="g2">
+    <div class="card"><div class="card-title">Branch별 매출 비중</div><div class="chart-box"><canvas id="cBranchPie"></canvas></div></div>
+    <div class="card"><div class="card-title">월별 Branch 비교</div><div class="chart-box"><canvas id="cBranchMonthly"></canvas></div></div>
   </div>
   <div class="full card">
-    <div class="card-title">매출 / 수금 / 미수금 추이 <span id="duePeriodLabel">주별 · Invoice date 기준</span></div>
-    <div class="chart-box tall"><canvas id="cDueTrend"></canvas></div>
+    <div class="card-title">일별 매출 — Toronto vs Edmonton</div>
+    <div class="chart-box tall"><canvas id="cBranchDaily"></canvas></div>
   </div>
-  <div class="g21">
-    <div class="card"><div class="card-title">고객별 미수금 Top 15</div><div class="chart-box tall"><canvas id="cDueCust"></canvas></div></div>
-    <div class="card"><div class="card-title">연령 분석 (Aging)</div><div id="agingRows" style="margin-top:8px"></div></div>
-  </div>
-  <div class="full card">
-    <div class="card-title">고객별 미수금 상세</div>
-    <div class="tbl-wrap"><table><thead><tr><th>고객명</th><th class="num">미수금 (Due)</th></tr></thead><tbody id="dueTblBody"></tbody></table></div>
+  <div class="g2">
+    <div class="card"><div class="card-title">Toronto 상세</div><div class="tbl-wrap"><table><thead><tr><th>항목</th><th class="num">수치</th></tr></thead><tbody id="torDetail"></tbody></table></div></div>
+    <div class="card"><div class="card-title">Edmonton 상세</div><div class="tbl-wrap"><table><thead><tr><th>항목</th><th class="num">수치</th></tr></thead><tbody id="edmDetail"></tbody></table></div></div>
   </div>
 </div>
 
-<!-- TAB 3: BO/OnHold -->
 <div class="panel" id="panel3">
+  <div class="full card"><div class="card-title">브랜드별 매출 Top 15</div><div class="chart-box tall"><canvas id="cBrand"></canvas></div></div>
+  <div class="full card">
+    <div class="card-title">브랜드별 상세</div>
+    <div class="tbl-wrap"><table><thead><tr><th>브랜드</th><th class="num">매출</th><th class="num">수량</th><th class="num">오더수</th></tr></thead><tbody id="brandTbl"></tbody></table></div>
+  </div>
+  <div class="full card" style="margin-top:16px"><div class="card-title">고객별 매출 Top 15</div><div class="chart-box tall"><canvas id="cCust"></canvas></div></div>
+  <div class="full card">
+    <div class="card-title">고객별 상세</div>
+    <div class="tbl-wrap"><table><thead><tr><th>고객</th><th class="num">매출</th><th class="num">수량</th><th class="num">오더수</th></tr></thead><tbody id="custTbl"></tbody></table></div>
+  </div>
+</div>
+
+<div class="panel" id="panel4">
   <div class="kpi-strip" style="grid-template-columns:repeat(3,1fr)">
     <div class="kpi red"><div class="kpi-lbl">Backordered</div><div class="kpi-val" id="k-bo">—</div><div class="kpi-sub">재고 부족 오더</div></div>
     <div class="kpi orange"><div class="kpi-lbl">On Hold</div><div class="kpi-val" id="k-oh">—</div><div class="kpi-sub">보류 중 오더</div></div>
@@ -308,62 +231,42 @@ tbody td:first-child { color:var(--text); font-weight:500; }
   </div>
   <div class="section-title">⚠️ On Hold 오더</div>
   <div class="full card">
-    <div class="tbl-wrap"><table><thead><tr><th>Order #</th><th>고객</th><th>Branch</th><th>Invoice Date</th><th class="num">Sale</th><th class="num">Due</th></tr></thead><tbody id="ohTblBody"></tbody></table></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Order #</th><th>고객</th><th>Branch</th><th>Order Date</th><th class="num">Sale</th></tr></thead><tbody id="ohTbl"></tbody></table></div>
   </div>
-  <div class="section-title">🔴 Backordered 오더</div>
+  <div class="section-title">🔴 Backordered 오더 (상위 30)</div>
   <div class="full card">
-    <div class="tbl-wrap"><table><thead><tr><th>Order #</th><th>고객</th><th>Branch</th><th>Invoice Date</th><th class="num">Sale</th><th class="num">Due</th></tr></thead><tbody id="boTblBody"></tbody></table></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Order #</th><th>고객</th><th>Branch</th><th>Order Date</th><th class="num">Sale</th></tr></thead><tbody id="boTbl"></tbody></table></div>
   </div>
 </div>
 
-<!-- TAB 4: BRANCH -->
-<div class="panel" id="panel4">
-  <div class="g2">
-    <div class="card"><div class="card-title">Branch별 매출 비중 <span>Invoice 기준</span></div><div class="chart-box"><canvas id="cBranchPie"></canvas></div></div>
-    <div class="card"><div class="card-title">Branch별 미수금 비중</div><div class="chart-box"><canvas id="cBranchDue"></canvas></div></div>
-  </div>
-  <div class="full card"><div class="card-title">일별 매출 비교 <span>Order Details 기준</span></div><div class="chart-box tall"><canvas id="cBranchDaily2"></canvas></div></div>
-  <div class="g2">
-    <div class="card"><div class="card-title">Toronto 상세</div><div class="tbl-wrap"><table><thead><tr><th>항목</th><th class="num">수치</th></tr></thead><tbody id="torDetail"></tbody></table></div></div>
-    <div class="card"><div class="card-title">Edmonton 상세</div><div class="tbl-wrap"><table><thead><tr><th>항목</th><th class="num">수치</th></tr></thead><tbody id="edmDetail"></tbody></table></div></div>
-  </div>
-</div>
-
-<!-- TAB 5: BRAND/고객 -->
 <div class="panel" id="panel5">
-  <div class="note">📌 브랜드 / 고객 매출은 Order Details 기준 (Order date)</div>
-  <div class="full card"><div class="card-title">브랜드별 매출 Top 15</div><div class="chart-box tall"><canvas id="cBrand"></canvas></div></div>
-  <div class="full card">
-    <div class="card-title">브랜드별 상세</div>
-    <div class="tbl-wrap"><table><thead><tr><th>브랜드</th><th class="num">매출</th><th class="num">수량</th><th class="num">오더수</th></tr></thead><tbody id="brandTblBody"></tbody></table></div>
+  <div class="kpi-strip" style="grid-template-columns:repeat(4,1fr)">
+    <div class="kpi red"><div class="kpi-lbl">총 미수금</div><div class="kpi-val" id="k-due">—</div><div class="kpi-sub">전체 Due 합계</div></div>
+    <div class="kpi yellow"><div class="kpi-lbl">연체 금액</div><div class="kpi-val" id="k-overdue">—</div><div class="kpi-sub">Due date 초과</div></div>
+    <div class="kpi orange"><div class="kpi-lbl">미결제 오더수</div><div class="kpi-val" id="k-unpaid">—</div><div class="kpi-sub">Unpaid 건수</div></div>
+    <div class="kpi green"><div class="kpi-lbl">수금 완료</div><div class="kpi-val" id="k-paid">—</div><div class="kpi-sub">Paid 금액</div></div>
   </div>
-  <div class="full card" style="margin-top:16px"><div class="card-title">고객별 매출 Top 15 <span>Order Details 기준</span></div><div class="chart-box tall"><canvas id="cCust"></canvas></div></div>
+  <div class="g21">
+    <div class="card"><div class="card-title">고객별 미수금 Top 15</div><div class="chart-box tall"><canvas id="cDueCust"></canvas></div></div>
+    <div class="card"><div class="card-title">연령 분석 (Aging)</div><div id="agingRows" style="margin-top:8px"></div></div>
+  </div>
   <div class="full card">
-    <div class="card-title">고객별 상세</div>
-    <div class="tbl-wrap"><table><thead><tr><th>고객</th><th class="num">매출</th><th class="num">수량</th><th class="num">오더수</th></tr></thead><tbody id="custTblBody"></tbody></table></div>
+    <div class="card-title">고객별 미수금 상세 <span>Overview(Invoice date) 기준</span></div>
+    <div class="tbl-wrap"><table><thead><tr><th>고객명</th><th class="num">미수금 (Due)</th></tr></thead><tbody id="dueTbl"></tbody></table></div>
   </div>
 </div>
 
-</div><!-- /panels -->
-</div><!-- /mainApp -->
+</div>
+</div>
 
 <script>
-// ══════════════════════════════════════
-// CONFIG
-// ══════════════════════════════════════
 const PASSWORD = '002298';
-const BASE_URL = 'https://asungtrading.github.io/tools/';
-const SALES_URL = BASE_URL + 'data_sales.json';
-const DETAILS_URL = BASE_URL + 'data_order_details.json';
+const DETAILS_URL = 'https://asungtrading.github.io/tools/data_order_details.json';
+const SALES_URL   = 'https://asungtrading.github.io/tools/data_sales.json';
 
-// ══════════════════════════════════════
-// LOCK
-// ══════════════════════════════════════
-document.getElementById('pwInput').addEventListener('keydown', e => { if (e.key === 'Enter') checkPw(); });
-
+document.getElementById('pwInput').addEventListener('keydown', e => { if(e.key==='Enter') checkPw(); });
 function checkPw() {
-  const val = document.getElementById('pwInput').value;
-  if (val === PASSWORD) {
+  if(document.getElementById('pwInput').value === PASSWORD) {
     document.getElementById('lockScreen').style.display = 'none';
     loadData();
   } else {
@@ -372,518 +275,234 @@ function checkPw() {
   }
 }
 
-// ══════════════════════════════════════
-// DATA LOAD
-// ══════════════════════════════════════
-let S = {}, D = {}; // Sales, Details
+const charts = {};
+const $ = id => document.getElementById(id);
+const fmtK = n => n>=1000000?'$'+(n/1000000).toFixed(2)+'M':n>=1000?'$'+(n/1000).toFixed(1)+'K':'$'+n.toFixed(0);
+const fmt = n => '$'+n.toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2});
+const TOOLTIP = {backgroundColor:'#181c28',titleColor:'#f0f2fa',bodyColor:'#c0c6d8',borderColor:'#252a3a',borderWidth:1};
+function baseOpts(rot){
+  return {responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{labels:{color:'#c0c6d8',font:{size:11}}},tooltip:TOOLTIP},
+    scales:{x:{grid:{color:'#1e2333'},ticks:{color:'#8890aa',font:{size:10},maxRotation:rot||0}},
+            y:{grid:{color:'#1e2333'},ticks:{color:'#8890aa',font:{size:10}}}}};
+}
+function mkChart(id,cfg){if(charts[id])charts[id].destroy();charts[id]=new Chart($(id),cfg);}
+
+let D = {};
+
+function parseDate(s) {
+  if(!s) return null;
+  s = String(s).trim();
+  const m = s.match(/^(\d{2})-([A-Za-z]{3})-(\d{4})$/);
+  if(m){const mo={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};return new Date(parseInt(m[3]),mo[m[2]],parseInt(m[1]));}
+  const d=new Date(s); return isNaN(d)?null:d;
+}
 
 async function loadData() {
   document.getElementById('loadingScreen').style.display = 'flex';
   try {
-    const [sRes, dRes] = await Promise.all([
-      fetch(SALES_URL + '?t=' + Date.now()),
-      fetch(DETAILS_URL + '?t=' + Date.now())
+    const [dRes,sRes] = await Promise.all([
+      fetch(DETAILS_URL+'?t='+Date.now()),
+      fetch(SALES_URL+'?t='+Date.now())
     ]);
-    const sJson = await sRes.json();
     const dJson = await dRes.json();
-    processData(sJson.rows, dJson.rows);
+    const sJson = await sRes.json();
+    processData(dJson.rows, sJson.rows);
     document.getElementById('loadingScreen').style.display = 'none';
     document.getElementById('mainApp').style.display = 'block';
     initTab(0);
   } catch(e) {
-    document.getElementById('loadingScreen').innerHTML = `<div style="color:var(--red);text-align:center">데이터 로드 실패<br><small>${e.message}</small></div>`;
+    document.getElementById('loadingScreen').innerHTML = '<div style="color:var(--red);text-align:center">데이터 로드 실패<br><small>'+e.message+'</small></div>';
   }
 }
 
-// ══════════════════════════════════════
-// PROCESS
-// ══════════════════════════════════════
-
-// "04-Apr-2026" 또는 "2026-04-09" 형식 모두 파싱
-function parseDate(s) {
-  if (!s) return null;
-  s = String(s).trim();
-  // "04-Apr-2026" 형식
-  const m = s.match(/^(\d{2})-([A-Za-z]{3})-(\d{4})$/);
-  if (m) {
-    const months = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
-    return new Date(parseInt(m[3]), months[m[2]], parseInt(m[1]));
-  }
-  // ISO 또는 기타 형식
-  const d = new Date(s);
-  return isNaN(d) ? null : d;
-}
-
-function processData(salesRows, detailRows) {
-  const today = new Date('2026-04-09');
-
-  // ── Sales (Overview) ──
-  const sales = salesRows.map(r => ({
-    order: r['Order #'],
-    progress: r['Order Progress'],
-    payStatus: r['Payment status'],
-    invoiceDate: parseDate(r['Invoice date']),
-    dueDate: parseDate(r['Due date']),
-    customer: r['Customer'],
-    status: r['Status'],
-    location: r['Location'],
-    sale: parseFloat(r['Sale']) || 0,
-    paid: parseFloat(r['Paid']) || 0,
-    due: parseFloat(r['Due']) || 0,
-  }));
-
-  // ── Details ──
+function processData(detailRows, salesRows) {
   const details = detailRows.map(r => ({
-    order: r['Order #'],
-    brand: r['Brand'] || r['brand'] || '',
-    sku: r['SKU'] || r['sku'] || '',
-    product: r['Product'] || '',
+    order: r['Order #'], brand: r['Brand']||'', progress: r['Order Progress']||'',
     orderDate: parseDate(r['Order date']),
-    customer: r['Customer'] || '',
-    location: r['Location'] || '',
-    qty: parseFloat(r['Quantity']) || 0,
-    sale: parseFloat(r['Sale']) || 0,
-    total: parseFloat(r['Total']) || 0,
-  })).filter(r => r.order);
-  S._details = details; // branch 필터링용
+    customer: r['Customer']||'', location: r['Location']||'',
+    qty: parseFloat(r['Quantity'])||0, sale: parseFloat(r['Sale'])||0,
+  })).filter(r => r.order && r.orderDate);
 
-  // ── KPIs ──
-  const tor = sales.filter(r => r.location === 'Asung Trading Inc.');
-  const edm = sales.filter(r => r.location === 'Asung - Edmonton');
-  const totalSale = sales.reduce((a,r) => a+r.sale, 0);
-  S.kpi = {
-    totalSale,
-    totalPaid: sales.reduce((a,r) => a+r.paid, 0),
-    totalDue: sales.reduce((a,r) => a+r.due, 0),
-    totalOrders: sales.length,
-    unpaidCnt: sales.filter(r => r.payStatus === 'Unpaid').length,
-    boCnt: sales.filter(r => r.status === 'Backordered').length,
-    onholdCnt: sales.filter(r => r.progress === 'On Hold').length,
-    overdueAmt: sales.filter(r => r.due > 0 && r.dueDate && r.dueDate < today).reduce((a,r) => a+r.due, 0),
-    torSale: tor.reduce((a,r) => a+r.sale, 0),
-    edmSale: edm.reduce((a,r) => a+r.sale, 0),
-    torDue: tor.reduce((a,r) => a+r.due, 0),
-    edmDue: edm.reduce((a,r) => a+r.due, 0),
-    torOrders: tor.length,
-    edmOrders: edm.length,
+  const tor = details.filter(r => r.location==='Asung Trading Inc.');
+  const edm = details.filter(r => r.location==='Asung - Edmonton');
+
+  D.kpi = {
+    totalSale: details.reduce((a,r)=>a+r.sale,0),
+    totalQty: details.reduce((a,r)=>a+r.qty,0),
+    totalOrders: new Set(details.map(r=>r.order)).size,
+    totalCust: new Set(details.map(r=>r.customer)).size,
+    boCnt: new Set(details.filter(r=>r.progress==='Backordered').map(r=>r.order)).size,
+    ohCnt: new Set(details.filter(r=>r.progress==='On Hold').map(r=>r.order)).size,
+    torSale: tor.reduce((a,r)=>a+r.sale,0), edmSale: edm.reduce((a,r)=>a+r.sale,0),
+    torOrders: new Set(tor.map(r=>r.order)).size, edmOrders: new Set(edm.map(r=>r.order)).size,
+    torCust: new Set(tor.map(r=>r.customer)).size, edmCust: new Set(edm.map(r=>r.customer)).size,
   };
 
-  // ── Order Progress / Payment ──
-  const progMap = {}, payMap = {};
-  sales.forEach(r => {
-    progMap[r.progress] = (progMap[r.progress]||0)+1;
-    payMap[r.payStatus] = (payMap[r.payStatus]||0)+1;
+  const progMap={};
+  details.forEach(r=>{if(!progMap[r.progress])progMap[r.progress]=new Set();progMap[r.progress].add(r.order);});
+  D.prog = Object.entries(progMap).map(([k,v])=>([k,v.size])).sort((a,b)=>b[1]-a[1]);
+
+  const ohMap={},boMap={};
+  details.filter(r=>r.progress==='On Hold').forEach(r=>{
+    if(!ohMap[r.order])ohMap[r.order]={customer:r.customer,location:r.location,date:r.orderDate,sale:0};
+    ohMap[r.order].sale+=r.sale;
   });
-  S.prog = Object.entries(progMap).sort((a,b) => b[1]-a[1]);
-  S.pay = Object.entries(payMap).sort((a,b) => b[1]-a[1]);
-
-  // ── Due by customer ──
-  const dueCustMap = {};
-  sales.filter(r => r.due > 0).forEach(r => { dueCustMap[r.customer] = (dueCustMap[r.customer]||0)+r.due; });
-  S.dueCust = Object.entries(dueCustMap).sort((a,b) => b[1]-a[1]).slice(0,15);
-
-  // ── Aging ──
-  const aging = { 'Current':0, '1-30 days':0, '31-60 days':0, '61-90 days':0, '90+ days':0 };
-  sales.filter(r => r.payStatus === 'Unpaid').forEach(r => {
-    if (!r.dueDate) return;
-    const diff = Math.floor((today - r.dueDate) / 86400000);
-    if (diff <= 0) aging['Current'] += r.due;
-    else if (diff <= 30) aging['1-30 days'] += r.due;
-    else if (diff <= 60) aging['31-60 days'] += r.due;
-    else if (diff <= 90) aging['61-90 days'] += r.due;
-    else aging['90+ days'] += r.due;
+  details.filter(r=>r.progress==='Backordered').forEach(r=>{
+    if(!boMap[r.order])boMap[r.order]={customer:r.customer,location:r.location,date:r.orderDate,sale:0};
+    boMap[r.order].sale+=r.sale;
   });
-  S.aging = aging;
+  D.ohRows = Object.entries(ohMap).map(([k,v])=>({order:k,...v})).sort((a,b)=>b.sale-a.sale);
+  D.boRows = Object.entries(boMap).map(([k,v])=>({order:k,...v})).sort((a,b)=>b.sale-a.sale).slice(0,30);
 
-  // ── On Hold / BO ──
-  S.ohRows = sales.filter(r => r.progress === 'On Hold');
-  S.boRows = sales.filter(r => r.status === 'Backordered').slice(0,30);
-
-  // ── Weekly trend (Details) ──
-  const weekMap = {};
-  details.forEach(r => {
-    if (!r.orderDate) return;
-    const dt = r.orderDate;
-    const dayOfWeek = dt.getDay();
-    const mon = new Date(dt); mon.setDate(dt.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek-1));
-    const wkKey = mon.toISOString().slice(0,10);
-    if (!weekMap[wkKey]) weekMap[wkKey] = { sale:0, qty:0, orders:new Set() };
-    weekMap[wkKey].sale += r.sale;
-    weekMap[wkKey].qty += r.qty;
-    weekMap[wkKey].orders.add(r.order);
-  });
-  S.weekly = Object.entries(weekMap).sort((a,b) => a[0]>b[0]?1:-1).map(([wkKey,v]) => ({
-    wk: wkKey.slice(5), sale: v.sale, qty: v.qty, orders: v.orders.size
-  }));
-
-  // ── Daily branch + orders + qty (Details) ──
-  const torDayMap = {}, edmDayMap = {}, dailyOrderMap = {}, dailyQtyMap = {};
-  details.forEach(r => {
-    if (!r.orderDate) return;
-    const dk = r.orderDate.toISOString().slice(0,10);
-    if (r.location === 'Asung Trading Inc.') torDayMap[dk] = (torDayMap[dk]||0)+r.sale;
-    else edmDayMap[dk] = (edmDayMap[dk]||0)+r.sale;
-    if (!dailyOrderMap[dk]) dailyOrderMap[dk] = new Set();
-    dailyOrderMap[dk].add(r.order);
-    dailyQtyMap[dk] = (dailyQtyMap[dk]||0) + r.qty;
-  });
-  const allDates = [...new Set([...Object.keys(torDayMap), ...Object.keys(edmDayMap)])].sort();
-  S.dailyLabels = allDates.map(dk => dk.slice(5));
-  S.torDaily = allDates.map(dk => torDayMap[dk]||0);
-  S.edmDaily = allDates.map(dk => edmDayMap[dk]||0);
-  S.dailyOrders = allDates.map(dk => dailyOrderMap[dk] ? dailyOrderMap[dk].size : 0);
-  S.dailyQty = allDates.map(dk => dailyQtyMap[dk]||0);
-
-  // ── Monthly trend (Details) ──
-  const monthMap = {};
-  details.forEach(r => {
-    if (!r.orderDate) return;
-    const moKey = r.orderDate.toISOString().slice(0,7);
-    if (!monthMap[moKey]) monthMap[moKey] = { sale:0, qty:0, orders:new Set() };
-    monthMap[moKey].sale += r.sale;
-    monthMap[moKey].qty += r.qty;
-    monthMap[moKey].orders.add(r.order);
-  });
-  S.monthly = Object.entries(monthMap).sort((a,b)=>a[0]>b[0]?1:-1).map(([moKey,v]) => ({
-    mo: moKey, sale:v.sale, qty:v.qty, orders:v.orders.size
-  }));
-
-  // ── Brand / Customer (Details) ──
-  const brandMap = {}, custMap = {};
-  details.forEach(r => {
-    if (!brandMap[r.brand]) brandMap[r.brand] = { sale:0, qty:0, orders:new Set() };
-    brandMap[r.brand].sale += r.sale;
-    brandMap[r.brand].qty += r.qty;
-    brandMap[r.brand].orders.add(r.order);
-    if (!custMap[r.customer]) custMap[r.customer] = { sale:0, qty:0, orders:new Set() };
-    custMap[r.customer].sale += r.sale;
-    custMap[r.customer].qty += r.qty;
-    custMap[r.customer].orders.add(r.order);
-  });
-  S.brands = Object.entries(brandMap).sort((a,b) => b[1].sale-a[1].sale).slice(0,15).map(([name,v]) => ({
-    name, sale: v.sale, qty: v.qty, orders: v.orders.size
-  }));
-  S.customers = Object.entries(custMap).sort((a,b) => b[1].sale-a[1].sale).slice(0,15).map(([name,v]) => ({
-    name, sale: v.sale, qty: v.qty, orders: v.orders.size
-  }));
-
-  // ── Sales weekly/monthly/daily (Overview - Invoice date) by branch ──
-  function buildSalesAgg(rows) {
-    const wkMap = {}, moMap = {}, dayMap = {};
-    rows.forEach(r => {
-      if (!r.invoiceDate) return;
-      const dt2 = r.invoiceDate;
-      const dk2 = dt2.toISOString().slice(0,10);
-      dayMap[dk2] = (dayMap[dk2]||0) + r.sale;
-      const dow = dt2.getDay();
-      const mon2 = new Date(dt2); mon2.setDate(dt2.getDate() - (dow===0?6:dow-1));
-      const wk2 = mon2.toISOString().slice(5,10);
-      if (!wkMap[wk2]) wkMap[wk2] = { sale:0, paid:0, due:0 };
-      wkMap[wk2].sale += r.sale; wkMap[wk2].paid += r.paid; wkMap[wk2].due += r.due;
-      const mo2 = dt2.toISOString().slice(0,7);
-      if (!moMap[mo2]) moMap[mo2] = { sale:0, paid:0, due:0 };
-      moMap[mo2].sale += r.sale; moMap[mo2].paid += r.paid; moMap[mo2].due += r.due;
-    });
-    return {
-      weekly: Object.entries(wkMap).sort((a,b)=>a[0]>b[0]?1:-1).map(([lbl,v])=>({lbl,...v})),
-      monthly: Object.entries(moMap).sort((a,b)=>a[0]>b[0]?1:-1).map(([lbl,v])=>({lbl,...v})),
-      dayMap
-    };
+  function agg(rows,keyFn){
+    const m={};
+    rows.forEach(r=>{const k=keyFn(r.orderDate);if(!m[k])m[k]={sale:0,qty:0,orders:new Set()};m[k].sale+=r.sale;m[k].qty+=r.qty;m[k].orders.add(r.order);});
+    return Object.entries(m).sort((a,b)=>a[0]>b[0]?1:-1).map(([k,v])=>({k,sale:v.sale,qty:v.qty,orders:v.orders.size}));
   }
-  const aggAll = buildSalesAgg(sales);
-  const aggTor = buildSalesAgg(sales.filter(r => r.location === 'Asung Trading Inc.'));
-  const aggEdm = buildSalesAgg(sales.filter(r => r.location === 'Asung - Edmonton'));
-  S.salesWeekly = aggAll.weekly;
-  S.salesMonthly = aggAll.monthly;
-  S.salesDayMap = aggAll.dayMap;
-  S.invAgg = { all: aggAll, tor: aggTor, edm: aggEdm };
+  const dKey = d=>d.toISOString().slice(5,10);
+  const wKey = d=>{const dow=d.getDay(),mon=new Date(d);mon.setDate(d.getDate()-(dow===0?6:dow-1));return mon.toISOString().slice(5,10);};
+  const mKey = d=>d.toISOString().slice(0,7);
 
-  // ── Header ──
-  const invoiceDates = sales.map(r => r.invoiceDate).filter(Boolean).sort((a,b)=>a-b);
-  const orderDates = details.map(r => r.orderDate).filter(Boolean).sort((a,b)=>a-b);
-  const salesFrom = invoiceDates[0] ? invoiceDates[0].toISOString().slice(0,10) : '';
-  const salesTo = invoiceDates[invoiceDates.length-1] ? invoiceDates[invoiceDates.length-1].toISOString().slice(0,10) : '';
-  const detFrom = orderDates[0] ? orderDates[0].toISOString().slice(0,10) : '';
-  const detTo = orderDates[orderDates.length-1] ? orderDates[orderDates.length-1].toISOString().slice(0,10) : '';
-  document.getElementById('hdrDate').textContent = salesFrom + ' ~ ' + salesTo;
-  document.getElementById('hdrStats').textContent = sales.length.toLocaleString() + ' orders · ' + details.length.toLocaleString() + ' lines · Order Details: ' + detFrom + ' ~ ' + detTo;
-}
+  D.daily  ={all:agg(details,dKey),tor:agg(tor,dKey),edm:agg(edm,dKey)};
+  D.weekly ={all:agg(details,wKey),tor:agg(tor,wKey),edm:agg(edm,wKey)};
+  D.monthly={all:agg(details,mKey),tor:agg(tor,mKey),edm:agg(edm,mKey)};
 
-// ══════════════════════════════════════
-// HELPERS
-// ══════════════════════════════════════
-const charts = {};
-const $ = id => document.getElementById(id);
-const fmtK = n => n >= 1000000 ? '$'+(n/1000000).toFixed(2)+'M' : n >= 1000 ? '$'+(n/1000).toFixed(1)+'K' : '$'+n.toFixed(0);
-const fmt = n => '$'+n.toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2});
-const TOOLTIP = { backgroundColor:'#181c28', titleColor:'#e8eaf0', bodyColor:'#9aa0b8', borderColor:'#252a3a', borderWidth:1 };
+  const brandMap={},custMap={};
+  details.forEach(r=>{
+    if(!brandMap[r.brand])brandMap[r.brand]={sale:0,qty:0,orders:new Set()};
+    brandMap[r.brand].sale+=r.sale;brandMap[r.brand].qty+=r.qty;brandMap[r.brand].orders.add(r.order);
+    if(!custMap[r.customer])custMap[r.customer]={sale:0,qty:0,orders:new Set()};
+    custMap[r.customer].sale+=r.sale;custMap[r.customer].qty+=r.qty;custMap[r.customer].orders.add(r.order);
+  });
+  D.brands = Object.entries(brandMap).sort((a,b)=>b[1].sale-a[1].sale).slice(0,15).map(([k,v])=>({name:k,sale:v.sale,qty:v.qty,orders:v.orders.size}));
+  D.customers = Object.entries(custMap).sort((a,b)=>b[1].sale-a[1].sale).slice(0,15).map(([k,v])=>({name:k,sale:v.sale,qty:v.qty,orders:v.orders.size}));
 
-function baseOpts(rot) {
-  return {
-    responsive:true, maintainAspectRatio:false,
-    plugins:{ legend:{ labels:{ color:'#9aa0b8', font:{size:11} } }, tooltip:TOOLTIP },
-    scales:{ x:{ grid:{color:'#1e2333'}, ticks:{color:'#8890aa',font:{size:10},maxRotation:rot||0} }, y:{ grid:{color:'#1e2333'}, ticks:{color:'#8890aa',font:{size:10}} } }
+  // Due from Sales Overview
+  const sales = salesRows.map(r=>({
+    payStatus:r['Payment status'],due:parseFloat(r['Due'])||0,
+    paid:parseFloat(r['Paid'])||0,customer:r['Customer']||'',dueDate:parseDate(r['Due date']),
+  }));
+  const today = new Date('2026-04-09');
+  D.due = {
+    totalDue: sales.reduce((a,r)=>a+r.due,0),
+    totalPaid: sales.reduce((a,r)=>a+r.paid,0),
+    overdueAmt: sales.filter(r=>r.due>0&&r.dueDate&&r.dueDate<today).reduce((a,r)=>a+r.due,0),
+    unpaidCnt: sales.filter(r=>r.payStatus==='Unpaid').length,
   };
-}
-
-function mkChart(id, config) {
-  if (charts[id]) charts[id].destroy();
-  charts[id] = new Chart($(id), config);
-}
-
-// ══════════════════════════════════════
-// TABS
-// ══════════════════════════════════════
-const tabInited = {};
-function showTab(i) {
-  document.querySelectorAll('.tab').forEach((t,j) => t.classList.toggle('active', i===j));
-  document.querySelectorAll('.panel').forEach((p,j) => p.classList.toggle('active', i===j));
-  if (!tabInited[i]) { tabInited[i] = true; initTab(i); }
-}
-
-function initTab(i) {
-  if (i===0) initOverview();
-  if (i===1) initTrend();
-  if (i===2) initDue();
-  if (i===3) initBO();
-  if (i===4) initBranch();
-  if (i===5) initBrand();
-}
-
-// ── TAB 0 ──
-function initOverview() {
-  const k = S.kpi;
-  $('k0').textContent = fmtK(k.totalSale);
-  $('k1').textContent = fmtK(k.totalPaid);
-  $('k2').textContent = fmtK(k.totalDue);
-  $('k3').textContent = fmtK(k.overdueAmt);
-  $('k4').textContent = (k.boCnt + k.onholdCnt).toLocaleString();
-
-  $('btor-orders').textContent = k.torOrders.toLocaleString();
-  $('btor-sale').textContent = fmtK(k.torSale);
-  $('btor-due').textContent = fmtK(k.torDue);
-  $('btor-pct').textContent = (k.torSale/k.totalSale*100).toFixed(1)+'%';
-  $('bedm-orders').textContent = k.edmOrders.toLocaleString();
-  $('bedm-sale').textContent = fmtK(k.edmSale);
-  $('bedm-due').textContent = fmtK(k.edmDue);
-  $('bedm-pct').textContent = (k.edmSale/k.totalSale*100).toFixed(1)+'%';
-
-  const PROG_COLORS = ['#3dd68c','#4f8ef7','#f05a5a','#3dcfc0','#f0c040','#f7824f','#9b7ff4','#5a607a','#b8bece'];
-  mkChart('cProg', { type:'doughnut', data:{ labels:S.prog.map(p=>p[0]), datasets:[{ data:S.prog.map(p=>p[1]), backgroundColor:PROG_COLORS, borderWidth:1, borderColor:'#0b0d12' }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'right',labels:{color:'#c0c6d8',font:{size:10},boxWidth:12}}, tooltip:TOOLTIP } } });
-
-  const PAY_COLORS = ['#f05a5a','#3dd68c','#f0c040','#9b7ff4','#4f8ef7','#3dcfc0'];
-  mkChart('cPay', { type:'doughnut', data:{ labels:S.pay.map(p=>p[0]), datasets:[{ data:S.pay.map(p=>p[1]), backgroundColor:PAY_COLORS, borderWidth:1, borderColor:'#0b0d12' }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'right',labels:{color:'#c0c6d8',font:{size:10},boxWidth:12}}, tooltip:TOOLTIP } } });
-}
-
-// ── TAB 1 ──
-let trendPeriod = 'daily';
-let trendBranch = 'all';
-
-function aggregateDetailsByBranch(branch, keyFn) {
-  const map = {};
-  (S._details || []).forEach(r => {
-    if (!r.orderDate) return;
-    if (branch === 'tor' && r.location !== 'Asung Trading Inc.') return;
-    if (branch === 'edm' && r.location !== 'Asung - Edmonton') return;
-    const key = keyFn(r.orderDate);
-    if (!map[key]) map[key] = { sale:0, qty:0, orders:new Set() };
-    map[key].sale += r.sale;
-    map[key].qty += r.qty;
-    map[key].orders.add(r.order);
+  const dueCustMap={};
+  sales.filter(r=>r.due>0).forEach(r=>{dueCustMap[r.customer]=(dueCustMap[r.customer]||0)+r.due;});
+  D.dueCust = Object.entries(dueCustMap).sort((a,b)=>b[1]-a[1]).slice(0,15);
+  const aging={Current:0,'1-30 days':0,'31-60 days':0,'61-90 days':0,'90+ days':0};
+  sales.filter(r=>r.payStatus==='Unpaid').forEach(r=>{
+    if(!r.dueDate) return;
+    const d=Math.floor((today-r.dueDate)/86400000);
+    if(d<=0)aging.Current+=r.due;
+    else if(d<=30)aging['1-30 days']+=r.due;
+    else if(d<=60)aging['31-60 days']+=r.due;
+    else if(d<=90)aging['61-90 days']+=r.due;
+    else aging['90+ days']+=r.due;
   });
-  return Object.entries(map).sort((a,b)=>a[0]>b[0]?1:-1).map(([k,v])=>({
-    key:k, sale:v.sale, qty:v.qty, orders:v.orders.size
-  }));
+  D.aging = aging;
+
+  const allDates=[...new Set(details.map(r=>r.orderDate.toISOString().slice(0,10)))].sort();
+  document.getElementById('hdrDate').textContent = allDates[0]?.slice(5)+' ~ '+allDates[allDates.length-1]?.slice(5)+', 2026';
+  document.getElementById('hdrStats').textContent = D.kpi.totalOrders.toLocaleString()+' orders · '+details.length.toLocaleString()+' lines · '+D.kpi.totalCust.toLocaleString()+' customers';
 }
 
-function getInvoiceSaleByPeriod(period, labels) {
-  const dm = S.salesDayMap || {};
-  const wm = {}; (S.salesWeekly||[]).forEach(w => { wm[w.lbl] = w.sale; });
-  const mm = {}; (S.salesMonthly||[]).forEach(m => { mm[m.lbl] = m.sale; });
-
-  if (period === 'daily') {
-    // dailyLabels = "MM-DD", salesDayMap keys = "YYYY-MM-DD"
-    // Build suffix lookup
-    const dmSuffix = {};
-    Object.entries(dm).forEach(([k,v]) => { dmSuffix[k.slice(5)] = (dmSuffix[k.slice(5)]||0)+v; });
-    return labels.map(l => dmSuffix[l] || 0);
-  }
-  if (period === 'weekly') {
-    // salesWeekly.lbl = "MM-DD" (monday), weekly labels = "MM-DD" ✅
-    return labels.map(l => wm[l] || 0);
-  }
-  // monthly: both "YYYY-MM" ✅
-  return labels.map(l => mm[l] || 0);
+const tabInited={};
+function showTab(i){
+  document.querySelectorAll('.tab').forEach((t,j)=>t.classList.toggle('active',i===j));
+  document.querySelectorAll('.panel').forEach((p,j)=>p.classList.toggle('active',i===j));
+  if(!tabInited[i]){tabInited[i]=true;initTab(i);}
+}
+function initTab(i){
+  if(i===0)initOverview();if(i===1)initTrend();if(i===2)initBranch();
+  if(i===3)initBrandCust();if(i===4)initBO();if(i===5)initDue();
 }
 
-function getPeriodData(period, branch) {
-  branch = branch || trendBranch;
+function initOverview(){
+  const k=D.kpi;
+  $('k0').textContent=fmtK(k.totalSale);$('k1').textContent=k.totalQty.toLocaleString();
+  $('k2').textContent=k.totalOrders.toLocaleString();$('k3').textContent=k.totalCust.toLocaleString();
+  $('k4').textContent=(k.boCnt+k.ohCnt).toLocaleString();
+  $('btor-orders').textContent=k.torOrders.toLocaleString();$('btor-sale').textContent=fmtK(k.torSale);
+  $('btor-pct').textContent=(k.torSale/k.totalSale*100).toFixed(1)+'%';$('btor-cust').textContent=k.torCust.toLocaleString();
+  $('bedm-orders').textContent=k.edmOrders.toLocaleString();$('bedm-sale').textContent=fmtK(k.edmSale);
+  $('bedm-pct').textContent=(k.edmSale/k.totalSale*100).toFixed(1)+'%';$('bedm-cust').textContent=k.edmCust.toLocaleString();
 
-  let orderData;
-  if (period === 'daily') {
-    let dailySale;
-    if (branch === 'tor') dailySale = S.torDaily;
-    else if (branch === 'edm') dailySale = S.edmDaily;
-    else dailySale = S.torDaily.map((v,i) => v + S.edmDaily[i]);
-    orderData = { labels: S.dailyLabels, sale: dailySale, orders: S.dailyOrders, qty: S.dailyQty };
-  } else if (period === 'weekly') {
-    if (branch === 'all') {
-      orderData = { labels: S.weekly.map(w=>w.wk), sale: S.weekly.map(w=>w.sale), orders: S.weekly.map(w=>w.orders), qty: S.weekly.map(w=>w.qty) };
-    } else {
-      const data = aggregateDetailsByBranch(branch, d => { const dow=d.getDay(); const mon=new Date(d); mon.setDate(d.getDate()-(dow===0?6:dow-1)); return mon.toISOString().slice(5,10); });
-      orderData = { labels: data.map(d=>d.key), sale: data.map(d=>d.sale), orders: data.map(d=>d.orders), qty: data.map(d=>d.qty) };
-    }
-  } else {
-    if (branch === 'all') {
-      orderData = { labels: S.monthly.map(m=>m.mo), sale: S.monthly.map(m=>m.sale), orders: S.monthly.map(m=>m.orders), qty: S.monthly.map(m=>m.qty) };
-    } else {
-      const data = aggregateDetailsByBranch(branch, d => d.toISOString().slice(0,7));
-      orderData = { labels: data.map(d=>d.key), sale: data.map(d=>d.sale), orders: data.map(d=>d.orders), qty: data.map(d=>d.qty) };
-    }
-  }
-
-  const invoiceSale = getInvoiceSaleByPeriod(period, orderData.labels, branch);
-  const labelStr = period === 'daily' ? '일별' : period === 'weekly' ? '주별' : '월별';
-  return { ...orderData, invoiceSale, labelStr };
+  const COLORS=['#3dd68c','#4f8ef7','#f05a5a','#3dcfc0','#f0c040','#f7824f','#9b7ff4','#5a607a','#b8bece'];
+  mkChart('cProg',{type:'doughnut',data:{labels:D.prog.map(p=>p[0]),datasets:[{data:D.prog.map(p=>p[1]),backgroundColor:COLORS,borderWidth:1,borderColor:'#0b0d12'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#c0c6d8',font:{size:10},boxWidth:12}},tooltip:TOOLTIP}}});
+  const mo=D.monthly.all;
+  mkChart('cMonthly',{type:'bar',data:{labels:mo.map(m=>m.k),datasets:[{label:'매출 ($)',data:mo.map(m=>m.sale),backgroundColor:'rgba(79,142,247,0.7)',borderRadius:5}]},options:{...baseOpts(),plugins:{...baseOpts().plugins,tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}}}});
 }
 
-function setTrendPeriod(period, el) {
-  trendPeriod = period;
-  document.querySelectorAll('#trendToggle .tgl').forEach(b => b.classList.remove('active'));
-  if (el) el.classList.add('active');
-  else { const btns = document.querySelectorAll('#trendToggle .tgl'); if(btns[['daily','weekly','monthly'].indexOf(period)]) btns[['daily','weekly','monthly'].indexOf(period)].classList.add('active'); }
-  const d = getPeriodData(period);
-  $('trendSaleLabel').textContent = d.labelStr + ' · Order(파랑) vs Invoice(초록)';
-  mkChart('cWeeklySale', {
-    type:'bar',
-    data:{ labels:d.labels, datasets:[
-      { label:'Order date 기준', data:d.sale, backgroundColor:'rgba(79,142,247,0.75)', borderRadius:4 },
-      { label:'Invoice date 기준', data:d.invoiceSale, backgroundColor:'rgba(61,214,140,0.75)', borderRadius:4 },
-    ]},
-    options:{ ...baseOpts(), plugins:{ ...baseOpts().plugins, tooltip:{ ...TOOLTIP, mode:'index', callbacks:{ label:ctx=>' '+ctx.dataset.label+': '+fmt(ctx.raw) } } } }
-  });
-  mkChart('cWeeklyOrders', { type:'bar', data:{ labels:d.labels, datasets:[{ label:'오더수', data:d.orders, backgroundColor:'rgba(61,207,192,0.7)', borderRadius:4 }] }, options:baseOpts() });
-  mkChart('cWeeklyQty', { type:'bar', data:{ labels:d.labels, datasets:[{ label:'수량', data:d.qty, backgroundColor:'rgba(155,127,244,0.7)', borderRadius:4 }] }, options:baseOpts() });
+let curPeriod='daily',curBranch='all';
+function setPeriod(p,el){curPeriod=p;document.querySelectorAll('#periodToggle .tgl').forEach(b=>b.classList.remove('active'));if(el)el.classList.add('active');renderTrend();}
+function setBranch(b,el){curBranch=b;document.querySelectorAll('#branchToggle .tgl').forEach(btn=>btn.classList.remove('active'));if(el)el.classList.add('active');renderTrend();}
+function renderTrend(){
+  const data=(D[curPeriod]||D.daily)[curBranch]||(D[curPeriod]||D.daily).all;
+  const labels=data.map(d=>d.k);
+  const rot=curPeriod==='daily'?30:0;
+  $('trendLabel').textContent={daily:'일별',weekly:'주별',monthly:'월별'}[curPeriod]+' · '+{all:'전체',tor:'Toronto',edm:'Edmonton'}[curBranch]+' · Order date 기준';
+  mkChart('cTrendSale',{type:'bar',data:{labels,datasets:[{label:'매출 ($)',data:data.map(d=>d.sale),backgroundColor:'rgba(79,142,247,0.7)',borderRadius:4}]},options:{...baseOpts(rot),plugins:{...baseOpts(rot).plugins,tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}}}});
+  mkChart('cTrendOrders',{type:'bar',data:{labels,datasets:[{label:'오더수',data:data.map(d=>d.orders),backgroundColor:'rgba(61,207,192,0.7)',borderRadius:4}]},options:baseOpts(rot)});
+  mkChart('cTrendQty',{type:'bar',data:{labels,datasets:[{label:'수량',data:data.map(d=>d.qty),backgroundColor:'rgba(155,127,244,0.7)',borderRadius:4}]},options:baseOpts(rot)});
+}
+function initTrend(){renderTrend();}
+
+function initBranch(){
+  const k=D.kpi;
+  mkChart('cBranchPie',{type:'doughnut',data:{labels:['Toronto','Edmonton'],datasets:[{data:[k.torSale,k.edmSale],backgroundColor:['rgba(79,142,247,0.8)','rgba(247,130,79,0.8)'],borderWidth:1,borderColor:'#0b0d12'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#c0c6d8',font:{size:11}}},tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}}}});
+  const mo=D.monthly,labels=[...new Set([...mo.tor.map(d=>d.k),...mo.edm.map(d=>d.k)])].sort();
+  const tm=Object.fromEntries(mo.tor.map(d=>[d.k,d.sale])),em=Object.fromEntries(mo.edm.map(d=>[d.k,d.sale]));
+  mkChart('cBranchMonthly',{type:'bar',data:{labels,datasets:[{label:'Toronto',data:labels.map(l=>tm[l]||0),backgroundColor:'rgba(79,142,247,0.7)',borderRadius:4},{label:'Edmonton',data:labels.map(l=>em[l]||0),backgroundColor:'rgba(247,130,79,0.7)',borderRadius:4}]},options:{...baseOpts(),plugins:{...baseOpts().plugins,tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}}}});
+  const dd=D.daily,dl=[...new Set([...dd.tor.map(d=>d.k),...dd.edm.map(d=>d.k)])].sort();
+  const tdm=Object.fromEntries(dd.tor.map(d=>[d.k,d.sale])),edm2=Object.fromEntries(dd.edm.map(d=>[d.k,d.sale]));
+  mkChart('cBranchDaily',{type:'line',data:{labels:dl,datasets:[{label:'Toronto',data:dl.map(l=>tdm[l]||0),borderColor:'#4f8ef7',backgroundColor:'rgba(79,142,247,0.08)',fill:true,borderWidth:2,pointRadius:2},{label:'Edmonton',data:dl.map(l=>edm2[l]||0),borderColor:'#f7824f',backgroundColor:'rgba(247,130,79,0.08)',fill:true,borderWidth:2,pointRadius:2}]},options:{...baseOpts(30),plugins:{...baseOpts(30).plugins,tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}}}});
+  const torRows=[['오더 수',k.torOrders.toLocaleString()],['총 매출',fmt(k.torSale)],['매출 비중',(k.torSale/k.totalSale*100).toFixed(1)+'%'],['고객 수',k.torCust.toLocaleString()]];
+  const edmRows=[['오더 수',k.edmOrders.toLocaleString()],['총 매출',fmt(k.edmSale)],['매출 비중',(k.edmSale/k.totalSale*100).toFixed(1)+'%'],['고객 수',k.edmCust.toLocaleString()]];
+  $('torDetail').innerHTML=torRows.map(r=>'<tr><td>'+r[0]+'</td><td class="num">'+r[1]+'</td></tr>').join('');
+  $('edmDetail').innerHTML=edmRows.map(r=>'<tr><td>'+r[0]+'</td><td class="num">'+r[1]+'</td></tr>').join('');
 }
 
-function setTrendBranch(branch, el) {
-  trendBranch = branch;
-  document.querySelectorAll('#branchToggle .tgl').forEach(b => b.classList.remove('active'));
-  if (el) el.classList.add('active');
-  else { const btns = document.querySelectorAll('#branchToggle .tgl'); if(btns[['all','tor','edm'].indexOf(branch)]) btns[['all','tor','edm'].indexOf(branch)].classList.add('active'); }
-  setTrendPeriod(trendPeriod);
+function initBrandCust(){
+  mkChart('cBrand',{type:'bar',indexAxis:'y',data:{labels:D.brands.map(b=>b.name),datasets:[{label:'매출 ($)',data:D.brands.map(b=>b.sale),backgroundColor:'rgba(61,214,140,0.7)',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}},scales:{x:{grid:{color:'#1e2333'},ticks:{color:'#8890aa',font:{size:10}}},y:{grid:{color:'#1e2333'},ticks:{color:'#c0c6d8',font:{size:10}}}}}});
+  $('brandTbl').innerHTML=D.brands.map(b=>'<tr><td>'+b.name+'</td><td class="num" style="color:var(--green)">'+fmt(b.sale)+'</td><td class="num">'+b.qty.toLocaleString()+'</td><td class="num">'+b.orders+'</td></tr>').join('');
+  mkChart('cCust',{type:'bar',indexAxis:'y',data:{labels:D.customers.map(c=>c.name.length>28?c.name.slice(0,28)+'…':c.name),datasets:[{label:'매출 ($)',data:D.customers.map(c=>c.sale),backgroundColor:'rgba(79,142,247,0.7)',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}},scales:{x:{grid:{color:'#1e2333'},ticks:{color:'#8890aa',font:{size:10}}},y:{grid:{color:'#1e2333'},ticks:{color:'#c0c6d8',font:{size:9}}}}}});
+  $('custTbl').innerHTML=D.customers.map(c=>'<tr><td>'+c.name+'</td><td class="num" style="color:var(--blue)">'+fmt(c.sale)+'</td><td class="num">'+c.qty.toLocaleString()+'</td><td class="num">'+c.orders+'</td></tr>').join('');
 }
 
-function initTrend() {
-  setTrendPeriod('daily');
-  mkChart('cDailyBranch', { type:'line', data:{ labels:S.dailyLabels, datasets:[
-    { label:'Toronto', data:S.torDaily, borderColor:'#4f8ef7', backgroundColor:'rgba(79,142,247,0.08)', fill:true, borderWidth:2, pointRadius:2 },
-    { label:'Edmonton', data:S.edmDaily, borderColor:'#f7824f', backgroundColor:'rgba(247,130,79,0.08)', fill:true, borderWidth:2, pointRadius:2 }
-  ]}, options:{ ...baseOpts(30), plugins:{ ...baseOpts(30).plugins, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } } } });
-}
-
-// ── TAB 2 ──
-let duePeriod = 'weekly';
-
-function setDuePeriod(period, el) {
-  duePeriod = period;
-  document.querySelectorAll('#dueToggle .tgl').forEach(b => b.classList.remove('active'));
-  if (el) el.classList.add('active');
-  else { const btns = document.querySelectorAll('#dueToggle .tgl'); if(btns[['weekly','monthly'].indexOf(period)]) btns[['weekly','monthly'].indexOf(period)].classList.add('active'); }
-  const labelStr = period === 'weekly' ? '주별' : '월별';
-  $('duePeriodLabel').textContent = labelStr + ' · Invoice date 기준';
-  const data = period === 'weekly' ? S.salesWeekly : S.salesMonthly;
-  mkChart('cDueTrend', {
-    type: 'bar',
-    data: {
-      labels: data.map(d=>d.lbl),
-      datasets: [
-        { label:'매출', data:data.map(d=>d.sale), backgroundColor:'rgba(79,142,247,0.7)', borderRadius:4 },
-        { label:'수금', data:data.map(d=>d.paid), backgroundColor:'rgba(61,214,140,0.7)', borderRadius:4 },
-        { label:'미수금', data:data.map(d=>d.due), backgroundColor:'rgba(240,90,90,0.7)', borderRadius:4 },
-      ]
-    },
-    options: { ...baseOpts(), plugins:{ ...baseOpts().plugins, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } } }
-  });
-}
-
-function initDue() {
-  const k = S.kpi;
-  $('k-due').textContent = fmtK(k.totalDue);
-  $('k-overdue').textContent = fmtK(k.overdueAmt);
-  $('k-unpaid').textContent = k.unpaidCnt.toLocaleString();
-  $('k-paid2').textContent = fmtK(k.totalPaid);
-
-  setDuePeriod('weekly');
-
-  mkChart('cDueCust', { type:'bar', indexAxis:'y', data:{ labels:S.dueCust.map(([n])=>n.length>24?n.slice(0,24)+'\u2026':n), datasets:[{ label:'Due ($)', data:S.dueCust.map(([,v])=>v), backgroundColor:'rgba(240,90,90,0.7)', borderRadius:4 }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } }, scales:{ x:{ grid:{color:'#1e2333'}, ticks:{color:'#8890aa',font:{size:10}} }, y:{ grid:{color:'#1e2333'}, ticks:{color:'#c0c6d8',font:{size:9}} } } } });
-
-  const total = Object.values(S.aging).reduce((a,b)=>a+b,0);
-  const agingColors = ['#3dd68c','#f0c040','#f7824f','#e05a5a','#f05a5a'];
-  const agingEl = $('agingRows');
-  agingEl.innerHTML = '';
-  Object.entries(S.aging).forEach(([lbl,val],i) => {
-    const pct = total > 0 ? (val/total*100) : 0;
-    agingEl.innerHTML += '<div class="aging-row"><div class="aging-label"><span>'+lbl+'</span><span>'+fmt(val)+'</span></div><div class="aging-bar-bg"><div class="aging-bar-fill" style="width:'+pct.toFixed(1)+'%;background:'+agingColors[i]+'"></div></div></div>';
-  });
-
-  const tbody = $('dueTblBody');
-  tbody.innerHTML = '';
-  S.dueCust.forEach(([name,val]) => {
-    tbody.innerHTML += '<tr><td>'+name+'</td><td class="num" style="color:var(--red)">'+fmt(val)+'</td></tr>';
-  });
-}
-
-// ── TAB 3 ──
-function initBO() {
-  const k = S.kpi;
-  $('k-bo').textContent = k.boCnt.toLocaleString();
-  $('k-oh').textContent = k.onholdCnt.toLocaleString();
-  $('k-booh').textContent = (k.boCnt+k.onholdCnt).toLocaleString();
-
-  const makeTbl = (rows, id) => {
-    const tbody = $(id);
-    tbody.innerHTML = rows.length === 0 ? '<tr><td colspan="6" style="text-align:center;color:var(--dim);padding:20px">데이터 없음</td></tr>' : '';
-    rows.forEach(r => {
-      const loc = r.location === 'Asung Trading Inc.' ? '<span class="tag tag-tor">Toronto</span>' : '<span class="tag tag-edm">Edmonton</span>';
-      const dt = r.invoiceDate ? r.invoiceDate.toISOString().slice(0,10) : '—';
-      tbody.innerHTML += `<tr><td style="font-family:'DM Mono',monospace;font-size:11px">${r.order}</td><td>${r.customer}</td><td>${loc}</td><td>${dt}</td><td class="num">${r.sale>0?fmt(r.sale):'—'}</td><td class="num" style="color:var(--red)">${r.due>0?fmt(r.due):'—'}</td></tr>`;
-    });
+function initBO(){
+  $('k-bo').textContent=D.kpi.boCnt.toLocaleString();
+  $('k-oh').textContent=D.kpi.ohCnt.toLocaleString();
+  $('k-booh').textContent=(D.kpi.boCnt+D.kpi.ohCnt).toLocaleString();
+  const makeTbl=(rows,id)=>{
+    $(id).innerHTML=rows.length===0?'<tr><td colspan="5" style="text-align:center;color:var(--dim);padding:20px">데이터 없음</td></tr>':
+      rows.map(r=>{
+        const loc=r.location==='Asung Trading Inc.'?'<span class="tag tag-tor">Toronto</span>':'<span class="tag tag-edm">Edmonton</span>';
+        const dt=r.date instanceof Date?r.date.toISOString().slice(0,10):String(r.date||'').slice(0,10);
+        return '<tr><td style="font-family:\'DM Mono\',monospace;font-size:11px">'+r.order+'</td><td>'+r.customer+'</td><td>'+loc+'</td><td>'+dt+'</td><td class="num">'+(r.sale>0?fmt(r.sale):'—')+'</td></tr>';
+      }).join('');
   };
-  makeTbl(S.ohRows, 'ohTblBody');
-  makeTbl(S.boRows, 'boTblBody');
+  makeTbl(D.ohRows,'ohTbl');makeTbl(D.boRows,'boTbl');
 }
 
-// ── TAB 4 ──
-function initBranch() {
-  const k = S.kpi;
-  mkChart('cBranchPie', { type:'doughnut', data:{ labels:['Toronto','Edmonton'], datasets:[{ data:[k.torSale,k.edmSale], backgroundColor:['rgba(79,142,247,0.8)','rgba(247,130,79,0.8)'], borderWidth:1, borderColor:'#0b0d12' }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'bottom',labels:{color:'#c0c6d8',font:{size:11}}}, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } } } });
-  mkChart('cBranchDue', { type:'doughnut', data:{ labels:['Toronto','Edmonton'], datasets:[{ data:[k.torDue,k.edmDue], backgroundColor:['rgba(240,90,90,0.8)','rgba(240,192,64,0.8)'], borderWidth:1, borderColor:'#0b0d12' }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'bottom',labels:{color:'#c0c6d8',font:{size:11}}}, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } } } });
-  mkChart('cBranchDaily2', { type:'line', data:{ labels:S.dailyLabels, datasets:[
-    { label:'Toronto', data:S.torDaily, borderColor:'#4f8ef7', backgroundColor:'rgba(79,142,247,0.1)', fill:true, borderWidth:2, pointRadius:3 },
-    { label:'Edmonton', data:S.edmDaily, borderColor:'#f7824f', backgroundColor:'rgba(247,130,79,0.1)', fill:true, borderWidth:2, pointRadius:3 }
-  ]}, options:{ ...baseOpts(30), plugins:{ ...baseOpts(30).plugins, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } } } });
-
-  const torRows = [['오더 수',k.torOrders.toLocaleString()],['총 매출',fmt(k.torSale)],['매출 비중',(k.torSale/k.totalSale*100).toFixed(1)+'%'],['미수금',fmt(k.torDue)],['Due 비중',(k.torDue/k.totalDue*100).toFixed(1)+'%']];
-  const edmRows = [['오더 수',k.edmOrders.toLocaleString()],['총 매출',fmt(k.edmSale)],['매출 비중',(k.edmSale/k.totalSale*100).toFixed(1)+'%'],['미수금',fmt(k.edmDue)],['Due 비중',(k.edmDue/k.totalDue*100).toFixed(1)+'%']];
-  $('torDetail').innerHTML = torRows.map(r=>`<tr><td>${r[0]}</td><td class="num">${r[1]}</td></tr>`).join('');
-  $('edmDetail').innerHTML = edmRows.map(r=>`<tr><td>${r[0]}</td><td class="num">${r[1]}</td></tr>`).join('');
+function initDue(){
+  const d=D.due;
+  $('k-due').textContent=fmtK(d.totalDue);$('k-overdue').textContent=fmtK(d.overdueAmt);
+  $('k-unpaid').textContent=d.unpaidCnt.toLocaleString();$('k-paid').textContent=fmtK(d.totalPaid);
+  mkChart('cDueCust',{type:'bar',indexAxis:'y',data:{labels:D.dueCust.map(([n])=>n.length>24?n.slice(0,24)+'…':n),datasets:[{label:'Due ($)',data:D.dueCust.map(([,v])=>v),backgroundColor:'rgba(240,90,90,0.7)',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}},scales:{x:{grid:{color:'#1e2333'},ticks:{color:'#8890aa',font:{size:10}}},y:{grid:{color:'#1e2333'},ticks:{color:'#c0c6d8',font:{size:9}}}}}});
+  const total=Object.values(D.aging).reduce((a,b)=>a+b,0);
+  const agingColors=['#3dd68c','#f0c040','#f7824f','#e05a5a','#f05a5a'];
+  $('agingRows').innerHTML=Object.entries(D.aging).map(([lbl,val],i)=>{
+    const pct=total>0?(val/total*100):0;
+    return '<div class="aging-row"><div class="aging-label"><span>'+lbl+'</span><span>'+fmt(val)+'</span></div><div class="aging-bar-bg"><div class="aging-bar-fill" style="width:'+pct.toFixed(1)+'%;background:'+agingColors[i]+'"></div></div></div>';
+  }).join('');
+  $('dueTbl').innerHTML=D.dueCust.map(([name,val])=>'<tr><td>'+name+'</td><td class="num" style="color:var(--red)">'+fmt(val)+'</td></tr>').join('');
 }
 
-// ── TAB 5 ──
-function initBrand() {
-  mkChart('cBrand', { type:'bar', indexAxis:'y', data:{ labels:S.brands.map(b=>b.name), datasets:[{ label:'매출 ($)', data:S.brands.map(b=>b.sale), backgroundColor:'rgba(61,214,140,0.7)', borderRadius:4 }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } }, scales:{ x:{ grid:{color:'#1e2333'}, ticks:{color:'#8890aa',font:{size:10}} }, y:{ grid:{color:'#1e2333'}, ticks:{color:'#c0c6d8',font:{size:10}} } } } });
-
-  const bTbody = $('brandTblBody');
-  bTbody.innerHTML = '';
-  S.brands.forEach(b => { bTbody.innerHTML += `<tr><td>${b.name}</td><td class="num" style="color:var(--green)">${fmt(b.sale)}</td><td class="num">${b.qty.toLocaleString()}</td><td class="num">${b.orders}</td></tr>`; });
-
-  mkChart('cCust', { type:'bar', indexAxis:'y', data:{ labels:S.customers.map(c=>c.name.length>28?c.name.slice(0,28)+'…':c.name), datasets:[{ label:'매출 ($)', data:S.customers.map(c=>c.sale), backgroundColor:'rgba(79,142,247,0.7)', borderRadius:4 }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } }, scales:{ x:{ grid:{color:'#1e2333'}, ticks:{color:'#8890aa',font:{size:10}} }, y:{ grid:{color:'#1e2333'}, ticks:{color:'#c0c6d8',font:{size:9}} } } } });
-
-  const cTbody = $('custTblBody');
-  cTbody.innerHTML = '';
-  S.customers.forEach(c => { cTbody.innerHTML += `<tr><td>${c.name}</td><td class="num" style="color:var(--blue)">${fmt(c.sale)}</td><td class="num">${c.qty.toLocaleString()}</td><td class="num">${c.orders}</td></tr>`; });
-}
+initTab(0);
 </script>
 </body>
 </html>
