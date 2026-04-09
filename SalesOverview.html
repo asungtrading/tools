@@ -143,6 +143,15 @@ tbody td:first-child { color:var(--text); font-weight:500; }
 
 .note { font-size:11px; color:var(--dim); padding:8px 12px; background:var(--surface2); border-radius:6px; border-left:2px solid var(--border); margin-bottom:16px; }
 
+
+/* TOGGLE */
+.toggle-bar { display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+.toggle-lbl { font-size:11px; color:var(--dim); font-weight:600; text-transform:uppercase; letter-spacing:.8px; }
+.toggle-group { display:flex; gap:4px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:3px; }
+.tgl { background:transparent; border:none; color:var(--dim); font-size:11px; font-weight:600; padding:5px 14px; border-radius:6px; cursor:pointer; transition:all .2s; }
+.tgl:hover { color:var(--text); }
+.tgl.active { background:var(--blue); color:#fff; }
+
 @media (max-width:900px) {
   .kpi-strip { grid-template-columns:repeat(3,1fr); }
   .g2,.g3,.g21,.branch-grid { grid-template-columns:1fr; }
@@ -229,12 +238,26 @@ tbody td:first-child { color:var(--text); font-weight:500; }
 <!-- TAB 1: TREND -->
 <div class="panel" id="panel1">
   <div class="note">📌 Sales Trend는 Order Details 기준 (Order date) · 미결제/결제는 Overview 기준 (Invoice date)</div>
-  <div class="full card"><div class="card-title">주간 매출 추이 <span>Order Details 기준</span></div><div class="chart-box tall"><canvas id="cWeeklySale"></canvas></div></div>
-  <div class="g2">
-    <div class="card"><div class="card-title">주간 오더 건수</div><div class="chart-box"><canvas id="cWeeklyOrders"></canvas></div></div>
-    <div class="card"><div class="card-title">주간 수량</div><div class="chart-box"><canvas id="cWeeklyQty"></canvas></div></div>
+  <div class="toggle-bar">
+    <span class="toggle-lbl">기간 단위</span>
+    <div class="toggle-group" id="trendToggle">
+      <button class="tgl active" onclick="setTrendPeriod('daily')">일별</button>
+      <button class="tgl" onclick="setTrendPeriod('weekly')">주별</button>
+      <button class="tgl" onclick="setTrendPeriod('monthly')">월별</button>
+    </div>
   </div>
-  <div class="full card"><div class="card-title">일별 매출 — Toronto vs Edmonton <span>Order Details 기준</span></div><div class="chart-box tall"><canvas id="cDailyBranch"></canvas></div></div>
+  <div class="full card">
+    <div class="card-title">매출 추이 <span id="trendSaleLabel">일별 · Order Details 기준</span></div>
+    <div class="chart-box tall"><canvas id="cWeeklySale"></canvas></div>
+  </div>
+  <div class="g2">
+    <div class="card"><div class="card-title">오더 건수 <span id="trendOrderLabel"></span></div><div class="chart-box"><canvas id="cWeeklyOrders"></canvas></div></div>
+    <div class="card"><div class="card-title">수량 <span id="trendQtyLabel"></span></div><div class="chart-box"><canvas id="cWeeklyQty"></canvas></div></div>
+  </div>
+  <div class="full card">
+    <div class="card-title">매출 비교 — Toronto vs Edmonton <span>Order Details 기준</span></div>
+    <div class="chart-box tall"><canvas id="cDailyBranch"></canvas></div>
+  </div>
 </div>
 
 <!-- TAB 2: 미결제 -->
@@ -244,6 +267,17 @@ tbody td:first-child { color:var(--text); font-weight:500; }
     <div class="kpi yellow"><div class="kpi-lbl">연체 금액</div><div class="kpi-val" id="k-overdue">—</div><div class="kpi-sub">Due date 초과</div></div>
     <div class="kpi orange"><div class="kpi-lbl">미결제 오더수</div><div class="kpi-val" id="k-unpaid">—</div><div class="kpi-sub">Unpaid 건수</div></div>
     <div class="kpi green"><div class="kpi-lbl">수금 완료</div><div class="kpi-val" id="k-paid2">—</div><div class="kpi-sub">Paid 금액</div></div>
+  </div>
+  <div class="toggle-bar">
+    <span class="toggle-lbl">추이 단위</span>
+    <div class="toggle-group" id="dueToggle">
+      <button class="tgl active" onclick="setDuePeriod('weekly')">주별</button>
+      <button class="tgl" onclick="setDuePeriod('monthly')">월별</button>
+    </div>
+  </div>
+  <div class="full card">
+    <div class="card-title">매출 / 수금 / 미수금 추이 <span id="duePeriodLabel">주별 · Invoice date 기준</span></div>
+    <div class="chart-box tall"><canvas id="cDueTrend"></canvas></div>
   </div>
   <div class="g21">
     <div class="card"><div class="card-title">고객별 미수금 Top 15</div><div class="chart-box tall"><canvas id="cDueCust"></canvas></div></div>
@@ -354,6 +388,22 @@ async function loadData() {
 // ══════════════════════════════════════
 // PROCESS
 // ══════════════════════════════════════
+
+// "04-Apr-2026" 또는 "2026-04-09" 형식 모두 파싱
+function parseDate(s) {
+  if (!s) return null;
+  s = String(s).trim();
+  // "04-Apr-2026" 형식
+  const m = s.match(/^(\d{2})-([A-Za-z]{3})-(\d{4})$/);
+  if (m) {
+    const months = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+    return new Date(parseInt(m[3]), months[m[2]], parseInt(m[1]));
+  }
+  // ISO 또는 기타 형식
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
+}
+
 function processData(salesRows, detailRows) {
   const today = new Date('2026-04-09');
 
@@ -363,8 +413,8 @@ function processData(salesRows, detailRows) {
     progress: r['Order Progress'],
     payStatus: r['Payment status'],
     invoiceStatus: r['Invoice status'],
-    invoiceDate: r['Invoice date'] ? new Date(r['Invoice date']) : null,
-    dueDate: r['Due date'] ? new Date(r['Due date']) : null,
+    invoiceDate: parseDate(r['Invoice date']),
+    dueDate: parseDate(r['Due date']),
     customer: r['Customer'],
     status: r['Status'],
     location: r['Location'],
@@ -376,16 +426,16 @@ function processData(salesRows, detailRows) {
   // ── Details ──
   const details = detailRows.map(r => ({
     order: r['Order #'],
-    brand: r['Brand'],
-    sku: r['SKU'],
-    product: r['Product'],
-    orderDate: r['Order date'] ? new Date(r['Order date']) : null,
-    customer: r['Customer'],
-    location: r['Location'],
+    brand: r['Brand'] || r['brand'] || '',
+    sku: r['SKU'] || r['sku'] || '',
+    product: r['Product'] || '',
+    orderDate: parseDate(r['Order date']),
+    customer: r['Customer'] || '',
+    location: r['Location'] || '',
     qty: parseFloat(r['Quantity']) || 0,
     sale: parseFloat(r['Sale']) || 0,
     total: parseFloat(r['Total']) || 0,
-  }));
+  })).filter(r => r.order);
 
   // ── KPIs ──
   const tor = sales.filter(r => r.location === 'Asung Trading Inc.');
@@ -496,10 +546,95 @@ function processData(salesRows, detailRows) {
     name, sale: v.sale, qty: v.qty, orders: v.orders.size
   }));
 
+
+  // ── Monthly trend (Details) ──
+  const monthMap = {};
+  details.forEach(r => {
+    if (!r.orderDate) return;
+    const mo = r.orderDate.toISOString().slice(0,7);
+    if (!monthMap[mo]) monthMap[mo] = { sale:0, qty:0, orders:new Set() };
+    monthMap[mo].sale += r.sale;
+    monthMap[mo].qty += r.qty;
+    monthMap[mo].orders.add(r.order);
+  });
+  S.monthly = Object.entries(monthMap).sort((a,b)=>a[0]>b[0]?1:-1).map(([mo,v]) => ({
+    mo, sale:v.sale, qty:v.qty, orders:v.orders.size
+  }));
+
+  // ── Sales weekly/monthly (Overview - Invoice date) ──
+  const salesWkMap = {}, salesMoMap = {};
+  sales.forEach(r => {
+    if (!r.invoiceDate) return;
+    // weekly
+    const d = r.invoiceDate;
+    const day = d.getDay();
+    const monday = new Date(d); monday.setDate(d.getDate() - (day===0?6:day-1));
+    const wk = monday.toISOString().slice(0,10).slice(5);
+    if (!salesWkMap[wk]) salesWkMap[wk] = { sale:0, paid:0, due:0 };
+    salesWkMap[wk].sale += r.sale;
+    salesWkMap[wk].paid += r.paid;
+    salesWkMap[wk].due += r.due;
+    // monthly
+    const mo = r.invoiceDate.toISOString().slice(0,7);
+    if (!salesMoMap[mo]) salesMoMap[mo] = { sale:0, paid:0, due:0 };
+    salesMoMap[mo].sale += r.sale;
+    salesMoMap[mo].paid += r.paid;
+    salesMoMap[mo].due += r.due;
+  });
+  S.salesWeekly = Object.entries(salesWkMap).sort((a,b)=>a[0]>b[0]?1:-1).map(([lbl,v])=>({lbl,...v}));
+  S.salesMonthly = Object.entries(salesMoMap).sort((a,b)=>a[0]>b[0]?1:-1).map(([lbl,v])=>({lbl,...v}));
+
+  // ── Daily orders/qty (Details) ──
+  const dailyOrderMap = {}, dailyQtyMap = {};
+  details.forEach(r => {
+    if (!r.orderDate) return;
+    const d = r.orderDate.toISOString().slice(0,10);
+    if (!dailyOrderMap[d]) dailyOrderMap[d] = new Set();
+    dailyOrderMap[d].add(r.order);
+    dailyQtyMap[d] = (dailyQtyMap[d]||0) + r.qty;
+  });
+  S.dailyOrders = allDates.map(d => dailyOrderMap[d] ? dailyOrderMap[d].size : 0);
+  S.dailyQty = allDates.map(d => dailyQtyMap[d]||0);
+
+  // ── Monthly trend (Details) ──
+  const monthMap = {};
+  details.forEach(r => {
+    if (!r.orderDate) return;
+    const mo = r.orderDate.toISOString().slice(0,7);
+    if (!monthMap[mo]) monthMap[mo] = { sale:0, qty:0, orders:new Set() };
+    monthMap[mo].sale += r.sale;
+    monthMap[mo].qty += r.qty;
+    monthMap[mo].orders.add(r.order);
+  });
+  S.monthly = Object.entries(monthMap).sort((a,b)=>a[0]>b[0]?1:-1).map(([mo,v]) => ({
+    mo, sale:v.sale, qty:v.qty, orders:v.orders.size
+  }));
+
+  // ── Sales weekly/monthly (Overview - Invoice date) ──
+  const salesWkMap = {}, salesMoMap = {};
+  sales.forEach(r => {
+    if (!r.invoiceDate) return;
+    const d = r.invoiceDate;
+    const day = d.getDay();
+    const monday = new Date(d); monday.setDate(d.getDate() - (day===0?6:day-1));
+    const wk = monday.toISOString().slice(5,10);
+    if (!salesWkMap[wk]) salesWkMap[wk] = { sale:0, paid:0, due:0 };
+    salesWkMap[wk].sale += r.sale;
+    salesWkMap[wk].paid += r.paid;
+    salesWkMap[wk].due += r.due;
+    const mo = r.invoiceDate.toISOString().slice(0,7);
+    if (!salesMoMap[mo]) salesMoMap[mo] = { sale:0, paid:0, due:0 };
+    salesMoMap[mo].sale += r.sale;
+    salesMoMap[mo].paid += r.paid;
+    salesMoMap[mo].due += r.due;
+  });
+  S.salesWeekly = Object.entries(salesWkMap).sort((a,b)=>a[0]>b[0]?1:-1).map(([lbl,v])=>({lbl,...v}));
+  S.salesMonthly = Object.entries(salesMoMap).sort((a,b)=>a[0]>b[0]?1:-1).map(([lbl,v])=>({lbl,...v}));
+
   // ── Header ──
   const dateStr = sales[0]?.invoiceDate ? sales[0].invoiceDate.toISOString().slice(0,7) : '—';
   document.getElementById('hdrDate').textContent = dateStr + ' · As of ' + today.toISOString().slice(0,10);
-  document.getElementById('hdrStats').textContent = `${sales.length.toLocaleString()} orders · ${details.length.toLocaleString()} lines`;
+  document.getElementById('hdrStats').textContent = sales.length.toLocaleString() + ' orders · ' + details.length.toLocaleString() + ' lines';
 }
 
 // ══════════════════════════════════════
@@ -569,11 +704,49 @@ function initOverview() {
 }
 
 // ── TAB 1 ──
+let trendPeriod = 'daily';
+
+function getPeriodData(period) {
+  if (period === 'daily') {
+    return {
+      labels: S.dailyLabels,
+      sale: S.torDaily.map((v,i) => v + S.edmDaily[i]),
+      orders: S.dailyOrders,
+      qty: S.dailyQty,
+      labelStr: '일별'
+    };
+  } else if (period === 'weekly') {
+    return {
+      labels: S.weekly.map(w=>w.wk),
+      sale: S.weekly.map(w=>w.sale),
+      orders: S.weekly.map(w=>w.orders),
+      qty: S.weekly.map(w=>w.qty),
+      labelStr: '주별'
+    };
+  } else {
+    return {
+      labels: S.monthly.map(m=>m.mo),
+      sale: S.monthly.map(m=>m.sale),
+      orders: S.monthly.map(m=>m.orders),
+      qty: S.monthly.map(m=>m.qty),
+      labelStr: '월별'
+    };
+  }
+}
+
+function setTrendPeriod(period) {
+  trendPeriod = period;
+  document.querySelectorAll('#trendToggle .tgl').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  const d = getPeriodData(period);
+  $('trendSaleLabel').textContent = d.labelStr + ' · Order Details 기준';
+  mkChart('cWeeklySale', { type:'bar', data:{ labels:d.labels, datasets:[{ label:'매출 ($)', data:d.sale, backgroundColor:'rgba(79,142,247,0.7)', borderRadius:5 }] }, options:{ ...baseOpts(), plugins:{ ...baseOpts().plugins, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } } } });
+  mkChart('cWeeklyOrders', { type:'bar', data:{ labels:d.labels, datasets:[{ label:'오더수', data:d.orders, backgroundColor:'rgba(61,207,192,0.7)', borderRadius:4 }] }, options:baseOpts() });
+  mkChart('cWeeklyQty', { type:'bar', data:{ labels:d.labels, datasets:[{ label:'수량', data:d.qty, backgroundColor:'rgba(155,127,244,0.7)', borderRadius:4 }] }, options:baseOpts() });
+}
+
 function initTrend() {
-  const wl = S.weekly.map(w=>w.wk);
-  mkChart('cWeeklySale', { type:'bar', data:{ labels:wl, datasets:[{ label:'주간 매출 ($)', data:S.weekly.map(w=>w.sale), backgroundColor:'rgba(79,142,247,0.7)', borderRadius:5 }] }, options:{ ...baseOpts(), plugins:{ ...baseOpts().plugins, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } } } });
-  mkChart('cWeeklyOrders', { type:'bar', data:{ labels:wl, datasets:[{ label:'오더수', data:S.weekly.map(w=>w.orders), backgroundColor:'rgba(61,207,192,0.7)', borderRadius:4 }] }, options:baseOpts() });
-  mkChart('cWeeklyQty', { type:'bar', data:{ labels:wl, datasets:[{ label:'수량', data:S.weekly.map(w=>w.qty), backgroundColor:'rgba(155,127,244,0.7)', borderRadius:4 }] }, options:baseOpts() });
+  setTrendPeriod('daily');
   mkChart('cDailyBranch', { type:'line', data:{ labels:S.dailyLabels, datasets:[
     { label:'Toronto', data:S.torDaily, borderColor:'#4f8ef7', backgroundColor:'rgba(79,142,247,0.08)', fill:true, borderWidth:2, pointRadius:2 },
     { label:'Edmonton', data:S.edmDaily, borderColor:'#f7824f', backgroundColor:'rgba(247,130,79,0.08)', fill:true, borderWidth:2, pointRadius:2 }
@@ -581,6 +754,29 @@ function initTrend() {
 }
 
 // ── TAB 2 ──
+let duePeriod = 'weekly';
+
+function setDuePeriod(period) {
+  duePeriod = period;
+  document.querySelectorAll('#dueToggle .tgl').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  const labelStr = period === 'weekly' ? '주별' : '월별';
+  $('duePeriodLabel').textContent = labelStr + ' · Invoice date 기준';
+  const data = period === 'weekly' ? S.salesWeekly : S.salesMonthly;
+  mkChart('cDueTrend', {
+    type: 'bar',
+    data: {
+      labels: data.map(d=>d.lbl),
+      datasets: [
+        { label:'매출', data:data.map(d=>d.sale), backgroundColor:'rgba(79,142,247,0.7)', borderRadius:4 },
+        { label:'수금', data:data.map(d=>d.paid), backgroundColor:'rgba(61,214,140,0.7)', borderRadius:4 },
+        { label:'미수금', data:data.map(d=>d.due), backgroundColor:'rgba(240,90,90,0.7)', borderRadius:4 },
+      ]
+    },
+    options: { ...baseOpts(), plugins:{ ...baseOpts().plugins, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } } }
+  });
+}
+
 function initDue() {
   const k = S.kpi;
   $('k-due').textContent = fmtK(k.totalDue);
@@ -588,7 +784,9 @@ function initDue() {
   $('k-unpaid').textContent = k.unpaidCnt.toLocaleString();
   $('k-paid2').textContent = fmtK(k.totalPaid);
 
-  mkChart('cDueCust', { type:'bar', indexAxis:'y', data:{ labels:S.dueCust.map(([n])=>n.length>24?n.slice(0,24)+'…':n), datasets:[{ label:'Due ($)', data:S.dueCust.map(([,v])=>v), backgroundColor:'rgba(240,90,90,0.7)', borderRadius:4 }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } }, scales:{ x:{ grid:{color:'#1e2333'}, ticks:{color:'#5a607a',font:{size:10}} }, y:{ grid:{color:'#1e2333'}, ticks:{color:'#9aa0b8',font:{size:9}} } } } });
+  setDuePeriod('weekly');
+
+  mkChart('cDueCust', { type:'bar', indexAxis:'y', data:{ labels:S.dueCust.map(([n])=>n.length>24?n.slice(0,24)+'\u2026':n), datasets:[{ label:'Due ($)', data:S.dueCust.map(([,v])=>v), backgroundColor:'rgba(240,90,90,0.7)', borderRadius:4 }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{ ...TOOLTIP, callbacks:{ label:ctx=>' '+fmt(ctx.raw) } } }, scales:{ x:{ grid:{color:'#1e2333'}, ticks:{color:'#5a607a',font:{size:10}} }, y:{ grid:{color:'#1e2333'}, ticks:{color:'#9aa0b8',font:{size:9}} } } } });
 
   const total = Object.values(S.aging).reduce((a,b)=>a+b,0);
   const agingColors = ['#3dd68c','#f0c040','#f7824f','#e05a5a','#f05a5a'];
@@ -596,13 +794,13 @@ function initDue() {
   agingEl.innerHTML = '';
   Object.entries(S.aging).forEach(([lbl,val],i) => {
     const pct = total > 0 ? (val/total*100) : 0;
-    agingEl.innerHTML += `<div class="aging-row"><div class="aging-label"><span>${lbl}</span><span>${fmt(val)}</span></div><div class="aging-bar-bg"><div class="aging-bar-fill" style="width:${pct.toFixed(1)}%;background:${agingColors[i]}"></div></div></div>`;
+    agingEl.innerHTML += '<div class="aging-row"><div class="aging-label"><span>'+lbl+'</span><span>'+fmt(val)+'</span></div><div class="aging-bar-bg"><div class="aging-bar-fill" style="width:'+pct.toFixed(1)+'%;background:'+agingColors[i]+'"></div></div></div>';
   });
 
   const tbody = $('dueTblBody');
   tbody.innerHTML = '';
   S.dueCust.forEach(([name,val]) => {
-    tbody.innerHTML += `<tr><td>${name}</td><td class="num" style="color:var(--red)">${fmt(val)}</td></tr>`;
+    tbody.innerHTML += '<tr><td>'+name+'</td><td class="num" style="color:var(--red)">'+fmt(val)+'</td></tr>';
   });
 }
 
