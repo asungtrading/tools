@@ -320,9 +320,10 @@ function processData(detailRows, salesRows) {
   const details = detailRows.map(r => ({
     order: r['Order #'], brand: r['Brand']||'', progress: r['Order Progress']||'',
     orderDate: parseDate(r['Order date']),
+    invoiceNo: r['Invoice #']||'',
     customer: r['Customer']||'', location: r['Location']||'',
     qty: parseFloat(r['Quantity'])||0, sale: parseFloat(r['Sale'])||0,
-  })).filter(r => r.order && r.orderDate);
+  })).filter(r => r.order && r.orderDate && r.invoiceNo);
 
   const tor = details.filter(r => r.location==='Asung Trading Inc.');
   const edm = details.filter(r => r.location==='Asung - Edmonton');
