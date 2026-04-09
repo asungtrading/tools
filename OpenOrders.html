@@ -7,6 +7,74 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
+#pwScreen{
+  position:fixed;inset:0;background:#0d0f14;
+  display:flex;align-items:center;justify-content:center;z-index:9999;
+}
+.pw-card{
+  background:#14171f;border:1px solid #252a38;border-radius:14px;
+  padding:36px 40px;width:100%;max-width:360px;text-align:center;
+}
+.pw-logo{font-size:11px;font-weight:700;letter-spacing:2px;color:#6b738a;
+  text-transform:uppercase;margin-bottom:24px;}
+.pw-logo span{color:#4f8ef7;}
+.pw-title{font-size:18px;font-weight:700;color:#e8ecf5;margin-bottom:6px;}
+.pw-sub{font-size:12px;color:#6b738a;margin-bottom:24px;}
+.pw-input{
+  width:100%;background:#1c2030;border:1px solid #252a38;border-radius:8px;
+  padding:11px 14px;font-size:14px;color:#e8ecf5;outline:none;
+  text-align:center;letter-spacing:.1em;margin-bottom:12px;
+  font-family:'Courier New',monospace;transition:border-color .2s;
+}
+.pw-input:focus{border-color:#4f8ef7;}
+.pw-input::placeholder{color:#3a3f52;letter-spacing:0;}
+.pw-btn{
+  width:100%;background:#4f8ef7;border:none;border-radius:8px;
+  padding:11px;font-size:14px;font-weight:700;color:#fff;
+  cursor:pointer;transition:background .2s;
+}
+.pw-btn:hover{background:#3a7de8;}
+.pw-err{
+  display:none;margin-top:10px;font-size:12px;color:#f74f6e;
+}
+</style>
+<script>
+// ✅ 비밀번호 변경은 여기서
+var PW = '002298';
+
+(function(){
+  var ok = sessionStorage.getItem('asung_auth');
+  if(ok === '1') return; // 이미 인증됨
+
+  document.addEventListener('DOMContentLoaded', function(){
+    var screen = document.getElementById('pwScreen');
+    if(screen) screen.style.display = 'flex';
+    // 대시보드 body 숨기기
+    document.body.style.overflow = 'hidden';
+  });
+})();
+
+function checkPassword(){
+  var input = document.getElementById('pwInput').value;
+  if(input === PW){
+    sessionStorage.setItem('asung_auth','1');
+    document.getElementById('pwScreen').style.display = 'none';
+    document.body.style.overflow = '';
+  } else {
+    document.getElementById('pwErr').style.display = 'block';
+    document.getElementById('pwInput').value = '';
+    document.getElementById('pwInput').focus();
+  }
+}
+
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Enter'){
+    var s = document.getElementById('pwScreen');
+    if(s && s.style.display !== 'none') checkPassword();
+  }
+});
+</script>
+<style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#0d0f14;--surface:#14171f;--surface2:#1c2030;--border:#252a38;
@@ -167,6 +235,18 @@ td.overdue-med{color:var(--yellow);font-weight:700}
 <!-- ════════════════════════════════════
      UPLOAD SCREEN
 ════════════════════════════════════ -->
+<!-- 비밀번호 화면 -->
+<div id="pwScreen" style="display:none">
+  <div class="pw-card">
+    <div class="pw-logo">ASUNG TRADING <span>INC.</span></div>
+    <div class="pw-title">Open Orders Dashboard</div>
+    <div class="pw-sub">내부 전용 · 비밀번호를 입력하세요</div>
+    <input class="pw-input" type="password" id="pwInput" placeholder="비밀번호 입력" autofocus>
+    <button class="pw-btn" onclick="checkPassword()">접속 →</button>
+    <div class="pw-err" id="pwErr">⚠ 비밀번호가 올바르지 않습니다</div>
+  </div>
+</div>
+
 <div id="uploadScreen">
   <div class="upload-logo">Asung Trading <span>|</span> Open Orders Dashboard</div>
 
