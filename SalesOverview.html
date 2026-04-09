@@ -366,9 +366,9 @@ function processData(detailRows, salesRows) {
     rows.forEach(r=>{const k=keyFn(r.orderDate);if(!m[k])m[k]={sale:0,qty:0,orders:new Set()};m[k].sale+=r.sale;m[k].qty+=r.qty;m[k].orders.add(r.order);});
     return Object.entries(m).sort((a,b)=>a[0]>b[0]?1:-1).map(([k,v])=>({k,sale:v.sale,qty:v.qty,orders:v.orders.size}));
   }
-  const dKey = d=>d.toISOString().slice(5,10);
-  const wKey = d=>{const dow=d.getDay(),mon=new Date(d);mon.setDate(d.getDate()-(dow===0?6:dow-1));return mon.toISOString().slice(5,10);};
-  const mKey = d=>d.toISOString().slice(0,7);
+  const dKey = d=>d.toISOString().slice(0,10);   // YYYY-MM-DD (정렬용)
+  const wKey = d=>{const dow=d.getDay(),mon=new Date(d);mon.setDate(d.getDate()-(dow===0?6:dow-1));return mon.toISOString().slice(0,10);};  // YYYY-MM-DD
+  const mKey = d=>d.toISOString().slice(0,7);   // YYYY-MM
 
   D.daily  ={all:agg(details,dKey),tor:agg(tor,dKey),edm:agg(edm,dKey)};
   D.weekly ={all:agg(details,wKey),tor:agg(tor,wKey),edm:agg(edm,wKey)};
@@ -472,21 +472,23 @@ function renderTrend(){
   const invMap = Object.fromEntries(invData.map(d=>[d.k,d]));
 
   const rot=curPeriod==='daily'?30:0;
+  const fmtLabel = k => curPeriod==='monthly' ? k : k.slice(5,10); // monthly=YYYY-MM, others=MM-DD
   const pStr={daily:'일별',weekly:'주별',monthly:'월별'}[curPeriod];
   const bStr={all:'전체',tor:'Toronto',edm:'Edmonton'}[curBranch];
   $('trendLabel').textContent=pStr+' · '+bStr+' · Order(파랑) vs Invoice(초록)';
 
-  mkChart('cTrendSale',{type:'bar',data:{labels:allKeys,datasets:[
+  const dispLabels = allKeys.map(fmtLabel);
+  mkChart('cTrendSale',{type:'bar',data:{labels:dispLabels,datasets:[
     {label:'Order date 기준',data:allKeys.map(k=>ordMap[k]?ordMap[k].sale:0),backgroundColor:'rgba(79,142,247,0.75)',borderRadius:4},
     {label:'Invoice date 기준',data:allKeys.map(k=>invMap[k]?invMap[k].sale:0),backgroundColor:'rgba(61,214,140,0.75)',borderRadius:4},
   ]},options:{...baseOpts(rot),plugins:{...baseOpts(rot).plugins,tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>' '+ctx.dataset.label+': '+fmt(ctx.raw)}}}}});
 
-  mkChart('cTrendOrders',{type:'bar',data:{labels:allKeys,datasets:[
+  mkChart('cTrendOrders',{type:'bar',data:{labels:dispLabels,datasets:[
     {label:'Order date',data:allKeys.map(k=>ordMap[k]?ordMap[k].orders:0),backgroundColor:'rgba(79,142,247,0.7)',borderRadius:4},
     {label:'Invoice date',data:allKeys.map(k=>invMap[k]?invMap[k].orders:0),backgroundColor:'rgba(61,214,140,0.7)',borderRadius:4},
   ]},options:baseOpts(rot)});
 
-  mkChart('cTrendQty',{type:'bar',data:{labels:allKeys,datasets:[
+  mkChart('cTrendQty',{type:'bar',data:{labels:dispLabels,datasets:[
     {label:'Order date',data:allKeys.map(k=>ordMap[k]?ordMap[k].qty:0),backgroundColor:'rgba(155,127,244,0.7)',borderRadius:4},
     {label:'Invoice date',data:allKeys.map(k=>invMap[k]?invMap[k].qty:0),backgroundColor:'rgba(61,207,192,0.7)',borderRadius:4},
   ]},options:baseOpts(rot)});
@@ -496,12 +498,13 @@ function initTrend(){renderTrend();}
 function initBranch(){
   const k=D.kpi;
   mkChart('cBranchPie',{type:'doughnut',data:{labels:['Toronto','Edmonton'],datasets:[{data:[k.torSale,k.edmSale],backgroundColor:['rgba(79,142,247,0.8)','rgba(247,130,79,0.8)'],borderWidth:1,borderColor:'#0b0d12'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#c0c6d8',font:{size:11}}},tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}}}});
-  const mo=D.monthly,labels=[...new Set([...mo.tor.map(d=>d.k),...mo.edm.map(d=>d.k)])].sort();
+  const mo=D.monthly,labels=[...new Set([...mo.tor.map(d=>d.k),...mo.edm.map(d=>d.k)])].sort(); // YYYY-MM already correct
   const tm=Object.fromEntries(mo.tor.map(d=>[d.k,d.sale])),em=Object.fromEntries(mo.edm.map(d=>[d.k,d.sale]));
   mkChart('cBranchMonthly',{type:'bar',data:{labels,datasets:[{label:'Toronto',data:labels.map(l=>tm[l]||0),backgroundColor:'rgba(79,142,247,0.7)',borderRadius:4},{label:'Edmonton',data:labels.map(l=>em[l]||0),backgroundColor:'rgba(247,130,79,0.7)',borderRadius:4}]},options:{...baseOpts(),plugins:{...baseOpts().plugins,tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}}}});
   const dd=D.daily,dl=[...new Set([...dd.tor.map(d=>d.k),...dd.edm.map(d=>d.k)])].sort();
   const tdm=Object.fromEntries(dd.tor.map(d=>[d.k,d.sale])),edm2=Object.fromEntries(dd.edm.map(d=>[d.k,d.sale]));
-  mkChart('cBranchDaily',{type:'line',data:{labels:dl,datasets:[{label:'Toronto',data:dl.map(l=>tdm[l]||0),borderColor:'#4f8ef7',backgroundColor:'rgba(79,142,247,0.08)',fill:true,borderWidth:2,pointRadius:2},{label:'Edmonton',data:dl.map(l=>edm2[l]||0),borderColor:'#f7824f',backgroundColor:'rgba(247,130,79,0.08)',fill:true,borderWidth:2,pointRadius:2}]},options:{...baseOpts(30),plugins:{...baseOpts(30).plugins,tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}}}});
+  const dlDisp=dl.map(k=>k.slice(5,10));
+  mkChart('cBranchDaily',{type:'line',data:{labels:dlDisp,datasets:[{label:'Toronto',data:dl.map(l=>tdm[l]||0),borderColor:'#4f8ef7',backgroundColor:'rgba(79,142,247,0.08)',fill:true,borderWidth:2,pointRadius:2},{label:'Edmonton',data:dl.map(l=>edm2[l]||0),borderColor:'#f7824f',backgroundColor:'rgba(247,130,79,0.08)',fill:true,borderWidth:2,pointRadius:2}]},options:{...baseOpts(30),plugins:{...baseOpts(30).plugins,tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}}}});
   const torRows=[['오더 수',k.torOrders.toLocaleString()],['총 매출',fmt(k.torSale)],['매출 비중',(k.torSale/k.totalSale*100).toFixed(1)+'%'],['고객 수',k.torCust.toLocaleString()]];
   const edmRows=[['오더 수',k.edmOrders.toLocaleString()],['총 매출',fmt(k.edmSale)],['매출 비중',(k.edmSale/k.totalSale*100).toFixed(1)+'%'],['고객 수',k.edmCust.toLocaleString()]];
   $('torDetail').innerHTML=torRows.map(r=>'<tr><td>'+r[0]+'</td><td class="num">'+r[1]+'</td></tr>').join('');
