@@ -567,32 +567,36 @@ function processData(salesRows, detailRows) {
     name, sale: v.sale, qty: v.qty, orders: v.orders.size
   }));
 
-  // ── Sales weekly/monthly/daily (Overview - Invoice date) ──
-  const salesWkMap = {}, salesMoMap = {}, salesDayMap = {};
-  sales.forEach(r => {
-    if (!r.invoiceDate) return;
-    const dt2 = r.invoiceDate;
-    // daily
-    const dk2 = dt2.toISOString().slice(0,10);
-    salesDayMap[dk2] = (salesDayMap[dk2]||0) + r.sale;
-    // weekly
-    const dow = dt2.getDay();
-    const mon2 = new Date(dt2); mon2.setDate(dt2.getDate() - (dow===0?6:dow-1));
-    const wk2 = mon2.toISOString().slice(5,10);
-    if (!salesWkMap[wk2]) salesWkMap[wk2] = { sale:0, paid:0, due:0 };
-    salesWkMap[wk2].sale += r.sale;
-    salesWkMap[wk2].paid += r.paid;
-    salesWkMap[wk2].due += r.due;
-    // monthly
-    const mo2 = dt2.toISOString().slice(0,7);
-    if (!salesMoMap[mo2]) salesMoMap[mo2] = { sale:0, paid:0, due:0 };
-    salesMoMap[mo2].sale += r.sale;
-    salesMoMap[mo2].paid += r.paid;
-    salesMoMap[mo2].due += r.due;
-  });
-  S.salesWeekly = Object.entries(salesWkMap).sort((a,b)=>a[0]>b[0]?1:-1).map(([lbl,v])=>({lbl,...v}));
-  S.salesMonthly = Object.entries(salesMoMap).sort((a,b)=>a[0]>b[0]?1:-1).map(([lbl,v])=>({lbl,...v}));
-  S.salesDayMap = salesDayMap;
+  // ── Sales weekly/monthly/daily (Overview - Invoice date) by branch ──
+  function buildSalesAgg(rows) {
+    const wkMap = {}, moMap = {}, dayMap = {};
+    rows.forEach(r => {
+      if (!r.invoiceDate) return;
+      const dt2 = r.invoiceDate;
+      const dk2 = dt2.toISOString().slice(0,10);
+      dayMap[dk2] = (dayMap[dk2]||0) + r.sale;
+      const dow = dt2.getDay();
+      const mon2 = new Date(dt2); mon2.setDate(dt2.getDate() - (dow===0?6:dow-1));
+      const wk2 = mon2.toISOString().slice(5,10);
+      if (!wkMap[wk2]) wkMap[wk2] = { sale:0, paid:0, due:0 };
+      wkMap[wk2].sale += r.sale; wkMap[wk2].paid += r.paid; wkMap[wk2].due += r.due;
+      const mo2 = dt2.toISOString().slice(0,7);
+      if (!moMap[mo2]) moMap[mo2] = { sale:0, paid:0, due:0 };
+      moMap[mo2].sale += r.sale; moMap[mo2].paid += r.paid; moMap[mo2].due += r.due;
+    });
+    return {
+      weekly: Object.entries(wkMap).sort((a,b)=>a[0]>b[0]?1:-1).map(([lbl,v])=>({lbl,...v})),
+      monthly: Object.entries(moMap).sort((a,b)=>a[0]>b[0]?1:-1).map(([lbl,v])=>({lbl,...v})),
+      dayMap
+    };
+  }
+  const aggAll = buildSalesAgg(sales);
+  const aggTor = buildSalesAgg(sales.filter(r => r.location === 'Asung Trading Inc.'));
+  const aggEdm = buildSalesAgg(sales.filter(r => r.location === 'Asung - Edmonton'));
+  S.salesWeekly = aggAll.weekly;
+  S.salesMonthly = aggAll.monthly;
+  S.salesDayMap = aggAll.dayMap;
+  S.invAgg = { all: aggAll, tor: aggTor, edm: aggEdm };
 
   // ── Header ──
   const invoiceDates = sales.map(r => r.invoiceDate).filter(Boolean).sort((a,b)=>a-b);
@@ -693,12 +697,22 @@ function aggregateDetailsByBranch(branch, keyFn) {
 }
 
 function getInvoiceSaleByPeriod(period, labels) {
-  // Invoice date 기준 매출을 Order labels에 맞춰 반환
   const dm = S.salesDayMap || {};
   const wm = {}; (S.salesWeekly||[]).forEach(w => { wm[w.lbl] = w.sale; });
   const mm = {}; (S.salesMonthly||[]).forEach(m => { mm[m.lbl] = m.sale; });
-  if (period === 'daily') return labels.map(l => dm['2026-'+l] || dm[Object.keys(dm).find(k=>k.slice(5)===l)] || 0);
-  if (period === 'weekly') return labels.map(l => wm[l] || 0);
+
+  if (period === 'daily') {
+    // dailyLabels = "MM-DD", salesDayMap keys = "YYYY-MM-DD"
+    // Build suffix lookup
+    const dmSuffix = {};
+    Object.entries(dm).forEach(([k,v]) => { dmSuffix[k.slice(5)] = (dmSuffix[k.slice(5)]||0)+v; });
+    return labels.map(l => dmSuffix[l] || 0);
+  }
+  if (period === 'weekly') {
+    // salesWeekly.lbl = "MM-DD" (monday), weekly labels = "MM-DD" ✅
+    return labels.map(l => wm[l] || 0);
+  }
+  // monthly: both "YYYY-MM" ✅
   return labels.map(l => mm[l] || 0);
 }
 
@@ -728,7 +742,7 @@ function getPeriodData(period, branch) {
     }
   }
 
-  const invoiceSale = getInvoiceSaleByPeriod(period, orderData.labels);
+  const invoiceSale = getInvoiceSaleByPeriod(period, orderData.labels, branch);
   const labelStr = period === 'daily' ? '일별' : period === 'weekly' ? '주별' : '월별';
   return { ...orderData, invoiceSale, labelStr };
 }
