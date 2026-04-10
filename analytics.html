@@ -223,6 +223,7 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
     <button class="tab-btn" onclick="switchTab('price')">💰 Price Analysis</button>
     <button class="tab-btn" onclick="switchTab('brand')">🏷 Brand Performance</button>
     <button class="tab-btn" onclick="switchTab('customer')">👤 Customer Performance</button>
+    <button class="tab-btn" onclick="switchTab('monthly')">📅 Monthly Comparison</button>
   </div>
 
   <!-- TAB: SALES (existing content) -->
@@ -442,6 +443,63 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
       </div>
     </div>
   </div><!-- /tab-customer -->
+  <!-- TAB: MONTHLY COMPARISON -->
+  <div class="tab-panel" id="tab-monthly">
+    <div class="price-search">
+      <div class="field">
+        <label class="field-label">비교 연도 1</label>
+        <select id="mYear1">
+          <option value="2026">2026</option>
+          <option value="2025" selected>2025</option>
+          <option value="2024">2024</option>
+          <option value="2023">2023</option>
+          <option value="2022">2022</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label">비교 연도 2</label>
+        <select id="mYear2">
+          <option value="2026">2026</option>
+          <option value="2025">2025</option>
+          <option value="2024" selected>2024</option>
+          <option value="2023">2023</option>
+          <option value="2022">2022</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label">Branch</label>
+        <select id="mBranch">
+          <option value="">전체</option>
+          <option value="Asung Trading Inc.">Toronto</option>
+          <option value="Asung - Edmonton">Edmonton</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label">Brand (선택)</label>
+        <div class="ac-wrap">
+          <input type="text" id="mBrand" placeholder="전체 브랜드" autocomplete="off" oninput="acInput(this,'mBrand','brand')" onkeydown="acKey(event,'mBrand')" onfocus="acInput(this,'mBrand','brand')" style="min-width:160px">
+          <div class="ac-list" id="ac-mBrand" style="display:none"></div>
+        </div>
+      </div>
+      <div class="field">
+        <label class="field-label">Customer (선택)</label>
+        <div class="ac-wrap">
+          <input type="text" id="mCustomer" placeholder="전체 고객" autocomplete="off" oninput="acInput(this,'mCustomer')" onkeydown="acKey(event,'mCustomer')" onfocus="acInput(this,'mCustomer')" style="min-width:160px">
+          <div class="ac-list" id="ac-mCustomer" style="display:none"></div>
+        </div>
+      </div>
+      <div>
+        <button class="search-btn" id="mSearchBtn" onclick="runMonthlyComparison()">🔍 비교</button>
+      </div>
+    </div>
+    <div class="content" id="monthlyContent">
+      <div class="empty-state">
+        <div class="empty-icon">📅</div>
+        <div class="empty-title">연도를 선택하고 비교 버튼을 누르세요</div>
+        <div class="empty-desc">YoY (전년 동월) 및 MoM (전월 대비) 매출을 비교합니다</div>
+      </div>
+    </div>
+  </div><!-- /tab-monthly -->
 
 </div><!-- /mainApp -->
 
@@ -1578,6 +1636,225 @@ function exportCSV(rows, filename) {
   const a = document.createElement('a');
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
+}
+
+// ══════════════════════════════════════
+// MONTHLY COMPARISON
+// ══════════════════════════════════════
+async function runMonthlyComparison() {
+  const year1    = document.getElementById('mYear1').value;
+  const year2    = document.getElementById('mYear2').value;
+  const branch   = document.getElementById('mBranch').value;
+  const brand    = document.getElementById('mBrand').value.trim();
+  const customer = document.getElementById('mCustomer').value.trim();
+
+  const btn = document.getElementById('mSearchBtn');
+  btn.disabled = true; btn.textContent = '⏳ 쿼리 중...';
+  document.getElementById('monthlyContent').innerHTML = '<div class="loading"><div class="spinner"></div> BigQuery 쿼리 중...</div>';
+
+  const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
+  const conds = [];
+  if (branch)   conds.push(`Location = '${branch.replace(/'/g,"''")}'`);
+  if (brand)    conds.push(`LOWER(Brand_Clean) LIKE LOWER('%${brand.replace(/'/g,"''")}%')`);
+  if (customer) conds.push(`LOWER(Customer_Clean) LIKE LOWER('%${customer.replace(/'/g,"''")}%')`);
+  const baseWhere = conds.length ? 'AND ' + conds.join(' AND ') : '';
+
+  try {
+    const [rows1, rows2] = await Promise.all([
+      bqQuery(`SELECT EXTRACT(MONTH FROM Date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders, COUNT(DISTINCT Customer_Clean) as customers FROM ${fullTable} WHERE EXTRACT(YEAR FROM Date) = ${year1} ${baseWhere} GROUP BY month ORDER BY month`),
+      bqQuery(`SELECT EXTRACT(MONTH FROM Date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders, COUNT(DISTINCT Customer_Clean) as customers FROM ${fullTable} WHERE EXTRACT(YEAR FROM Date) = ${year2} ${baseWhere} GROUP BY month ORDER BY month`)
+    ]);
+
+    btn.disabled = false; btn.textContent = '🔍 비교';
+    renderMonthlyComparison({ rows1, rows2, year1, year2 });
+  } catch(e) {
+    btn.disabled = false; btn.textContent = '🔍 비교';
+    document.getElementById('monthlyContent').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">쿼리 오류</div><div class="empty-desc">${e.message}</div></div>`;
+  }
+}
+
+function renderMonthlyComparison({ rows1, rows2, year1, year2 }) {
+  const MONTHS = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+
+  // Build month maps
+  const map1 = {}, map2 = {};
+  rows1.forEach(r => map1[parseInt(r.month)] = r);
+  rows2.forEach(r => map2[parseInt(r.month)] = r);
+
+  // Annual totals
+  const tot1 = { rev: rows1.reduce((a,r)=>a+(parseFloat(r.revenue)||0),0), gp: rows1.reduce((a,r)=>a+(parseFloat(r.gp)||0),0), qty: rows1.reduce((a,r)=>a+(parseInt(r.qty)||0),0), orders: rows1.reduce((a,r)=>a+(parseInt(r.orders)||0),0) };
+  const tot2 = { rev: rows2.reduce((a,r)=>a+(parseFloat(r.revenue)||0),0), gp: rows2.reduce((a,r)=>a+(parseFloat(r.gp)||0),0), qty: rows2.reduce((a,r)=>a+(parseInt(r.qty)||0),0), orders: rows2.reduce((a,r)=>a+(parseInt(r.orders)||0),0) };
+  const yoyRev = tot2.rev > 0 ? ((tot1.rev - tot2.rev)/tot2.rev*100).toFixed(1) : '—';
+  const yoyGp  = tot2.gp  > 0 ? ((tot1.gp  - tot2.gp )/tot2.gp *100).toFixed(1) : '—';
+
+  // MoM data for year1 (month vs prev month)
+  const momRows = [];
+  for (let m = 1; m <= 12; m++) {
+    const cur  = map1[m];
+    const prev = map1[m-1];
+    if (cur && prev) {
+      const curRev  = parseFloat(cur.revenue)||0;
+      const prevRev = parseFloat(prev.revenue)||0;
+      momRows.push({ month: m, cur: curRev, prev: prevRev, chg: prevRev > 0 ? ((curRev-prevRev)/prevRev*100).toFixed(1) : '—' });
+    }
+  }
+
+  document.getElementById('monthlyContent').innerHTML = `
+    <div style="padding:20px 24px 0">
+
+      <!-- YoY 연간 요약 KPI -->
+      <div style="margin-bottom:16px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--dim)">YoY 연간 요약 — ${year1} vs ${year2}</div>
+      <div class="kpi-strip" style="margin-bottom:24px">
+        <div class="kpi blue"><div class="kpi-lbl">${year1} 총매출</div><div class="kpi-val">${fmtK(tot1.rev)}</div><div class="kpi-sub">${tot1.orders} orders</div></div>
+        <div class="kpi ${parseFloat(yoyRev)>=0?'green':'red'}"><div class="kpi-lbl">YoY 매출 증감</div><div class="kpi-val">${yoyRev}%</div><div class="kpi-sub">vs ${year2} ${fmtK(tot2.rev)}</div></div>
+        <div class="kpi green"><div class="kpi-lbl">${year1} GP</div><div class="kpi-val">${fmtK(tot1.gp)}</div><div class="kpi-sub">GM ${tot1.rev>0?(tot1.gp/tot1.rev*100).toFixed(1):0}%</div></div>
+        <div class="kpi ${parseFloat(yoyGp)>=0?'green':'red'}"><div class="kpi-lbl">YoY GP 증감</div><div class="kpi-val">${yoyGp}%</div><div class="kpi-sub">vs ${year2} ${fmtK(tot2.gp)}</div></div>
+        <div class="kpi yellow"><div class="kpi-lbl">${year1} 수량</div><div class="kpi-val">${tot1.qty.toLocaleString()}</div><div class="kpi-sub">units</div></div>
+        <div class="kpi purple"><div class="kpi-lbl">${year2} 수량</div><div class="kpi-val">${tot2.qty.toLocaleString()}</div><div class="kpi-sub">units</div></div>
+      </div>
+
+      <!-- YoY 차트 -->
+      <div class="charts-grid" style="margin-bottom:16px">
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">월별 매출 YoY — ${year1} vs ${year2}</span></div>
+          <div class="chart-box tall"><canvas id="cYoYRev"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">월별 GP YoY — ${year1} vs ${year2}</span></div>
+          <div class="chart-box tall"><canvas id="cYoYGp"></canvas></div>
+        </div>
+      </div>
+
+      <!-- YoY 증감률 차트 -->
+      <div class="charts-row" style="margin-bottom:16px">
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">YoY 매출 증감률 (%)</span></div>
+          <div class="chart-box"><canvas id="cYoYPct"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">MoM 매출 증감률 — ${year1} (%)</span></div>
+          <div class="chart-box"><canvas id="cMoM"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">월별 수량 YoY</span></div>
+          <div class="chart-box"><canvas id="cYoYQty"></canvas></div>
+        </div>
+      </div>
+
+      <!-- YoY 상세 테이블 -->
+      <div class="tbl-card" style="margin-bottom:24px">
+        <div class="tbl-hdr">
+          <span class="tbl-title">월별 상세 비교</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="tbl-count">${year1} vs ${year2}</span>
+            <button class="export-btn" onclick="exportCSV(exportData.monthly,'monthly_comparison_${year1}_vs_${year2}.csv')">⬇ CSV</button>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table><thead><tr>
+            <th>월</th>
+            <th class="num">${year1} 매출</th><th class="num">${year2} 매출</th><th class="num">YoY 증감</th><th class="num">YoY %</th>
+            <th class="num">${year1} GP</th><th class="num">${year2} GP</th><th class="num">GP YoY %</th>
+            <th class="num">${year1} 수량</th><th class="num">${year2} 수량</th>
+            <th class="num">${year1} 오더</th><th class="num">${year2} 오더</th>
+          </tr></thead><tbody>
+            ${MONTHS.map((mn, i) => {
+              const m = i + 1;
+              const r1 = map1[m], r2 = map2[m];
+              const rev1 = r1 ? parseFloat(r1.revenue)||0 : null;
+              const rev2 = r2 ? parseFloat(r2.revenue)||0 : null;
+              const gp1  = r1 ? parseFloat(r1.gp)||0 : null;
+              const gp2  = r2 ? parseFloat(r2.gp)||0 : null;
+              const qty1 = r1 ? parseInt(r1.qty)||0 : null;
+              const qty2 = r2 ? parseInt(r2.qty)||0 : null;
+              const ord1 = r1 ? parseInt(r1.orders)||0 : null;
+              const ord2 = r2 ? parseInt(r2.orders)||0 : null;
+              const yoyRevPct = (rev1!==null && rev2!==null && rev2>0) ? ((rev1-rev2)/rev2*100).toFixed(1) : '—';
+              const yoyGpPct  = (gp1!==null  && gp2!==null  && gp2>0)  ? ((gp1-gp2)/gp2*100).toFixed(1)   : '—';
+              const revDiff   = (rev1!==null && rev2!==null) ? rev1-rev2 : null;
+              const pctColor  = yoyRevPct==='—' ? 'var(--dim)' : parseFloat(yoyRevPct)>=0 ? 'var(--green)' : 'var(--red)';
+              const gpColor   = yoyGpPct==='—'  ? 'var(--dim)' : parseFloat(yoyGpPct)>=0  ? 'var(--green)' : 'var(--red)';
+              return `<tr>
+                <td style="font-weight:600">${mn}</td>
+                <td class="num">${rev1!==null?fmt(rev1):'—'}</td>
+                <td class="num" style="color:var(--dim)">${rev2!==null?fmt(rev2):'—'}</td>
+                <td class="num ${revDiff!==null?(revDiff>=0?'pos':'neg'):''}">${revDiff!==null?fmt(revDiff):'—'}</td>
+                <td class="num" style="color:${pctColor};font-weight:600">${yoyRevPct==='—'?'—':yoyRevPct+'%'}</td>
+                <td class="num">${gp1!==null?fmt(gp1):'—'}</td>
+                <td class="num" style="color:var(--dim)">${gp2!==null?fmt(gp2):'—'}</td>
+                <td class="num" style="color:${gpColor};font-weight:600">${yoyGpPct==='—'?'—':yoyGpPct+'%'}</td>
+                <td class="num">${qty1!==null?qty1.toLocaleString():'—'}</td>
+                <td class="num" style="color:var(--dim)">${qty2!==null?qty2.toLocaleString():'—'}</td>
+                <td class="num">${ord1!==null?ord1:'—'}</td>
+                <td class="num" style="color:var(--dim)">${ord2!==null?ord2:'—'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Cache for export
+  exportData.monthly = MONTHS.map((mn, i) => {
+    const m = i+1, r1=map1[m], r2=map2[m];
+    const rev1=r1?parseFloat(r1.revenue)||0:null, rev2=r2?parseFloat(r2.revenue)||0:null;
+    const gp1=r1?parseFloat(r1.gp)||0:null, gp2=r2?parseFloat(r2.gp)||0:null;
+    return {
+      Month: mn,
+      [`${year1}_Revenue`]: rev1??'', [`${year2}_Revenue`]: rev2??'',
+      YoY_Revenue_Pct: (rev1!==null&&rev2!==null&&rev2>0)?((rev1-rev2)/rev2*100).toFixed(1):'',
+      [`${year1}_GP`]: gp1??'', [`${year2}_GP`]: gp2??'',
+      YoY_GP_Pct: (gp1!==null&&gp2!==null&&gp2>0)?((gp1-gp2)/gp2*100).toFixed(1):'',
+      [`${year1}_Qty`]: r1?parseInt(r1.qty)||0:'', [`${year2}_Qty`]: r2?parseInt(r2.qty)||0:'',
+    };
+  });
+
+  const labels = MONTHS;
+  const rev1Data = MONTHS.map((_,i) => map1[i+1] ? parseFloat(map1[i+1].revenue)||0 : null);
+  const rev2Data = MONTHS.map((_,i) => map2[i+1] ? parseFloat(map2[i+1].revenue)||0 : null);
+  const gp1Data  = MONTHS.map((_,i) => map1[i+1] ? parseFloat(map1[i+1].gp)||0 : null);
+  const gp2Data  = MONTHS.map((_,i) => map2[i+1] ? parseFloat(map2[i+1].gp)||0 : null);
+  const qty1Data = MONTHS.map((_,i) => map1[i+1] ? parseInt(map1[i+1].qty)||0 : null);
+  const qty2Data = MONTHS.map((_,i) => map2[i+1] ? parseInt(map2[i+1].qty)||0 : null);
+  const yoyPctData = MONTHS.map((_,i) => {
+    const r1=rev1Data[i], r2=rev2Data[i];
+    return (r1!==null&&r2!==null&&r2>0) ? parseFloat(((r1-r2)/r2*100).toFixed(1)) : null;
+  });
+  const momPctData = MONTHS.map((_,i) => {
+    const cur=rev1Data[i], prev=rev1Data[i-1];
+    return (i>0&&cur!==null&&prev!==null&&prev>0) ? parseFloat(((cur-prev)/prev*100).toFixed(1)) : null;
+  });
+
+  // YoY Revenue
+  mkChart('cYoYRev', { type:'bar', data:{ labels, datasets:[
+    {label:year1, data:rev1Data, backgroundColor:'rgba(59,130,246,0.75)', borderRadius:4},
+    {label:year2, data:rev2Data, backgroundColor:'rgba(59,130,246,0.25)', borderRadius:4},
+  ]}, options:{...baseOpts(), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>' '+ctx.dataset.label+': '+fmt(ctx.raw)}}}}});
+
+  // YoY GP
+  mkChart('cYoYGp', { type:'bar', data:{ labels, datasets:[
+    {label:year1, data:gp1Data, backgroundColor:'rgba(34,197,94,0.75)', borderRadius:4},
+    {label:year2, data:gp2Data, backgroundColor:'rgba(34,197,94,0.25)', borderRadius:4},
+  ]}, options:{...baseOpts(), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>' '+ctx.dataset.label+': '+fmt(ctx.raw)}}}}});
+
+  // YoY % change
+  mkChart('cYoYPct', { type:'bar', data:{ labels, datasets:[{
+    label:'YoY %', data:yoyPctData, borderRadius:4,
+    backgroundColor: yoyPctData.map(v => v===null?'transparent':v>=0?'rgba(34,197,94,0.75)':'rgba(239,68,68,0.75)')
+  }]}, options:{...baseOpts(), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,callbacks:{label:ctx=>' YoY: '+(ctx.raw??'—')+'%'}}}, scales:{...baseOpts().scales, y:{...baseOpts().scales.y, ticks:{...baseOpts().scales.y.ticks, callback:v=>v+'%'}}}}});
+
+  // MoM %
+  mkChart('cMoM', { type:'bar', data:{ labels, datasets:[{
+    label:'MoM %', data:momPctData, borderRadius:4,
+    backgroundColor: momPctData.map(v => v===null?'transparent':v>=0?'rgba(59,130,246,0.75)':'rgba(239,68,68,0.75)')
+  }]}, options:{...baseOpts(), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,callbacks:{label:ctx=>' MoM: '+(ctx.raw??'—')+'%'}}}, scales:{...baseOpts().scales, y:{...baseOpts().scales.y, ticks:{...baseOpts().scales.y.ticks, callback:v=>v+'%'}}}}});
+
+  // YoY Qty
+  mkChart('cYoYQty', { type:'bar', data:{ labels, datasets:[
+    {label:year1, data:qty1Data, backgroundColor:'rgba(168,85,247,0.75)', borderRadius:4},
+    {label:year2, data:qty2Data, backgroundColor:'rgba(168,85,247,0.25)', borderRadius:4},
+  ]}, options:{...baseOpts(), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,mode:'index'}}}});
 }
 
 // ── INIT ──
