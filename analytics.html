@@ -293,6 +293,10 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
         <input type="text" id="pSku" placeholder="예: ORS11108" style="min-width:160px">
       </div>
       <div class="field">
+        <label class="field-label">Brand (선택)</label>
+        <input type="text" id="pBrand" placeholder="예: ORS, Kim & C" style="min-width:160px">
+      </div>
+      <div class="field">
         <label class="field-label">Customer (선택)</label>
         <input type="text" id="pCustomer" placeholder="예: Clore" style="min-width:160px">
       </div>
@@ -737,6 +741,7 @@ function renderDetailTable(rows) {
 // ══════════════════════════════════════
 async function runPriceSearch() {
   const sku      = document.getElementById('pSku').value.trim();
+  const brand    = document.getElementById('pBrand').value.trim();
   const customer = document.getElementById('pCustomer').value.trim();
   const branch   = document.getElementById('pBranch').value;
   const dateFrom = document.getElementById('pDateFrom').value;
@@ -754,6 +759,7 @@ async function runPriceSearch() {
   const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
   const conds = [`LOWER(SKU) = LOWER('${sku.replace(/'/g,"''")}' )`];
   if (customer) conds.push(`LOWER(Customer_Clean) LIKE LOWER('%${customer.replace(/'/g,"''")}%')`);
+  if (brand)    conds.push(`LOWER(Brand_Clean) LIKE LOWER('%${brand.replace(/'/g,"''")}%')`);
   if (branch)   conds.push(`Location = '${branch.replace(/'/g,"''")}'`);
   if (dateFrom) conds.push(`Date >= '${dateFrom}'`);
   if (dateTo)   conds.push(`Date <= '${dateTo}'`);
