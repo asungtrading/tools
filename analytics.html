@@ -409,10 +409,12 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
           <input type="date" id="cDateTo">
         </div>
       </div>
-      <div class="field">
-        <label class="field-label">Customer <span style="color:var(--red)">*필수</span></label>
-        <div class="ac-wrap">
-          <input type="text" id="cCustomer" placeholder="예: Clore, Rex Beauty" autocomplete="off" oninput="acInput(this,'cCustomer')" onkeydown="acKey(event,'cCustomer')" onfocus="acInput(this,'cCustomer')" style="min-width:180px">
+      <div class="field" style="flex:1;min-width:280px">
+        <label class="field-label">Customer <span style="color:var(--red)">*필수</span> <span style="color:var(--dim);font-weight:400">(최대 5개, Enter로 추가)</span></label>
+        <div class="ac-wrap" style="position:relative">
+          <div id="cCustChips" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:34px;padding:4px 8px;background:#0f1625;border:1px solid #1f2a3d;border-radius:6px">
+            <input type="text" id="cCustomer" placeholder="고객명 입력 후 Enter" autocomplete="off" oninput="acInput(this,'cCustomer')" onkeydown="cCustKey(event)" onfocus="acInput(this,'cCustomer')" style="flex:1;min-width:140px;background:transparent;border:none;outline:none;color:var(--text);font-size:12px;padding:4px">
+          </div>
           <div class="ac-list" id="ac-cCustomer" style="display:none"></div>
         </div>
       </div>
@@ -1599,15 +1601,60 @@ function renderBrandPerformance({ summaryRows, trendRows, skuRows, custRows, bra
 // ══════════════════════════════════════
 // CUSTOMER PERFORMANCE
 // ══════════════════════════════════════
+// ─── Multi-customer chip state ───
+let cCustList = [];
+const CUSTOMER_COLORS = ['#3b82f6','#22c55e','#f59e0b','#a855f7','#ef4444'];
+
+function cCustKey(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const v = e.target.value.trim();
+    if (v) addCustChip(v);
+    return;
+  }
+  acKey(e, 'cCustomer');
+}
+function addCustChip(name) {
+  if (!name) return;
+  if (cCustList.length >= 5) { alert('최대 5명까지 비교 가능합니다'); return; }
+  if (cCustList.some(c => c.toLowerCase() === name.toLowerCase())) return;
+  cCustList.push(name);
+  const inp = document.getElementById('cCustomer');
+  inp.value = '';
+  document.getElementById('ac-cCustomer').style.display = 'none';
+  renderCustChips();
+  inp.focus();
+}
+function removeCustChip(name) {
+  cCustList = cCustList.filter(c => c !== name);
+  renderCustChips();
+}
+function renderCustChips() {
+  const container = document.getElementById('cCustChips');
+  const inp = document.getElementById('cCustomer');
+  container.querySelectorAll('.cust-chip').forEach(n => n.remove());
+  cCustList.forEach((c, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'cust-chip';
+    chip.style.cssText = `display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:${CUSTOMER_COLORS[i]}22;border:1px solid ${CUSTOMER_COLORS[i]};color:${CUSTOMER_COLORS[i]};border-radius:12px;font-size:11px;font-weight:600;max-width:220px`;
+    const safe = c.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    chip.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c}">${c}</span><span style="cursor:pointer;font-weight:700;flex-shrink:0" onclick="removeCustChip('${safe}')">×</span>`;
+    container.insertBefore(chip, inp);
+  });
+}
+
 async function runCustomerSearch() {
-  const customer = document.getElementById('cCustomer').value.trim();
+  const remaining = document.getElementById('cCustomer').value.trim();
+  if (remaining) addCustChip(remaining);
+
+  const customers = [...cCustList];
   const branch   = document.getElementById('cBranch').value;
   const source   = document.getElementById('cSource').value;
   const dateFrom = document.getElementById('cDateFrom').value;
   const dateTo   = document.getElementById('cDateTo').value;
 
-  if (!customer) {
-    document.getElementById('customerContent').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">고객명을 입력하세요</div></div>`;
+  if (!customers.length) {
+    document.getElementById('customerContent').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">고객을 1명 이상 입력하세요</div></div>`;
     return;
   }
   const btn = document.getElementById('cSearchBtn');
@@ -1615,39 +1662,167 @@ async function runCustomerSearch() {
   document.getElementById('customerContent').innerHTML = '<div class="loading"><div class="spinner"></div> BigQuery 쿼리 중...</div>';
 
   const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
-  const conds = [`LOWER(Customer_Clean) LIKE LOWER('%${customer.replace(/'/g,"''")}%')`];
-  if (branch)   conds.push(`Location = '${branch.replace(/'/g,"''")}'`);
-  if (source)   conds.push(`Source_Clean = '${source.replace(/'/g,"''")}'`);
+  // Apostrophe-safe literal encoder (same pattern as brand tab)
+  const sqlStr = s => "'" + s.replace(/\\/g,'\\\\').replace(/'/g,'\\u0027').replace(/\n/g,'\\n') + "'";
+  const custClauses = customers.map(c => `LOWER(Customer_Clean) LIKE LOWER(${sqlStr('%'+c.toLowerCase()+'%')})`);
+  const conds = ['(' + custClauses.join(' OR ') + ')'];
+  if (branch)   conds.push(`Location = ${sqlStr(branch)}`);
+  if (source)   conds.push(`Source_Clean = ${sqlStr(source)}`);
   if (dateFrom) conds.push(`Date >= '${dateFrom}'`);
   if (dateTo)   conds.push(`Date <= '${dateTo}'`);
   const where = 'WHERE ' + conds.join(' AND ');
 
+  const caseExpr = 'CASE ' + customers.map(c =>
+    `WHEN LOWER(Customer_Clean) LIKE LOWER(${sqlStr('%'+c.toLowerCase()+'%')}) THEN ${sqlStr(c)}`
+  ).join(' ') + ' ELSE NULL END';
+
   try {
-    const [summaryRows, trendRows, brandRows, skuRows] = await Promise.all([
-      bqQuery(`SELECT MAX(Customer_Clean) as customer, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders, COUNT(DISTINCT Brand_Clean) as brands, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where}`),
-      bqQuery(`SELECT FORMAT_DATE('%Y-%m', Date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY month ORDER BY month`),
-      bqQuery(`SELECT Brand_Clean as brand, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY brand ORDER BY revenue DESC LIMIT 30`),
-      bqQuery(`SELECT SKU, MAX(Product_Name) as product, MAX(Brand_Clean) as brand, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, ROUND(SUM(Total)/NULLIF(SUM(Quantity),0),2) as avg_price, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY SKU ORDER BY revenue DESC LIMIT 50`)
-    ]);
+    const queries = [
+      bqQuery(`SELECT ${caseExpr} as cust_label, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders, COUNT(DISTINCT Brand_Clean) as brands, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY cust_label HAVING cust_label IS NOT NULL`),
+      bqQuery(`SELECT ${caseExpr} as cust_label, FORMAT_DATE('%Y-%m', Date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY cust_label, month HAVING cust_label IS NOT NULL ORDER BY month`),
+    ];
+    if (customers.length === 1) {
+      queries.push(
+        bqQuery(`SELECT Brand_Clean as brand, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY brand ORDER BY revenue DESC LIMIT 30`),
+        bqQuery(`SELECT SKU, MAX(Product_Name) as product, MAX(Brand_Clean) as brand, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, ROUND(SUM(Total)/NULLIF(SUM(Quantity),0),2) as avg_price, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY SKU ORDER BY revenue DESC LIMIT 50`)
+      );
+    }
+    const results = await Promise.all(queries);
+    const summaryRows = results[0];
+    const trendRows   = results[1];
+    const brandRows   = results[2] || [];
+    const skuRows     = results[3] || [];
 
     btn.disabled = false; btn.textContent = '🔍 분석';
-    if (!trendRows.length) {
-      document.getElementById('customerContent').innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">결과 없음</div><div class="empty-desc">고객 "${customer}"에 해당하는 데이터가 없습니다</div></div>`;
+    if (!summaryRows.length) {
+      document.getElementById('customerContent').innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">결과 없음</div><div class="empty-desc">입력한 고객에 해당하는 데이터가 없습니다</div></div>`;
       return;
     }
-    renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows, customer });
+    renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows, customers });
   } catch(e) {
     btn.disabled = false; btn.textContent = '🔍 분석';
     document.getElementById('customerContent').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">쿼리 오류</div><div class="empty-desc">${e.message}</div></div>`;
   }
 }
 
-function renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows, customer }) {
+function renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows, customers }) {
+  const isMulti = customers.length > 1;
+  const customer = customers[0];
+
+  // ── MULTI-CUSTOMER COMPARISON VIEW ──
+  if (isMulti) {
+    const summaryByCust = {};
+    summaryRows.forEach(r => { summaryByCust[r.cust_label] = r; });
+    const orderedSummary = customers.map(c => summaryByCust[c]).filter(Boolean);
+
+    const monthSet = new Set();
+    trendRows.forEach(r => monthSet.add(r.month));
+    const months = [...monthSet].sort();
+
+    const pivot = {};
+    customers.forEach(c => { pivot[c] = {}; months.forEach(m => pivot[c][m] = { rev:0, gp:0, qty:0, orders:0 }); });
+    trendRows.forEach(r => {
+      if (pivot[r.cust_label] && pivot[r.cust_label][r.month]) {
+        pivot[r.cust_label][r.month] = {
+          rev: parseFloat(r.revenue)||0, gp: parseFloat(r.gp)||0,
+          qty: parseInt(r.qty)||0, orders: parseInt(r.orders)||0
+        };
+      }
+    });
+
+    exportData.custCompare = [];
+    customers.forEach(c => months.forEach(m => {
+      const x = pivot[c][m];
+      exportData.custCompare.push({ Customer:c, Month:m, Revenue:x.rev, Gross_Profit:x.gp, GM_Pct: x.rev>0?(x.gp/x.rev*100).toFixed(1):0, Quantity:x.qty, Orders:x.orders });
+    }));
+
+    const today = new Date();
+    const kpiCards = orderedSummary.map(s => {
+      const color = CUSTOMER_COLORS[customers.indexOf(s.cust_label)] || '#3b82f6';
+      const rev = parseFloat(s.revenue)||0, gp = parseFloat(s.gp)||0;
+      const gm = rev > 0 ? (gp/rev*100).toFixed(1) : '0';
+      const cMonths = months.map(m => pivot[s.cust_label][m].rev);
+      const mid = Math.floor(cMonths.length/2);
+      const firstHalf = cMonths.slice(0,mid).reduce((a,b)=>a+b,0);
+      const secondHalf = cMonths.slice(mid).reduce((a,b)=>a+b,0);
+      const growth = firstHalf>0 ? ((secondHalf-firstHalf)/firstHalf*100).toFixed(1) : 'N/A';
+      const growthColor = growth === 'N/A' ? 'var(--dim)' : (parseFloat(growth)>=0 ? 'var(--green)' : 'var(--red)');
+      const growthSign = growth !== 'N/A' && parseFloat(growth)>=0 ? '+' : '';
+      // Days since last purchase
+      let daysAgo = '—';
+      if (s.last_date) {
+        const d = new Date(s.last_date);
+        const diff = Math.floor((today - d) / (1000*60*60*24));
+        daysAgo = diff + '일 전';
+      }
+      return `
+        <div style="background:#0f1625;border:1px solid ${color};border-left:3px solid ${color};border-radius:6px;padding:12px 14px;min-width:190px;flex:1">
+          <div style="font-size:12px;font-weight:700;color:${color};margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${s.cust_label}">${s.cust_label}</div>
+          <div style="font-size:10px;color:var(--dim);margin-bottom:8px">마지막 구매: ${s.last_date||'—'} · ${daysAgo}</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:11px">
+            <div><div style="color:var(--dim);font-size:10px">매출</div><div style="font-weight:600;color:var(--text)">${fmtK(rev)}</div></div>
+            <div><div style="color:var(--dim);font-size:10px">GP</div><div style="font-weight:600;color:var(--text)">${fmtK(gp)}</div></div>
+            <div><div style="color:var(--dim);font-size:10px">GM%</div><div style="font-weight:600;color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</div></div>
+            <div><div style="color:var(--dim);font-size:10px">성장률</div><div style="font-weight:600;color:${growthColor}">${growth==='N/A'?'N/A':growthSign+growth+'%'}</div></div>
+            <div><div style="color:var(--dim);font-size:10px">주문</div><div style="font-weight:600;color:var(--text)">${parseInt(s.orders)||0}</div></div>
+            <div><div style="color:var(--dim);font-size:10px">브랜드</div><div style="font-weight:600;color:var(--text)">${parseInt(s.brands)||0}</div></div>
+          </div>
+        </div>`;
+    }).join('');
+
+    document.getElementById('customerContent').innerHTML = `
+      <div style="padding:20px 24px 24px">
+        <div style="margin-bottom:14px">
+          <span style="font-size:13px;font-weight:700;color:var(--text)">👥 고객 비교 (${customers.length}명)</span>
+          <button class="export-btn" style="margin-left:12px" onclick="exportCSV(exportData.custCompare,'customer_compare.csv')">⬇ CSV</button>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px">${kpiCards}</div>
+        <div class="charts-grid" style="margin-bottom:16px">
+          <div class="card">
+            <div class="card-hdr"><span class="card-title">월별 매출 추이</span><span class="card-badge">${months.length}개월</span></div>
+            <div class="chart-box tall"><canvas id="cCustCmpRev"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-hdr"><span class="card-title">월별 GP% 추이</span></div>
+            <div class="chart-box tall"><canvas id="cCustCmpGm"></canvas></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const revDatasets = customers.map((c,i) => ({
+      label: c, data: months.map(m => pivot[c][m].rev),
+      borderColor: CUSTOMER_COLORS[i], backgroundColor: CUSTOMER_COLORS[i]+'33',
+      tension: 0.3, borderWidth: 2, pointRadius: 3
+    }));
+    mkChart('cCustCmpRev', { type:'line', data:{ labels:months, datasets:revDatasets },
+      options:{...baseOpts(), plugins:{...baseOpts().plugins, legend:{display:true,position:'top',labels:{color:'#94a3b8',font:{size:10}}}, tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>' '+ctx.dataset.label+': '+fmt(ctx.raw)}}}}});
+
+    const gmDatasets = customers.map((c,i) => ({
+      label: c,
+      data: months.map(m => { const x = pivot[c][m]; return x.rev>0 ? +(x.gp/x.rev*100).toFixed(1) : null; }),
+      borderColor: CUSTOMER_COLORS[i], backgroundColor: CUSTOMER_COLORS[i]+'33',
+      tension: 0.3, borderWidth: 2, pointRadius: 3, spanGaps: true
+    }));
+    mkChart('cCustCmpGm', { type:'line', data:{ labels:months, datasets:gmDatasets },
+      options:{...baseOpts(), plugins:{...baseOpts().plugins, legend:{display:true,position:'top',labels:{color:'#94a3b8',font:{size:10}}}, tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>' '+ctx.dataset.label+': '+(ctx.raw==null?'—':ctx.raw+'%')}}}, scales:{...baseOpts().scales, y:{...baseOpts().scales.y, ticks:{...baseOpts().scales.y.ticks, callback:v=>v+'%'}}}}});
+    return;
+  }
+
+  // ── SINGLE CUSTOMER DEEP-DIVE (original) ──
+  const s0 = summaryRows[0] || {};
+  const singleSummary = [{
+    customer: s0.cust_label || customer,
+    revenue: s0.revenue, gp: s0.gp, qty: s0.qty,
+    orders: s0.orders, brands: s0.brands,
+    first_date: s0.first_date, last_date: s0.last_date
+  }];
+
   // Cache for export
   exportData.custTrend  = trendRows.map(r => ({ Customer: customer, Month: r.month, Revenue: r.revenue, Gross_Profit: r.gp, Quantity: r.qty, Orders: r.orders }));
   exportData.custBrands = brandRows.map(r => ({ Customer: customer, Brand: r.brand, First_Date: r.first_date, Last_Date: r.last_date, Revenue: r.revenue, Gross_Profit: r.gp, GM_Pct: (parseFloat(r.revenue)>0?(parseFloat(r.gp)/parseFloat(r.revenue)*100).toFixed(1):0), Quantity: r.qty, Orders: r.orders }));
   exportData.custSkus   = skuRows.map(r => ({ Customer: customer, SKU: r.SKU, Product: r.product, Brand: r.brand, First_Date: r.first_date, Last_Date: r.last_date, Avg_Price: r.avg_price, Revenue: r.revenue, Gross_Profit: r.gp, GM_Pct: (parseFloat(r.revenue)>0?(parseFloat(r.gp)/parseFloat(r.revenue)*100).toFixed(1):0), Quantity: r.qty, Orders: r.orders }));
-  const s = summaryRows[0] || {};
+  const s = singleSummary[0] || {};
   const rev = parseFloat(s.revenue)||0, gp = parseFloat(s.gp)||0;
   const gm = rev > 0 ? (gp/rev*100).toFixed(1) : '0';
   const avgOrder = (parseInt(s.orders)||0) > 0 ? rev / (parseInt(s.orders)||1) : 0;
@@ -1809,6 +1984,10 @@ function acSelect(e, fieldId) {
   const val = e.currentTarget.dataset.val;
   if (fieldId === 'bBrand') {
     addBrandChip(val);
+    return;
+  }
+  if (fieldId === 'cCustomer') {
+    addCustChip(val);
     return;
   }
   const input = document.getElementById(fieldId);
