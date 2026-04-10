@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Asung Analytics</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 :root {
   --bg: #080a0f;
@@ -543,42 +544,71 @@ function switchTab(tab) {
 }
 
 // ══════════════════════════════════════
-// AUTH
+// AUTH  (Google Identity Services - popup)
 // ══════════════════════════════════════
-function signIn() {
-  const params = new URLSearchParams({
+let tokenClient = null;
+
+function initGIS() {
+  if (!window.google?.accounts?.oauth2) {
+    setTimeout(initGIS, 200);
+    return;
+  }
+  tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
-    redirect_uri: window.location.origin + window.location.pathname,
-    response_type: 'token',
-    scope: 'https://www.googleapis.com/auth/bigquery.readonly https://www.googleapis.com/auth/userinfo.email',
-    prompt: 'select_account'
+    scope: [
+      'https://www.googleapis.com/auth/bigquery.readonly',
+      'https://www.googleapis.com/auth/userinfo.email',
+      'openid'
+    ].join(' '),
+    callback: async (resp) => {
+      if (resp.error) {
+        document.getElementById('authErr').textContent = '로그인 오류: ' + resp.error;
+        return;
+      }
+      accessToken = resp.access_token;
+      sessionStorage.setItem('asung_token', accessToken);
+      sessionStorage.setItem('asung_token_exp', Date.now() + 55 * 60 * 1000);
+      await loadUser();
+    },
+    error_callback: (err) => {
+      if (err.type !== 'popup_closed') {
+        document.getElementById('authErr').textContent = '팝업 오류: ' + (err.message || err.type);
+      }
+    }
   });
-  window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params;
+}
+
+function signIn() {
+  if (!tokenClient) {
+    document.getElementById('authErr').textContent = 'Google 라이브러리 로딩 중입니다. 잠시 후 다시 시도하세요.';
+    return;
+  }
+  document.getElementById('authErr').textContent = '';
+  tokenClient.requestAccessToken({ prompt: 'select_account' });
 }
 
 function signOut() {
+  if (accessToken && window.google?.accounts?.oauth2) {
+    google.accounts.oauth2.revoke(accessToken, () => {});
+  }
   accessToken = null; currentUser = null;
+  sessionStorage.removeItem('asung_token');
+  sessionStorage.removeItem('asung_token_exp');
   document.getElementById('mainApp').style.display = 'none';
   document.getElementById('authScreen').style.display = 'flex';
+  document.getElementById('authErr').textContent = '';
 }
 
 async function checkAuth() {
-  // Check hash for token (OAuth implicit flow)
-  const hash = new URLSearchParams(window.location.hash.slice(1));
-  const token = hash.get('access_token');
-  if (token) {
-    accessToken = token;
-    window.history.replaceState(null, '', window.location.pathname);
-    await loadUser();
-    return;
-  }
-  // Check sessionStorage
   const saved = sessionStorage.getItem('asung_token');
-  if (saved) {
+  const exp   = parseInt(sessionStorage.getItem('asung_token_exp') || '0');
+  if (saved && Date.now() < exp) {
     accessToken = saved;
     await loadUser();
     return;
   }
+  sessionStorage.removeItem('asung_token');
+  sessionStorage.removeItem('asung_token_exp');
   document.getElementById('authScreen').style.display = 'flex';
 }
 
@@ -620,8 +650,11 @@ async function loadUser() {
     loadCustomerList(); // preload for autocomplete
     loadBrandList();    // preload for autocomplete
   } catch(e) {
-    document.getElementById('authErr').textContent = '로그인 오류: ' + e.message;
+    sessionStorage.removeItem('asung_token');
+    sessionStorage.removeItem('asung_token_exp');
     accessToken = null;
+    document.getElementById('authErr').textContent = '로그인 오류: ' + e.message;
+    document.getElementById('authScreen').style.display = 'flex';
   }
 }
 
@@ -2025,6 +2058,7 @@ function renderMonthlyComparison({ rows1, rows2, label1, label2 }) {
 
 
 // ── INIT ──
+initGIS();
 checkAuth();
 </script>
 </body>
