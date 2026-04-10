@@ -209,6 +209,8 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
   <div class="tab-nav">
     <button class="tab-btn active" onclick="switchTab('sales')">📊 Sales Overview</button>
     <button class="tab-btn" onclick="switchTab('price')">💰 Price Analysis</button>
+    <button class="tab-btn" onclick="switchTab('brand')">🏷 Brand Performance</button>
+    <button class="tab-btn" onclick="switchTab('customer')">👤 Customer Performance</button>
   </div>
 
   <!-- TAB: SALES (existing content) -->
@@ -320,6 +322,97 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
       </div>
     </div>
   </div><!-- /tab-price -->
+
+  <!-- TAB: BRAND PERFORMANCE -->
+  <div class="tab-panel" id="tab-brand">
+    <div class="price-search">
+      <div class="field">
+        <label class="field-label">기간</label>
+        <div class="date-row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;min-width:240px">
+          <input type="date" id="bDateFrom">
+          <input type="date" id="bDateTo">
+        </div>
+      </div>
+      <div class="field">
+        <label class="field-label">Brand <span style="color:var(--red)">*필수</span></label>
+        <input type="text" id="bBrand" placeholder="예: ORS, Kim & C" style="min-width:180px">
+      </div>
+      <div class="field">
+        <label class="field-label">Branch</label>
+        <select id="bBranch">
+          <option value="">전체</option>
+          <option value="Asung Trading Inc.">Toronto</option>
+          <option value="Asung - Edmonton">Edmonton</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label">Source</label>
+        <select id="bSource">
+          <option value="">전체</option>
+          <option value="B2B">B2B</option>
+          <option value="Shopify">Shopify</option>
+          <option value="Pos">POS</option>
+          <option value="Backend">Backend</option>
+        </select>
+      </div>
+      <div>
+        <button class="search-btn" id="bSearchBtn" onclick="runBrandSearch()">🔍 분석</button>
+      </div>
+    </div>
+    <div class="content" id="brandContent">
+      <div class="empty-state">
+        <div class="empty-icon">🏷</div>
+        <div class="empty-title">브랜드를 입력하고 분석 버튼을 누르세요</div>
+        <div class="empty-desc">브랜드의 월별 추이 · SKU별 · 고객별 성과를 분석합니다</div>
+      </div>
+    </div>
+  </div><!-- /tab-brand -->
+
+  <!-- TAB: CUSTOMER PERFORMANCE -->
+  <div class="tab-panel" id="tab-customer">
+    <div class="price-search">
+      <div class="field">
+        <label class="field-label">기간</label>
+        <div class="date-row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;min-width:240px">
+          <input type="date" id="cDateFrom">
+          <input type="date" id="cDateTo">
+        </div>
+      </div>
+      <div class="field">
+        <label class="field-label">Customer <span style="color:var(--red)">*필수</span></label>
+        <input type="text" id="cCustomer" placeholder="예: Clore, Rex Beauty" style="min-width:180px">
+      </div>
+      <div class="field">
+        <label class="field-label">Branch</label>
+        <select id="cBranch">
+          <option value="">전체</option>
+          <option value="Asung Trading Inc.">Toronto</option>
+          <option value="Asung - Edmonton">Edmonton</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label">Source</label>
+        <select id="cSource">
+          <option value="">전체</option>
+          <option value="B2B">B2B</option>
+          <option value="Shopify">Shopify</option>
+          <option value="Pos">POS</option>
+          <option value="Backend">Backend</option>
+        </select>
+      </div>
+      <div>
+        <button class="search-btn" id="cSearchBtn" onclick="runCustomerSearch()">🔍 분석</button>
+      </div>
+    </div>
+    <div class="content" id="customerContent">
+      <div class="empty-state">
+        <div class="empty-icon">👤</div>
+        <div class="empty-title">고객을 입력하고 분석 버튼을 누르세요</div>
+        <div class="empty-desc">고객의 월별 추이 · 브랜드별 · SKU별 구매 패턴을 분석합니다</div>
+      </div>
+    </div>
+  </div><!-- /tab-customer -->
+
 </div><!-- /mainApp -->
 
 <script>
@@ -416,6 +509,10 @@ async function loadUser() {
     document.getElementById('dateTo').value = today.toISOString().slice(0,10);
     document.getElementById('pDateFrom').value = '2022-01-01';
     document.getElementById('pDateTo').value = today.toISOString().slice(0,10);
+    document.getElementById('bDateFrom').value = '2022-01-01';
+    document.getElementById('bDateTo').value = today.toISOString().slice(0,10);
+    document.getElementById('cDateFrom').value = '2022-01-01';
+    document.getElementById('cDateTo').value = today.toISOString().slice(0,10);
 
     runSearch();
   } catch(e) {
@@ -771,6 +868,8 @@ async function runPriceSearch() {
       bqQuery(`
         SELECT
           ROUND(Unit_Price, 2) as price,
+          MIN(CAST(Date AS STRING)) as first_date,
+          MAX(CAST(Date AS STRING)) as last_date,
           SUM(Quantity) as qty,
           SUM(Total) as revenue,
           SUM(Gross_Profit) as gp,
@@ -791,9 +890,11 @@ async function runPriceSearch() {
         FROM ${fullTable} ${where}
         GROUP BY SKU
       `),
-      // Top customers at each common price
+      // Top customers at each common price — with date range
       bqQuery(`
         SELECT Customer_Clean as customer, ROUND(Unit_Price,2) as price,
+          MIN(CAST(Date AS STRING)) as first_date,
+          MAX(CAST(Date AS STRING)) as last_date,
           SUM(Quantity) as qty, SUM(Total) as revenue
         FROM ${fullTable} ${where}
         GROUP BY customer, price
@@ -864,6 +965,7 @@ function renderPriceAnalysis({ priceRows, summaryRows, custRows, sku }) {
           <table>
             <thead><tr>
               <th>Unit Price</th>
+              <th>첫 판매일</th><th>마지막 판매일</th>
               <th class="num">수량</th><th class="num">수량 비중</th>
               <th class="num">매출</th><th class="num">매출 비중</th>
               <th class="num">GP</th><th class="num">GM%</th>
@@ -882,6 +984,8 @@ function renderPriceAnalysis({ priceRows, summaryRows, custRows, sku }) {
                   <td style="font-family:monospace;font-weight:${isTop?'700':'400'};color:${isTop?'var(--green)':'var(--text)'}">
                     $${parseFloat(r.price).toFixed(2)}${isTop?' 🔝':''}
                   </td>
+                  <td style="font-size:11px;color:var(--dim)">${r.first_date||'—'}</td>
+                  <td style="font-size:11px;color:var(--dim)">${r.last_date||'—'}</td>
                   <td class="num">${qty.toLocaleString()}</td>
                   <td class="num">
                     <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
@@ -913,12 +1017,15 @@ function renderPriceAnalysis({ priceRows, summaryRows, custRows, sku }) {
           <table>
             <thead><tr>
               <th>고객</th><th class="num">Unit Price</th>
+              <th>첫 구매일</th><th>마지막 구매일</th>
               <th class="num">수량</th><th class="num">매출</th>
             </tr></thead>
             <tbody>
               ${custRows.map(r => `<tr>
                 <td>${r.customer||'—'}</td>
                 <td class="num" style="font-family:monospace">$${parseFloat(r.price).toFixed(2)}</td>
+                <td style="font-size:11px;color:var(--dim)">${r.first_date||'—'}</td>
+                <td style="font-size:11px;color:var(--dim)">${r.last_date||'—'}</td>
                 <td class="num">${parseInt(r.qty)||0}</td>
                 <td class="num">${fmt(r.revenue)}</td>
               </tr>`).join('')}
@@ -973,6 +1080,287 @@ function renderPriceAnalysis({ priceRows, summaryRows, custRows, sku }) {
       }
     }
   });
+}
+
+// ══════════════════════════════════════
+// BRAND PERFORMANCE
+// ══════════════════════════════════════
+async function runBrandSearch() {
+  const brand    = document.getElementById('bBrand').value.trim();
+  const branch   = document.getElementById('bBranch').value;
+  const source   = document.getElementById('bSource').value;
+  const dateFrom = document.getElementById('bDateFrom').value;
+  const dateTo   = document.getElementById('bDateTo').value;
+
+  if (!brand) {
+    document.getElementById('brandContent').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">브랜드를 입력하세요</div></div>`;
+    return;
+  }
+  const btn = document.getElementById('bSearchBtn');
+  btn.disabled = true; btn.textContent = '⏳ 쿼리 중...';
+  document.getElementById('brandContent').innerHTML = '<div class="loading"><div class="spinner"></div> BigQuery 쿼리 중...</div>';
+
+  const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
+  const conds = [`LOWER(Brand_Clean) LIKE LOWER('%${brand.replace(/'/g,"''")}%')`];
+  if (branch)   conds.push(`Location = '${branch.replace(/'/g,"''")}'`);
+  if (source)   conds.push(`Source_Clean = '${source.replace(/'/g,"''")}'`);
+  if (dateFrom) conds.push(`Date >= '${dateFrom}'`);
+  if (dateTo)   conds.push(`Date <= '${dateTo}'`);
+  const where = 'WHERE ' + conds.join(' AND ');
+
+  try {
+    const [summaryRows, trendRows, skuRows, custRows] = await Promise.all([
+      bqQuery(`SELECT MAX(Brand_Clean) as brand, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders, COUNT(DISTINCT Customer_Clean) as customers, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where}`),
+      bqQuery(`SELECT FORMAT_DATE('%Y-%m', Date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY month ORDER BY month`),
+      bqQuery(`SELECT SKU, MAX(Product_Name) as product, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY SKU ORDER BY revenue DESC LIMIT 50`),
+      bqQuery(`SELECT Customer_Clean as customer, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY customer ORDER BY revenue DESC LIMIT 50`)
+    ]);
+
+    btn.disabled = false; btn.textContent = '🔍 분석';
+    if (!trendRows.length) {
+      document.getElementById('brandContent').innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">결과 없음</div><div class="empty-desc">브랜드 "${brand}"에 해당하는 데이터가 없습니다</div></div>`;
+      return;
+    }
+    renderBrandPerformance({ summaryRows, trendRows, skuRows, custRows, brand });
+  } catch(e) {
+    btn.disabled = false; btn.textContent = '🔍 분석';
+    document.getElementById('brandContent').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">쿼리 오류</div><div class="empty-desc">${e.message}</div></div>`;
+  }
+}
+
+function renderBrandPerformance({ summaryRows, trendRows, skuRows, custRows, brand }) {
+  const s = summaryRows[0] || {};
+  const rev = parseFloat(s.revenue)||0, gp = parseFloat(s.gp)||0;
+  const gm = rev > 0 ? (gp/rev*100).toFixed(1) : '0';
+
+  document.getElementById('brandContent').innerHTML = `
+    <div style="padding:20px 24px 0">
+      <div style="margin-bottom:14px">
+        <span style="font-size:13px;font-weight:700;color:var(--text)">${s.brand || brand}</span>
+        <span style="font-size:11px;color:var(--dim);margin-left:8px">${s.first_date||''} ~ ${s.last_date||''}</span>
+      </div>
+      <div class="kpi-strip" style="margin-bottom:20px">
+        <div class="kpi blue"><div class="kpi-lbl">총 매출</div><div class="kpi-val">${fmtK(rev)}</div><div class="kpi-sub">${parseInt(s.orders)||0} orders</div></div>
+        <div class="kpi green"><div class="kpi-lbl">Gross Profit</div><div class="kpi-val">${fmtK(gp)}</div><div class="kpi-sub">GM ${gm}%</div></div>
+        <div class="kpi yellow"><div class="kpi-lbl">총 수량</div><div class="kpi-val">${(parseInt(s.qty)||0).toLocaleString()}</div><div class="kpi-sub">units</div></div>
+        <div class="kpi purple"><div class="kpi-lbl">고객 수</div><div class="kpi-val">${parseInt(s.customers)||0}</div><div class="kpi-sub">unique</div></div>
+        <div class="kpi teal"><div class="kpi-lbl">SKU 수</div><div class="kpi-val">${skuRows.length}</div><div class="kpi-sub">products</div></div>
+        <div class="kpi blue"><div class="kpi-lbl">평균 월 매출</div><div class="kpi-val">${fmtK(rev / Math.max(trendRows.length,1))}</div><div class="kpi-sub">${trendRows.length}개월</div></div>
+      </div>
+      <div class="charts-grid" style="margin-bottom:16px">
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">월별 매출 · GP 추이</span><span class="card-badge">${trendRows.length}개월</span></div>
+          <div class="chart-box tall"><canvas id="cBrandTrend"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">월별 수량</span></div>
+          <div class="chart-box tall"><canvas id="cBrandQty"></canvas></div>
+        </div>
+      </div>
+      <div class="tbl-card" style="margin-bottom:16px">
+        <div class="tbl-hdr"><span class="tbl-title">SKU별 성과</span><span class="tbl-count">${skuRows.length}개 SKU</span></div>
+        <div class="tbl-wrap">
+          <table><thead><tr>
+            <th>SKU</th><th>제품명</th>
+            <th>첫 판매일</th><th>마지막 판매일</th>
+            <th class="num">매출</th><th class="num">GP</th><th class="num">GM%</th>
+            <th class="num">수량</th><th class="num">오더수</th>
+          </tr></thead><tbody>
+            ${skuRows.map(r => {
+              const rv=parseFloat(r.revenue)||0, g=parseFloat(r.gp)||0, gm=rv>0?(g/rv*100).toFixed(1):0;
+              return `<tr>
+                <td style="font-family:monospace;font-size:11px">${r.SKU||'—'}</td>
+                <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.product||'—'}</td>
+                <td style="font-size:11px;color:var(--dim)">${r.first_date||'—'}</td>
+                <td style="font-size:11px;color:var(--dim)">${r.last_date||'—'}</td>
+                <td class="num">${fmt(rv)}</td>
+                <td class="num ${g>=0?'pos':'neg'}">${fmt(g)}</td>
+                <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
+                <td class="num">${parseInt(r.qty)||0}</td>
+                <td class="num">${parseInt(r.orders)||0}</td>
+              </tr>`;
+            }).join('')}
+          </tbody></table>
+        </div>
+      </div>
+      <div class="tbl-card" style="margin-bottom:24px">
+        <div class="tbl-hdr"><span class="tbl-title">고객별 구매 내역</span><span class="tbl-count">${custRows.length}개 고객</span></div>
+        <div class="tbl-wrap">
+          <table><thead><tr>
+            <th>고객</th>
+            <th>첫 구매일</th><th>마지막 구매일</th>
+            <th class="num">매출</th><th class="num">GP</th><th class="num">GM%</th>
+            <th class="num">수량</th><th class="num">오더수</th>
+          </tr></thead><tbody>
+            ${custRows.map(r => {
+              const rv=parseFloat(r.revenue)||0, g=parseFloat(r.gp)||0, gm=rv>0?(g/rv*100).toFixed(1):0;
+              return `<tr>
+                <td>${r.customer||'—'}</td>
+                <td style="font-size:11px;color:var(--dim)">${r.first_date||'—'}</td>
+                <td style="font-size:11px;color:var(--dim)">${r.last_date||'—'}</td>
+                <td class="num">${fmt(rv)}</td>
+                <td class="num ${g>=0?'pos':'neg'}">${fmt(g)}</td>
+                <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
+                <td class="num">${parseInt(r.qty)||0}</td>
+                <td class="num">${parseInt(r.orders)||0}</td>
+              </tr>`;
+            }).join('')}
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const labels = trendRows.map(r => r.month);
+  mkChart('cBrandTrend', { type:'bar', data:{ labels, datasets:[
+    {label:'매출', data:trendRows.map(r=>parseFloat(r.revenue)||0), backgroundColor:'rgba(59,130,246,0.7)', borderRadius:4, yAxisID:'y'},
+    {label:'GP',   data:trendRows.map(r=>parseFloat(r.gp)||0),      backgroundColor:'rgba(34,197,94,0.7)',  borderRadius:4, yAxisID:'y'},
+  ]}, options:{...baseOpts(), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>' '+ctx.dataset.label+': '+fmt(ctx.raw)}}}, scales:{...baseOpts().scales}}});
+
+  mkChart('cBrandQty', { type:'bar', data:{ labels, datasets:[
+    {label:'수량', data:trendRows.map(r=>parseInt(r.qty)||0), backgroundColor:'rgba(168,85,247,0.7)', borderRadius:4}
+  ]}, options:baseOpts()});
+}
+
+// ══════════════════════════════════════
+// CUSTOMER PERFORMANCE
+// ══════════════════════════════════════
+async function runCustomerSearch() {
+  const customer = document.getElementById('cCustomer').value.trim();
+  const branch   = document.getElementById('cBranch').value;
+  const source   = document.getElementById('cSource').value;
+  const dateFrom = document.getElementById('cDateFrom').value;
+  const dateTo   = document.getElementById('cDateTo').value;
+
+  if (!customer) {
+    document.getElementById('customerContent').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">고객명을 입력하세요</div></div>`;
+    return;
+  }
+  const btn = document.getElementById('cSearchBtn');
+  btn.disabled = true; btn.textContent = '⏳ 쿼리 중...';
+  document.getElementById('customerContent').innerHTML = '<div class="loading"><div class="spinner"></div> BigQuery 쿼리 중...</div>';
+
+  const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
+  const conds = [`LOWER(Customer_Clean) LIKE LOWER('%${customer.replace(/'/g,"''")}%')`];
+  if (branch)   conds.push(`Location = '${branch.replace(/'/g,"''")}'`);
+  if (source)   conds.push(`Source_Clean = '${source.replace(/'/g,"''")}'`);
+  if (dateFrom) conds.push(`Date >= '${dateFrom}'`);
+  if (dateTo)   conds.push(`Date <= '${dateTo}'`);
+  const where = 'WHERE ' + conds.join(' AND ');
+
+  try {
+    const [summaryRows, trendRows, brandRows, skuRows] = await Promise.all([
+      bqQuery(`SELECT MAX(Customer_Clean) as customer, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders, COUNT(DISTINCT Brand_Clean) as brands, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where}`),
+      bqQuery(`SELECT FORMAT_DATE('%Y-%m', Date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY month ORDER BY month`),
+      bqQuery(`SELECT Brand_Clean as brand, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY brand ORDER BY revenue DESC LIMIT 30`),
+      bqQuery(`SELECT SKU, MAX(Product_Name) as product, MAX(Brand_Clean) as brand, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, ROUND(SUM(Total)/NULLIF(SUM(Quantity),0),2) as avg_price, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY SKU ORDER BY revenue DESC LIMIT 50`)
+    ]);
+
+    btn.disabled = false; btn.textContent = '🔍 분석';
+    if (!trendRows.length) {
+      document.getElementById('customerContent').innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">결과 없음</div><div class="empty-desc">고객 "${customer}"에 해당하는 데이터가 없습니다</div></div>`;
+      return;
+    }
+    renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows, customer });
+  } catch(e) {
+    btn.disabled = false; btn.textContent = '🔍 분석';
+    document.getElementById('customerContent').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">쿼리 오류</div><div class="empty-desc">${e.message}</div></div>`;
+  }
+}
+
+function renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows, customer }) {
+  const s = summaryRows[0] || {};
+  const rev = parseFloat(s.revenue)||0, gp = parseFloat(s.gp)||0;
+  const gm = rev > 0 ? (gp/rev*100).toFixed(1) : '0';
+  const avgOrder = (parseInt(s.orders)||0) > 0 ? rev / (parseInt(s.orders)||1) : 0;
+
+  document.getElementById('customerContent').innerHTML = `
+    <div style="padding:20px 24px 0">
+      <div style="margin-bottom:14px">
+        <span style="font-size:13px;font-weight:700;color:var(--text)">${s.customer || customer}</span>
+        <span style="font-size:11px;color:var(--dim);margin-left:8px">${s.first_date||''} ~ ${s.last_date||''}</span>
+      </div>
+      <div class="kpi-strip" style="margin-bottom:20px">
+        <div class="kpi blue"><div class="kpi-lbl">총 매출</div><div class="kpi-val">${fmtK(rev)}</div><div class="kpi-sub">${parseInt(s.orders)||0} orders</div></div>
+        <div class="kpi green"><div class="kpi-lbl">Gross Profit</div><div class="kpi-val">${fmtK(gp)}</div><div class="kpi-sub">GM ${gm}%</div></div>
+        <div class="kpi yellow"><div class="kpi-lbl">총 수량</div><div class="kpi-val">${(parseInt(s.qty)||0).toLocaleString()}</div><div class="kpi-sub">units</div></div>
+        <div class="kpi teal"><div class="kpi-lbl">평균 주문금액</div><div class="kpi-val">${fmtK(avgOrder)}</div><div class="kpi-sub">per order</div></div>
+        <div class="kpi purple"><div class="kpi-lbl">구매 브랜드 수</div><div class="kpi-val">${parseInt(s.brands)||0}</div><div class="kpi-sub">brands</div></div>
+        <div class="kpi blue"><div class="kpi-lbl">구매 SKU 수</div><div class="kpi-val">${skuRows.length}</div><div class="kpi-sub">products</div></div>
+      </div>
+      <div class="charts-grid" style="margin-bottom:16px">
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">월별 구매 추이</span><span class="card-badge">${trendRows.length}개월</span></div>
+          <div class="chart-box tall"><canvas id="cCustTrend"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">브랜드별 매출 비중</span></div>
+          <div class="chart-box tall"><canvas id="cCustBrand"></canvas></div>
+        </div>
+      </div>
+      <div class="tbl-card" style="margin-bottom:16px">
+        <div class="tbl-hdr"><span class="tbl-title">브랜드별 구매 내역</span><span class="tbl-count">${brandRows.length}개 브랜드</span></div>
+        <div class="tbl-wrap">
+          <table><thead><tr>
+            <th>브랜드</th>
+            <th>첫 구매일</th><th>마지막 구매일</th>
+            <th class="num">매출</th><th class="num">GP</th><th class="num">GM%</th>
+            <th class="num">수량</th><th class="num">오더수</th>
+          </tr></thead><tbody>
+            ${brandRows.map(r => {
+              const rv=parseFloat(r.revenue)||0, g=parseFloat(r.gp)||0, gm=rv>0?(g/rv*100).toFixed(1):0;
+              return `<tr>
+                <td style="font-weight:500">${r.brand||'—'}</td>
+                <td style="font-size:11px;color:var(--dim)">${r.first_date||'—'}</td>
+                <td style="font-size:11px;color:var(--dim)">${r.last_date||'—'}</td>
+                <td class="num">${fmt(rv)}</td>
+                <td class="num ${g>=0?'pos':'neg'}">${fmt(g)}</td>
+                <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
+                <td class="num">${parseInt(r.qty)||0}</td>
+                <td class="num">${parseInt(r.orders)||0}</td>
+              </tr>`;
+            }).join('')}
+          </tbody></table>
+        </div>
+      </div>
+      <div class="tbl-card" style="margin-bottom:24px">
+        <div class="tbl-hdr"><span class="tbl-title">SKU별 구매 내역</span><span class="tbl-count">${skuRows.length}개 SKU</span></div>
+        <div class="tbl-wrap">
+          <table><thead><tr>
+            <th>SKU</th><th>제품명</th><th>브랜드</th>
+            <th>첫 구매일</th><th>마지막 구매일</th>
+            <th class="num">평균단가</th><th class="num">매출</th>
+            <th class="num">GP</th><th class="num">GM%</th><th class="num">수량</th>
+          </tr></thead><tbody>
+            ${skuRows.map(r => {
+              const rv=parseFloat(r.revenue)||0, g=parseFloat(r.gp)||0, gm=rv>0?(g/rv*100).toFixed(1):0;
+              return `<tr>
+                <td style="font-family:monospace;font-size:11px">${r.SKU||'—'}</td>
+                <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.product||'—'}</td>
+                <td style="font-size:11px;color:var(--mid)">${r.brand||'—'}</td>
+                <td style="font-size:11px;color:var(--dim)">${r.first_date||'—'}</td>
+                <td style="font-size:11px;color:var(--dim)">${r.last_date||'—'}</td>
+                <td class="num" style="font-family:monospace">$${parseFloat(r.avg_price||0).toFixed(2)}</td>
+                <td class="num">${fmt(rv)}</td>
+                <td class="num ${g>=0?'pos':'neg'}">${fmt(g)}</td>
+                <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
+                <td class="num">${parseInt(r.qty)||0}</td>
+              </tr>`;
+            }).join('')}
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const labels = trendRows.map(r => r.month);
+  mkChart('cCustTrend', { type:'bar', data:{ labels, datasets:[
+    {label:'매출', data:trendRows.map(r=>parseFloat(r.revenue)||0), backgroundColor:'rgba(59,130,246,0.7)', borderRadius:4, yAxisID:'y'},
+    {label:'GP',   data:trendRows.map(r=>parseFloat(r.gp)||0),      backgroundColor:'rgba(34,197,94,0.7)',  borderRadius:4, yAxisID:'y'},
+  ]}, options:{...baseOpts(), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>' '+ctx.dataset.label+': '+fmt(ctx.raw)}}}, scales:{...baseOpts().scales}}});
+
+  const COLORS = ['rgba(59,130,246,0.8)','rgba(34,197,94,0.8)','rgba(249,115,22,0.8)','rgba(168,85,247,0.8)','rgba(20,184,166,0.8)','rgba(234,179,8,0.8)','rgba(239,68,68,0.8)','rgba(99,102,241,0.8)'];
+  mkChart('cCustBrand', { type:'doughnut', data:{ labels: brandRows.slice(0,8).map(r=>r.brand), datasets:[{ data: brandRows.slice(0,8).map(r=>parseFloat(r.revenue)||0), backgroundColor: COLORS, borderWidth:1, borderColor:'#080a0f' }]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:10},boxWidth:10}},tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}}}});
 }
 
 // ── INIT ──
