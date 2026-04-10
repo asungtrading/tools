@@ -149,7 +149,7 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
 
 /* ── AUTOCOMPLETE ── */
 .ac-wrap { position: relative; }
-.ac-list { position: absolute; top: 100%; left: 0; right: 0; background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; max-height: 220px; overflow-y: auto; z-index: 999; margin-top: 2px; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+.ac-list { position: absolute; top: 100%; left: 0; right: 0; background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; max-height: 360px; overflow-y: auto; z-index: 999; margin-top: 2px; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
 .ac-item { padding: 9px 12px; font-size: 12px; color: var(--mid); cursor: pointer; border-bottom: 1px solid var(--border); transition: background .1s; }
 .ac-item:last-child { border-bottom: none; }
 .ac-item:hover, .ac-item.selected { background: var(--surface3); color: var(--text); }
@@ -1939,7 +1939,7 @@ async function loadCustomerList() {
   if (customerList.length) return;
   try {
     const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
-    const rows = await bqQuery(`SELECT DISTINCT Customer_Clean as name FROM ${fullTable} WHERE Customer_Clean IS NOT NULL ORDER BY name LIMIT 2000`);
+    const rows = await bqQuery(`SELECT DISTINCT Customer_Clean as name FROM ${fullTable} WHERE Customer_Clean IS NOT NULL ORDER BY name LIMIT 20000`);
     customerList = rows.map(r => r.name).filter(Boolean);
   } catch(e) { console.warn('Customer list load failed:', e.message); }
 }
@@ -1948,7 +1948,7 @@ async function loadBrandList() {
   if (brandList.length) return;
   try {
     const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
-    const rows = await bqQuery(`SELECT DISTINCT Brand_Clean as name FROM ${fullTable} WHERE Brand_Clean IS NOT NULL ORDER BY name LIMIT 500`);
+    const rows = await bqQuery(`SELECT DISTINCT Brand_Clean as name FROM ${fullTable} WHERE Brand_Clean IS NOT NULL ORDER BY name LIMIT 2000`);
     brandList = rows.map(r => r.name).filter(Boolean);
   } catch(e) { console.warn('Brand list load failed:', e.message); }
 }
@@ -1967,8 +1967,8 @@ function acInput(input, fieldId, type='customer') {
   }
 
   const matches = q
-    ? sourceList.filter(n => n.toLowerCase().includes(q)).slice(0, 40)
-    : sourceList.slice(0, 40);
+    ? sourceList.filter(n => n.toLowerCase().includes(q)).slice(0, 100)
+    : sourceList.slice(0, 100);
 
   if (!matches.length) { list.style.display = 'none'; return; }
 
