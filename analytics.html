@@ -1323,8 +1323,9 @@ async function runBrandSearch() {
   document.getElementById('brandContent').innerHTML = '<div class="loading"><div class="spinner"></div> BigQuery 쿼리 중...</div>';
 
   const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
-  // Each brand uses LIKE for fuzzy match, joined by OR
-  const brandClauses = brands.map(b => `LOWER(Brand_Clean) LIKE LOWER('%${b.replace(/'/g,"''")}%')`);
+  // Each brand uses LIKE for fuzzy match, joined by OR (double-quoted to survive apostrophes)
+  const sqlDq2 = s => '"' + s.replace(/\\/g,'\\\\').replace(/"/g,'\\"') + '"';
+  const brandClauses = brands.map(b => `LOWER(Brand_Clean) LIKE LOWER(${sqlDq2('%'+b.toLowerCase()+'%')})`);
   const conds = ['(' + brandClauses.join(' OR ') + ')'];
   if (branch)   conds.push(`Location = '${branch.replace(/'/g,"''")}'`);
   if (source)   conds.push(`Source_Clean = '${source.replace(/'/g,"''")}'`);
@@ -1332,9 +1333,13 @@ async function runBrandSearch() {
   if (dateTo)   conds.push(`Date <= '${dateTo}'`);
   const where = 'WHERE ' + conds.join(' AND ');
 
-  // Build a CASE expression to bucket rows into the user-typed brand label
+  // Build a CASE expression to bucket rows into the user-typed brand label.
+  // Use double-quoted string literals so apostrophes in brand names (e.g. "Aunt Jackie's")
+  // don't need escaping — BigQuery treats '' inside single-quoted literals as two concatenated
+  // string literals which triggers a syntax error.
+  const sqlDq = s => '"' + s.replace(/\\/g,'\\\\').replace(/"/g,'\\"') + '"';
   const caseExpr = 'CASE ' + brands.map(b =>
-    `WHEN LOWER(Brand_Clean) LIKE LOWER('%${b.replace(/'/g,"''")}%') THEN '${b.replace(/'/g,"''")}'`
+    `WHEN LOWER(Brand_Clean) LIKE LOWER(${sqlDq('%'+b.toLowerCase()+'%')}) THEN ${sqlDq(b)}`
   ).join(' ') + ' ELSE NULL END';
 
   try {
