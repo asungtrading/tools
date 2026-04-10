@@ -146,6 +146,9 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
 .gm-bar { height: 4px; background: var(--surface3); border-radius: 2px; margin-top: 4px; overflow: hidden; }
 .gm-fill { height: 100%; border-radius: 2px; }
 
+.export-btn { background: none; border: 1px solid var(--border2); color: var(--mid); font-size: 10px; font-weight: 600; padding: 4px 10px; border-radius: 6px; cursor: pointer; transition: all .2s; letter-spacing: .4px; }
+.export-btn:hover { background: var(--surface2); color: var(--text); border-color: var(--blue); }
+
 /* ── TABS ── */
 .tab-nav { display: flex; align-items: center; gap: 4px; padding: 0 24px; background: var(--surface); border-bottom: 1px solid var(--border); }
 .tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: var(--dim); font-size: 12px; font-weight: 600; padding: 12px 16px; cursor: pointer; transition: all .2s; letter-spacing: .4px; white-space: nowrap; }
@@ -429,6 +432,7 @@ let accessToken = null;
 let currentUser = null;
 let sortCol = null, sortAsc = true;
 const charts = {};
+const exportData = {}; // cache rendered data for CSV export
 
 // ══════════════════════════════════════
 // TABS
@@ -641,6 +645,10 @@ function baseOpts(rot){return{responsive:true,maintainAspectRatio:false,plugins:
 
 function renderResults(data) {
   const { kpiRows, trendRows, brandRows, custRows, sourceRows, locationRows, detailRows } = data;
+  // Cache for export
+  exportData.salesBrands  = brandRows;
+  exportData.salesCusts   = custRows;
+  exportData.salesDetails = detailRows;
   const k = kpiRows[0] || {};
   const revenue = parseFloat(k.revenue)||0;
   const gp = parseFloat(k.gp)||0;
@@ -705,7 +713,10 @@ function renderResults(data) {
     <div class="tbl-card">
       <div class="tbl-hdr">
         <span class="tbl-title">브랜드별 상세</span>
-        <span class="tbl-count">${brandRows.length}개 브랜드</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="tbl-count">${brandRows.length}개 브랜드</span>
+          <button class="export-btn" onclick="exportCSV(exportData.salesBrands,'sales_brands.csv')">⬇ CSV</button>
+        </div>
       </div>
       <div class="tbl-wrap">${renderBrandTable(brandRows)}</div>
     </div>
@@ -713,7 +724,10 @@ function renderResults(data) {
     <div class="tbl-card">
       <div class="tbl-hdr">
         <span class="tbl-title">고객별 상세</span>
-        <span class="tbl-count">${custRows.length}개 고객</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="tbl-count">${custRows.length}개 고객</span>
+          <button class="export-btn" onclick="exportCSV(exportData.salesCusts,'sales_customers.csv')">⬇ CSV</button>
+        </div>
       </div>
       <div class="tbl-wrap">${renderCustTable(custRows)}</div>
     </div>
@@ -721,7 +735,10 @@ function renderResults(data) {
     <div class="tbl-card">
       <div class="tbl-hdr">
         <span class="tbl-title">오더 라인 상세</span>
-        <span class="tbl-count">최근 200건</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="tbl-count">최근 200건</span>
+          <button class="export-btn" onclick="exportCSV(exportData.salesDetails,'sales_detail.csv')">⬇ CSV</button>
+        </div>
       </div>
       <div class="tbl-wrap">${renderDetailTable(detailRows)}</div>
     </div>
@@ -916,6 +933,19 @@ async function runPriceSearch() {
 }
 
 function renderPriceAnalysis({ priceRows, summaryRows, custRows, sku }) {
+  // Cache for export
+  exportData.priceBands = priceRows.map(r => ({
+    SKU: sku, Unit_Price: r.price,
+    First_Date: r.first_date, Last_Date: r.last_date,
+    Quantity: r.qty, Revenue: r.revenue, Gross_Profit: r.gp,
+    GM_Pct: (parseFloat(r.revenue)>0 ? (parseFloat(r.gp)/parseFloat(r.revenue)*100).toFixed(1) : 0),
+    Orders: r.orders, Customers: r.customers
+  }));
+  exportData.priceCusts = custRows.map(r => ({
+    Customer: r.customer, Unit_Price: r.price,
+    First_Date: r.first_date, Last_Date: r.last_date,
+    Quantity: r.qty, Revenue: r.revenue
+  }));
   const s = summaryRows[0] || {};
   const totalQty = priceRows.reduce((a,r) => a + (parseInt(r.qty)||0), 0);
   const totalRev = priceRows.reduce((a,r) => a + (parseFloat(r.revenue)||0), 0);
@@ -959,7 +989,10 @@ function renderPriceAnalysis({ priceRows, summaryRows, custRows, sku }) {
       <div class="tbl-card" style="margin-bottom:16px">
         <div class="tbl-hdr">
           <span class="tbl-title">가격대별 상세</span>
-          <span class="tbl-count">${priceRows.length}개 가격대</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="tbl-count">${priceRows.length}개 가격대</span>
+            <button class="export-btn" onclick="exportCSV(exportData.priceBands,'price_bands_${sku}.csv')">⬇ CSV</button>
+          </div>
         </div>
         <div class="price-table-wrap">
           <table>
@@ -1011,7 +1044,10 @@ function renderPriceAnalysis({ priceRows, summaryRows, custRows, sku }) {
       <div class="tbl-card" style="margin-bottom:24px">
         <div class="tbl-hdr">
           <span class="tbl-title">고객별 가격 내역</span>
-          <span class="tbl-count">Top 200</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="tbl-count">Top 200</span>
+            <button class="export-btn" onclick="exportCSV(exportData.priceCusts,'price_customers_${sku}.csv')">⬇ CSV</button>
+          </div>
         </div>
         <div class="price-table-wrap">
           <table>
@@ -1129,6 +1165,10 @@ async function runBrandSearch() {
 }
 
 function renderBrandPerformance({ summaryRows, trendRows, skuRows, custRows, brand }) {
+  // Cache for export
+  exportData.brandTrend = trendRows.map(r => ({ Brand: brand, Month: r.month, Revenue: r.revenue, Gross_Profit: r.gp, Quantity: r.qty, Orders: r.orders }));
+  exportData.brandSkus  = skuRows.map(r => ({ Brand: brand, SKU: r.SKU, Product: r.product, First_Date: r.first_date, Last_Date: r.last_date, Revenue: r.revenue, Gross_Profit: r.gp, GM_Pct: (parseFloat(r.revenue)>0?(parseFloat(r.gp)/parseFloat(r.revenue)*100).toFixed(1):0), Quantity: r.qty, Orders: r.orders }));
+  exportData.brandCusts = custRows.map(r => ({ Brand: brand, Customer: r.customer, First_Date: r.first_date, Last_Date: r.last_date, Revenue: r.revenue, Gross_Profit: r.gp, GM_Pct: (parseFloat(r.revenue)>0?(parseFloat(r.gp)/parseFloat(r.revenue)*100).toFixed(1):0), Quantity: r.qty, Orders: r.orders }));
   const s = summaryRows[0] || {};
   const rev = parseFloat(s.revenue)||0, gp = parseFloat(s.gp)||0;
   const gm = rev > 0 ? (gp/rev*100).toFixed(1) : '0';
@@ -1158,7 +1198,13 @@ function renderBrandPerformance({ summaryRows, trendRows, skuRows, custRows, bra
         </div>
       </div>
       <div class="tbl-card" style="margin-bottom:16px">
-        <div class="tbl-hdr"><span class="tbl-title">SKU별 성과</span><span class="tbl-count">${skuRows.length}개 SKU</span></div>
+        <div class="tbl-hdr">
+          <span class="tbl-title">SKU별 성과</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="tbl-count">${skuRows.length}개 SKU</span>
+            <button class="export-btn" onclick="exportCSV(exportData.brandSkus,'brand_sku_${brand}.csv')">⬇ CSV</button>
+          </div>
+        </div>
         <div class="tbl-wrap">
           <table><thead><tr>
             <th>SKU</th><th>제품명</th>
@@ -1184,7 +1230,13 @@ function renderBrandPerformance({ summaryRows, trendRows, skuRows, custRows, bra
         </div>
       </div>
       <div class="tbl-card" style="margin-bottom:24px">
-        <div class="tbl-hdr"><span class="tbl-title">고객별 구매 내역</span><span class="tbl-count">${custRows.length}개 고객</span></div>
+        <div class="tbl-hdr">
+          <span class="tbl-title">고객별 구매 내역</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="tbl-count">${custRows.length}개 고객</span>
+            <button class="export-btn" onclick="exportCSV(exportData.brandCusts,'brand_customers_${brand}.csv')">⬇ CSV</button>
+          </div>
+        </div>
         <div class="tbl-wrap">
           <table><thead><tr>
             <th>고객</th>
@@ -1269,6 +1321,10 @@ async function runCustomerSearch() {
 }
 
 function renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows, customer }) {
+  // Cache for export
+  exportData.custTrend  = trendRows.map(r => ({ Customer: customer, Month: r.month, Revenue: r.revenue, Gross_Profit: r.gp, Quantity: r.qty, Orders: r.orders }));
+  exportData.custBrands = brandRows.map(r => ({ Customer: customer, Brand: r.brand, First_Date: r.first_date, Last_Date: r.last_date, Revenue: r.revenue, Gross_Profit: r.gp, GM_Pct: (parseFloat(r.revenue)>0?(parseFloat(r.gp)/parseFloat(r.revenue)*100).toFixed(1):0), Quantity: r.qty, Orders: r.orders }));
+  exportData.custSkus   = skuRows.map(r => ({ Customer: customer, SKU: r.SKU, Product: r.product, Brand: r.brand, First_Date: r.first_date, Last_Date: r.last_date, Avg_Price: r.avg_price, Revenue: r.revenue, Gross_Profit: r.gp, GM_Pct: (parseFloat(r.revenue)>0?(parseFloat(r.gp)/parseFloat(r.revenue)*100).toFixed(1):0), Quantity: r.qty, Orders: r.orders }));
   const s = summaryRows[0] || {};
   const rev = parseFloat(s.revenue)||0, gp = parseFloat(s.gp)||0;
   const gm = rev > 0 ? (gp/rev*100).toFixed(1) : '0';
@@ -1299,7 +1355,13 @@ function renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows,
         </div>
       </div>
       <div class="tbl-card" style="margin-bottom:16px">
-        <div class="tbl-hdr"><span class="tbl-title">브랜드별 구매 내역</span><span class="tbl-count">${brandRows.length}개 브랜드</span></div>
+        <div class="tbl-hdr">
+          <span class="tbl-title">브랜드별 구매 내역</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="tbl-count">${brandRows.length}개 브랜드</span>
+            <button class="export-btn" onclick="exportCSV(exportData.custBrands,'customer_brands_${customer}.csv')">⬇ CSV</button>
+          </div>
+        </div>
         <div class="tbl-wrap">
           <table><thead><tr>
             <th>브랜드</th>
@@ -1324,7 +1386,13 @@ function renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows,
         </div>
       </div>
       <div class="tbl-card" style="margin-bottom:24px">
-        <div class="tbl-hdr"><span class="tbl-title">SKU별 구매 내역</span><span class="tbl-count">${skuRows.length}개 SKU</span></div>
+        <div class="tbl-hdr">
+          <span class="tbl-title">SKU별 구매 내역</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="tbl-count">${skuRows.length}개 SKU</span>
+            <button class="export-btn" onclick="exportCSV(exportData.custSkus,'customer_skus_${customer}.csv')">⬇ CSV</button>
+          </div>
+        </div>
         <div class="tbl-wrap">
           <table><thead><tr>
             <th>SKU</th><th>제품명</th><th>브랜드</th>
@@ -1361,6 +1429,29 @@ function renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows,
 
   const COLORS = ['rgba(59,130,246,0.8)','rgba(34,197,94,0.8)','rgba(249,115,22,0.8)','rgba(168,85,247,0.8)','rgba(20,184,166,0.8)','rgba(234,179,8,0.8)','rgba(239,68,68,0.8)','rgba(99,102,241,0.8)'];
   mkChart('cCustBrand', { type:'doughnut', data:{ labels: brandRows.slice(0,8).map(r=>r.brand), datasets:[{ data: brandRows.slice(0,8).map(r=>parseFloat(r.revenue)||0), backgroundColor: COLORS, borderWidth:1, borderColor:'#080a0f' }]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:10},boxWidth:10}},tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}}}});
+}
+
+// ══════════════════════════════════════
+// CSV EXPORT
+// ══════════════════════════════════════
+function exportCSV(rows, filename) {
+  if (!rows || !rows.length) return;
+  const headers = Object.keys(rows[0]);
+  const csv = [
+    headers.join(','),
+    ...rows.map(row => headers.map(h => {
+      const v = row[h] ?? '';
+      const s = String(v);
+      return s.includes(',') || s.includes('"') || s.includes('\n')
+        ? '"' + s.replace(/"/g, '""') + '"'
+        : s;
+    }).join(','))
+  ].join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ── INIT ──
