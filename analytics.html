@@ -1772,21 +1772,152 @@ async function runMonthlyComparison(mode='year', custom=null) {
 }
 
 function renderMonthlyComparison({ rows1, rows2, label1, label2 }) {
-  // Use actual months from data (YYYY-MM keys), merged and sorted
-  const allMonths = [...new Set([...rows1.map(r=>r.month), ...rows2.map(r=>r.month)])].sort();
-
-  const map1 = {}, map2 = {};
-  rows1.forEach(r => map1[r.month] = r);
-  rows2.forEach(r => map2[r.month] = r);
+  // Match by position (index) - handles cross-year rolling comparisons
+  // Use the longer array length as reference
+  const maxLen = Math.max(rows1.length, rows2.length);
+  const months1 = rows1.map(r => r.month);
+  const months2 = rows2.map(r => r.month);
 
   // Totals
   const tot1 = { rev: rows1.reduce((a,r)=>a+(parseFloat(r.revenue)||0),0), gp: rows1.reduce((a,r)=>a+(parseFloat(r.gp)||0),0), qty: rows1.reduce((a,r)=>a+(parseInt(r.qty)||0),0), orders: rows1.reduce((a,r)=>a+(parseInt(r.orders)||0),0) };
   const tot2 = { rev: rows2.reduce((a,r)=>a+(parseFloat(r.revenue)||0),0), gp: rows2.reduce((a,r)=>a+(parseFloat(r.gp)||0),0), qty: rows2.reduce((a,r)=>a+(parseInt(r.qty)||0),0), orders: rows2.reduce((a,r)=>a+(parseInt(r.orders)||0),0) };
-  const yoyRev = tot2.rev > 0 ? ((tot1.rev - tot2.rev)/tot2.rev*100).toFixed(1) : '—';
-  const yoyGp  = tot2.gp  > 0 ? ((tot1.gp  - tot2.gp )/tot2.gp *100).toFixed(1) : '—';
+  const chgRev = tot2.rev > 0 ? ((tot1.rev - tot2.rev)/tot2.rev*100).toFixed(1) : '—';
+  const chgGp  = tot2.gp  > 0 ? ((tot1.gp  - tot2.gp )/tot2.gp *100).toFixed(1) : '—';
 
-  // Chart labels: 기간1 month만 (순서대로)
-  const months1 = rows1.map(r => r.month);
+  // Build index-based rows for display and charts
+  const tableRows = Array.from({length: maxLen}, (_, i) => ({
+    r1: rows1[i] || null,
+    r2: rows2[i] || null,
+    m1: months1[i] || '—',
+    m2: months2[i] || '—',
+  }));
+
+  const rev1Data = tableRows.map(t => t.r1 ? parseFloat(t.r1.revenue)||0 : null);
+  const rev2Data = tableRows.map(t => t.r2 ? parseFloat(t.r2.revenue)||0 : null);
+  const gp1Data  = tableRows.map(t => t.r1 ? parseFloat(t.r1.gp)||0 : null);
+  const gp2Data  = tableRows.map(t => t.r2 ? parseFloat(t.r2.gp)||0 : null);
+  const qty1Data = tableRows.map(t => t.r1 ? parseInt(t.r1.qty)||0 : null);
+  const qty2Data = tableRows.map(t => t.r2 ? parseInt(t.r2.qty)||0 : null);
+  const pctData  = tableRows.map((t,i) => (rev1Data[i]!==null&&rev2Data[i]!==null&&rev2Data[i]>0) ? parseFloat(((rev1Data[i]-rev2Data[i])/rev2Data[i]*100).toFixed(1)) : null);
+  const momData  = tableRows.map((t,i) => (i>0&&rev1Data[i]!==null&&rev1Data[i-1]!==null&&rev1Data[i-1]>0) ? parseFloat(((rev1Data[i]-rev1Data[i-1])/rev1Data[i-1]*100).toFixed(1)) : null);
+
+  // Chart labels: 기간1 월 표시
+  const chartLabels = tableRows.map(t => t.m1);
+
+  document.getElementById('monthlyContent').innerHTML = `
+    <div style="padding:20px 24px 0">
+      <div style="margin-bottom:16px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--dim)">비교 요약 — ${label1} vs ${label2}</div>
+      <div class="kpi-strip" style="margin-bottom:24px">
+        <div class="kpi blue"><div class="kpi-lbl">${label1} 총매출</div><div class="kpi-val">${fmtK(tot1.rev)}</div><div class="kpi-sub">${tot1.orders} orders</div></div>
+        <div class="kpi ${parseFloat(chgRev)>=0?'green':'red'}"><div class="kpi-lbl">매출 증감</div><div class="kpi-val">${chgRev==='—'?'—':chgRev+'%'}</div><div class="kpi-sub">vs ${fmtK(tot2.rev)}</div></div>
+        <div class="kpi green"><div class="kpi-lbl">${label1} GP</div><div class="kpi-val">${fmtK(tot1.gp)}</div><div class="kpi-sub">GM ${tot1.rev>0?(tot1.gp/tot1.rev*100).toFixed(1):0}%</div></div>
+        <div class="kpi ${parseFloat(chgGp)>=0?'green':'red'}"><div class="kpi-lbl">GP 증감</div><div class="kpi-val">${chgGp==='—'?'—':chgGp+'%'}</div><div class="kpi-sub">vs ${fmtK(tot2.gp)}</div></div>
+        <div class="kpi yellow"><div class="kpi-lbl">${label1} 수량</div><div class="kpi-val">${tot1.qty.toLocaleString()}</div><div class="kpi-sub">units</div></div>
+        <div class="kpi purple"><div class="kpi-lbl">${label2} 수량</div><div class="kpi-val">${tot2.qty.toLocaleString()}</div><div class="kpi-sub">units</div></div>
+      </div>
+
+      <div class="charts-grid" style="margin-bottom:16px">
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">월별 매출 비교</span><span class="card-badge">${label1} vs ${label2}</span></div>
+          <div class="chart-box tall"><canvas id="cYoYRev"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">월별 GP 비교</span></div>
+          <div class="chart-box tall"><canvas id="cYoYGp"></canvas></div>
+        </div>
+      </div>
+
+      <div class="charts-row" style="margin-bottom:16px">
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">매출 증감률 (%)</span></div>
+          <div class="chart-box"><canvas id="cYoYPct"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">MoM 증감률 — ${label1} (%)</span></div>
+          <div class="chart-box"><canvas id="cMoM"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">월별 수량 비교</span></div>
+          <div class="chart-box"><canvas id="cYoYQty"></canvas></div>
+        </div>
+      </div>
+
+      <div class="tbl-card" style="margin-bottom:24px">
+        <div class="tbl-hdr">
+          <span class="tbl-title">월별 상세 비교</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="tbl-count">${tableRows.length}개월</span>
+            <button class="export-btn" onclick="exportCSV(exportData.monthly,'monthly_comparison.csv')">⬇ CSV</button>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table><thead><tr>
+            <th>${label1} 월</th><th>${label2} 월</th>
+            <th class="num">${label1} 매출</th><th class="num">${label2} 매출</th>
+            <th class="num">증감액</th><th class="num">증감%</th>
+            <th class="num">${label1} GP</th><th class="num">${label2} GP</th><th class="num">GP%</th>
+            <th class="num">${label1} 수량</th><th class="num">${label2} 수량</th>
+            <th class="num">${label1} 오더</th><th class="num">${label2} 오더</th>
+          </tr></thead><tbody>
+            ${tableRows.map((t,i) => {
+              const rev1=rev1Data[i], rev2=rev2Data[i];
+              const gp1=gp1Data[i], gp2=gp2Data[i];
+              const qty1=qty1Data[i], qty2=qty2Data[i];
+              const ord1=t.r1?parseInt(t.r1.orders)||0:null;
+              const ord2=t.r2?parseInt(t.r2.orders)||0:null;
+              const revPct=(rev1!==null&&rev2!==null&&rev2>0)?((rev1-rev2)/rev2*100).toFixed(1):'—';
+              const gpPct =(gp1!==null&&gp2!==null&&gp2>0)?((gp1-gp2)/gp2*100).toFixed(1):'—';
+              const revDiff=(rev1!==null&&rev2!==null)?rev1-rev2:null;
+              return `<tr>
+                <td style="font-weight:600;white-space:nowrap">${t.m1}</td>
+                <td style="color:var(--dim);white-space:nowrap">${t.m2}</td>
+                <td class="num">${rev1!==null?fmt(rev1):'—'}</td>
+                <td class="num" style="color:var(--dim)">${rev2!==null?fmt(rev2):'—'}</td>
+                <td class="num ${revDiff!==null?(revDiff>=0?'pos':'neg'):''}">${revDiff!==null?fmt(revDiff):'—'}</td>
+                <td class="num" style="color:${revPct==='—'?'var(--dim)':parseFloat(revPct)>=0?'var(--green)':'var(--red)'};font-weight:600">${revPct==='—'?'—':revPct+'%'}</td>
+                <td class="num">${gp1!==null?fmt(gp1):'—'}</td>
+                <td class="num" style="color:var(--dim)">${gp2!==null?fmt(gp2):'—'}</td>
+                <td class="num" style="color:${gpPct==='—'?'var(--dim)':parseFloat(gpPct)>=0?'var(--green)':'var(--red)'};font-weight:600">${gpPct==='—'?'—':gpPct+'%'}</td>
+                <td class="num">${qty1!==null?qty1.toLocaleString():'—'}</td>
+                <td class="num" style="color:var(--dim)">${qty2!==null?qty2.toLocaleString():'—'}</td>
+                <td class="num">${ord1!==null?ord1:'—'}</td>
+                <td class="num" style="color:var(--dim)">${ord2!==null?ord2:'—'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Cache for export
+  exportData.monthly = tableRows.map((t,i) => ({
+    [`${label1}_Month`]: t.m1, [`${label2}_Month`]: t.m2,
+    [`${label1}_Revenue`]: rev1Data[i]??'', [`${label2}_Revenue`]: rev2Data[i]??'',
+    Revenue_Change_Pct: pctData[i]??'',
+    [`${label1}_GP`]: gp1Data[i]??'', [`${label2}_GP`]: gp2Data[i]??'',
+    [`${label1}_Qty`]: qty1Data[i]??'', [`${label2}_Qty`]: qty2Data[i]??'',
+  }));
+
+  mkChart('cYoYRev', {type:'bar', data:{labels:chartLabels, datasets:[
+    {label:label1, data:rev1Data, backgroundColor:'rgba(59,130,246,0.75)', borderRadius:4},
+    {label:label2, data:rev2Data, backgroundColor:'rgba(59,130,246,0.25)', borderRadius:4},
+  ]}, options:{...baseOpts(45), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>' '+ctx.dataset.label+': '+fmt(ctx.raw)}}}}});
+
+  mkChart('cYoYGp', {type:'bar', data:{labels:chartLabels, datasets:[
+    {label:label1, data:gp1Data, backgroundColor:'rgba(34,197,94,0.75)', borderRadius:4},
+    {label:label2, data:gp2Data, backgroundColor:'rgba(34,197,94,0.25)', borderRadius:4},
+  ]}, options:{...baseOpts(45), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>' '+ctx.dataset.label+': '+fmt(ctx.raw)}}}}});
+
+  mkChart('cYoYPct', {type:'bar', data:{labels:chartLabels, datasets:[{label:'증감%', data:pctData, borderRadius:4, backgroundColor:pctData.map(v=>v===null?'transparent':v>=0?'rgba(34,197,94,0.75)':'rgba(239,68,68,0.75)')}]}, options:{...baseOpts(45), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+(ctx.raw??'—')+'%'}}}, scales:{...baseOpts().scales, y:{...baseOpts().scales.y, ticks:{...baseOpts().scales.y.ticks, callback:v=>v+'%'}}}}});
+
+  mkChart('cMoM', {type:'bar', data:{labels:chartLabels, datasets:[{label:'MoM%', data:momData, borderRadius:4, backgroundColor:momData.map(v=>v===null?'transparent':v>=0?'rgba(59,130,246,0.75)':'rgba(239,68,68,0.75)')}]}, options:{...baseOpts(45), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+(ctx.raw??'—')+'%'}}}, scales:{...baseOpts().scales, y:{...baseOpts().scales.y, ticks:{...baseOpts().scales.y.ticks, callback:v=>v+'%'}}}}});
+
+  mkChart('cYoYQty', {type:'bar', data:{labels:chartLabels, datasets:[
+    {label:label1, data:qty1Data, backgroundColor:'rgba(168,85,247,0.75)', borderRadius:4},
+    {label:label2, data:qty2Data, backgroundColor:'rgba(168,85,247,0.25)', borderRadius:4},
+  ]}, options:{...baseOpts(45), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,mode:'index'}}}});
+}
 
   document.getElementById('monthlyContent').innerHTML = `
     <div style="padding:20px 24px 0">
@@ -1892,34 +2023,6 @@ function renderMonthlyComparison({ rows1, rows2, label1, label2 }) {
     };
   });
 
-  const rev1Data = months1.map(m => map1[m] ? parseFloat(map1[m].revenue)||0 : null);
-  const rev2Data = months1.map(m => map2[m] ? parseFloat(map2[m].revenue)||0 : null);
-  const gp1Data  = months1.map(m => map1[m] ? parseFloat(map1[m].gp)||0 : null);
-  const gp2Data  = months1.map(m => map2[m] ? parseFloat(map2[m].gp)||0 : null);
-  const qty1Data = months1.map(m => map1[m] ? parseInt(map1[m].qty)||0 : null);
-  const qty2Data = months1.map(m => map2[m] ? parseInt(map2[m].qty)||0 : null);
-  const pctData  = months1.map((m,i) => (rev1Data[i]!==null&&rev2Data[i]!==null&&rev2Data[i]>0) ? parseFloat(((rev1Data[i]-rev2Data[i])/rev2Data[i]*100).toFixed(1)) : null);
-  const momData  = months1.map((m,i) => (i>0&&rev1Data[i]!==null&&rev1Data[i-1]!==null&&rev1Data[i-1]>0) ? parseFloat(((rev1Data[i]-rev1Data[i-1])/rev1Data[i-1]*100).toFixed(1)) : null);
-
-  mkChart('cYoYRev', {type:'bar', data:{labels:months1, datasets:[
-    {label:label1, data:rev1Data, backgroundColor:'rgba(59,130,246,0.75)', borderRadius:4},
-    {label:label2, data:rev2Data, backgroundColor:'rgba(59,130,246,0.25)', borderRadius:4},
-  ]}, options:{...baseOpts(45), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>' '+ctx.dataset.label+': '+fmt(ctx.raw)}}}}});
-
-  mkChart('cYoYGp', {type:'bar', data:{labels:months1, datasets:[
-    {label:label1, data:gp1Data, backgroundColor:'rgba(34,197,94,0.75)', borderRadius:4},
-    {label:label2, data:gp2Data, backgroundColor:'rgba(34,197,94,0.25)', borderRadius:4},
-  ]}, options:{...baseOpts(45), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>' '+ctx.dataset.label+': '+fmt(ctx.raw)}}}}});
-
-  mkChart('cYoYPct', {type:'bar', data:{labels:months1, datasets:[{label:'증감%', data:pctData, borderRadius:4, backgroundColor:pctData.map(v=>v===null?'transparent':v>=0?'rgba(34,197,94,0.75)':'rgba(239,68,68,0.75)')}]}, options:{...baseOpts(45), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+(ctx.raw??'—')+'%'}}}, scales:{...baseOpts().scales, y:{...baseOpts().scales.y, ticks:{...baseOpts().scales.y.ticks, callback:v=>v+'%'}}}}});
-
-  mkChart('cMoM', {type:'bar', data:{labels:months1, datasets:[{label:'MoM%', data:momData, borderRadius:4, backgroundColor:momData.map(v=>v===null?'transparent':v>=0?'rgba(59,130,246,0.75)':'rgba(239,68,68,0.75)')}]}, options:{...baseOpts(45), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+(ctx.raw??'—')+'%'}}}, scales:{...baseOpts().scales, y:{...baseOpts().scales.y, ticks:{...baseOpts().scales.y.ticks, callback:v=>v+'%'}}}}});
-
-  mkChart('cYoYQty', {type:'bar', data:{labels:months1, datasets:[
-    {label:label1, data:qty1Data, backgroundColor:'rgba(168,85,247,0.75)', borderRadius:4},
-    {label:label2, data:qty2Data, backgroundColor:'rgba(168,85,247,0.25)', borderRadius:4},
-  ]}, options:{...baseOpts(45), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,mode:'index'}}}});
-}
 
 // ── INIT ──
 checkAuth();
