@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Asung Analytics</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #080a0f;
+  --surface: #0f1218;
+  --surface2: #161b24;
+  --surface3: #1c2330;
+  --border: #222a38;
+  --border2: #2a3446;
+  --blue: #3b82f6;
+  --blue2: #60a5fa;
+  --green: #22c55e;
+  --red: #ef4444;
+  --yellow: #eab308;
+  --orange: #f97316;
+  --purple: #a855f7;
+  --teal: #14b8a6;
+  --text: #f1f5f9;
+  --mid: #94a3b8;
+  --dim: #475569;
+  --gold: #f59e0b;
+  --grid: #1a2233;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: 'DM Sans', 'Segoe UI', sans-serif; font-size: 13px; min-height: 100vh; }
+body::before { content: ''; position: fixed; inset: 0; background: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(59,130,246,.08), transparent); pointer-events: none; z-index: 0; }
+
+/* ── AUTH ── */
+#authScreen { position: fixed; inset: 0; background: var(--bg); z-index: 9999; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 32px; }
+.auth-logo { text-align: center; }
+.auth-logo-mark { font-size: 48px; font-weight: 900; letter-spacing: -2px; background: linear-gradient(135deg, var(--blue), var(--teal)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.auth-logo-sub { font-size: 12px; letter-spacing: 4px; text-transform: uppercase; color: var(--dim); margin-top: 4px; }
+.auth-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 40px 48px; text-align: center; min-width: 360px; }
+.auth-title { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+.auth-desc { font-size: 12px; color: var(--dim); margin-bottom: 32px; line-height: 1.6; }
+.google-btn { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; background: #fff; color: #1a1a1a; border: none; border-radius: 10px; padding: 14px 20px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all .2s; }
+.google-btn:hover { background: #f0f0f0; transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0,0,0,.3); }
+.google-btn svg { width: 20px; height: 20px; }
+.auth-note { font-size: 11px; color: var(--dim); margin-top: 16px; }
+.auth-err { color: var(--red); font-size: 12px; margin-top: 12px; min-height: 16px; }
+
+/* ── HEADER ── */
+#mainApp { display: none; position: relative; z-index: 1; }
+.hdr { background: rgba(8,10,15,.9); backdrop-filter: blur(16px); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; align-items: center; justify-content: space-between; height: 56px; position: sticky; top: 0; z-index: 100; }
+.hdr-brand { display: flex; align-items: center; gap: 10px; }
+.hdr-logo { font-size: 16px; font-weight: 800; letter-spacing: -0.5px; background: linear-gradient(135deg, var(--blue), var(--teal)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.hdr-sep { color: var(--border2); font-size: 18px; }
+.hdr-title { font-size: 13px; color: var(--mid); font-weight: 500; }
+.hdr-user { display: flex; align-items: center; gap: 10px; }
+.hdr-avatar { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--border2); }
+.hdr-name { font-size: 12px; color: var(--mid); }
+.hdr-signout { font-size: 11px; color: var(--dim); cursor: pointer; padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px; transition: all .2s; background: none; }
+.hdr-signout:hover { color: var(--text); border-color: var(--border2); }
+
+/* ── SEARCH PANEL ── */
+.search-panel { background: var(--surface); border-bottom: 1px solid var(--border); padding: 20px 24px; }
+.search-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap: 12px; align-items: end; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--dim); }
+.field input, .field select { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 13px; outline: none; transition: border-color .2s; width: 100%; }
+.field input:focus, .field select:focus { border-color: var(--blue); }
+.field input::placeholder { color: var(--dim); }
+.search-btn { background: var(--blue); color: #fff; border: none; border-radius: 8px; padding: 10px 24px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .2s; white-space: nowrap; height: 40px; }
+.search-btn:hover { background: var(--blue2); }
+.search-btn:disabled { opacity: .5; cursor: not-allowed; }
+.date-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+/* ── FILTER CHIPS ── */
+.filter-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 24px; background: var(--surface); border-bottom: 1px solid var(--border); min-height: 48px; }
+.filter-chip { display: inline-flex; align-items: center; gap: 6px; background: rgba(59,130,246,.15); border: 1px solid rgba(59,130,246,.3); color: var(--blue2); font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 20px; }
+.filter-chip button { background: none; border: none; color: var(--blue2); cursor: pointer; font-size: 14px; line-height: 1; padding: 0; }
+.filter-empty { font-size: 11px; color: var(--dim); }
+
+/* ── CONTENT ── */
+.content { padding: 24px; }
+
+/* ── KPI ── */
+.kpi-strip { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 20px; }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; position: relative; overflow: hidden; }
+.kpi::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
+.kpi.blue::after { background: var(--blue); }
+.kpi.green::after { background: var(--green); }
+.kpi.red::after { background: var(--red); }
+.kpi.yellow::after { background: var(--yellow); }
+.kpi.purple::after { background: var(--purple); }
+.kpi.teal::after { background: var(--teal); }
+.kpi-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--dim); margin-bottom: 6px; }
+.kpi-val { font-size: 20px; font-weight: 700; font-family: 'DM Mono', monospace; line-height: 1; }
+.kpi.blue .kpi-val { color: var(--blue2); }
+.kpi.green .kpi-val { color: var(--green); }
+.kpi.red .kpi-val { color: var(--red); }
+.kpi.yellow .kpi-val { color: var(--yellow); }
+.kpi.purple .kpi-val { color: var(--purple); }
+.kpi.teal .kpi-val { color: var(--teal); }
+.kpi-sub { font-size: 10px; color: var(--dim); margin-top: 4px; }
+
+/* ── CHARTS ── */
+.charts-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 16px; }
+.charts-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; }
+.card-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.card-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--mid); }
+.card-badge { font-size: 10px; color: var(--dim); background: var(--surface2); padding: 3px 8px; border-radius: 10px; }
+.chart-box { height: 200px; position: relative; }
+.chart-box.tall { height: 280px; }
+.chart-box.sm { height: 160px; }
+
+/* ── TABLE ── */
+.tbl-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 16px; overflow: hidden; }
+.tbl-hdr { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.tbl-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--mid); }
+.tbl-count { font-size: 11px; color: var(--dim); }
+.tbl-wrap { overflow-x: auto; max-height: 400px; overflow-y: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+thead th { position: sticky; top: 0; background: var(--surface2); text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none; }
+thead th:hover { color: var(--mid); }
+tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+tbody tr:hover { background: var(--surface2); }
+tbody td { padding: 10px 14px; color: var(--mid); }
+tbody td:first-child { color: var(--text); font-weight: 500; }
+.num { text-align: right; font-family: 'DM Mono', monospace; }
+.pos { color: var(--green) !important; }
+.neg { color: var(--red) !important; }
+.tag { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 4px; }
+.tag-tor { background: rgba(59,130,246,.15); color: var(--blue2); }
+.tag-edm { background: rgba(249,115,22,.15); color: var(--orange); }
+.tag-shopify { background: rgba(34,197,94,.15); color: var(--green); }
+.tag-b2b { background: rgba(168,85,247,.15); color: var(--purple); }
+
+/* ── EMPTY / LOADING ── */
+.empty-state { text-align: center; padding: 60px 20px; color: var(--dim); }
+.empty-icon { font-size: 48px; margin-bottom: 12px; }
+.empty-title { font-size: 16px; font-weight: 600; color: var(--mid); margin-bottom: 6px; }
+.empty-desc { font-size: 12px; }
+.loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 40px; color: var(--dim); }
+.spinner { width: 20px; height: 20px; border: 2px solid var(--border2); border-top-color: var(--blue); border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── GM BAR ── */
+.gm-bar { height: 4px; background: var(--surface3); border-radius: 2px; margin-top: 4px; overflow: hidden; }
+.gm-fill { height: 100%; border-radius: 2px; }
+
+@media (max-width: 1100px) {
+  .search-grid { grid-template-columns: 1fr 1fr; }
+  .kpi-strip { grid-template-columns: repeat(3, 1fr); }
+  .charts-grid, .charts-row { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- AUTH -->
+<div id="authScreen">
+  <div class="auth-logo">
+    <div class="auth-logo-mark">ASUNG</div>
+    <div class="auth-logo-sub">Analytics Platform</div>
+  </div>
+  <div class="auth-card">
+    <div class="auth-title">Sign in to continue</div>
+    <div class="auth-desc">회사 계정(@asung.ca)으로 로그인하세요.<br>다른 계정은 접근이 제한됩니다.</div>
+    <button class="google-btn" onclick="signIn()">
+      <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+      Google 계정으로 로그인
+    </button>
+    <div class="auth-note">asung.ca 도메인 계정만 접속 가능합니다</div>
+    <div class="auth-err" id="authErr"></div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div id="mainApp">
+  <div class="hdr">
+    <div class="hdr-brand">
+      <span class="hdr-logo">ASUNG</span>
+      <span class="hdr-sep">|</span>
+      <span class="hdr-title">Analytics</span>
+    </div>
+    <div class="hdr-user">
+      <img class="hdr-avatar" id="userAvatar" src="" alt="">
+      <span class="hdr-name" id="userName">—</span>
+      <button class="hdr-signout" onclick="signOut()">Sign out</button>
+    </div>
+  </div>
+
+  <!-- SEARCH -->
+  <div class="search-panel">
+    <div class="search-grid">
+      <div class="field">
+        <label class="field-label">기간</label>
+        <div class="date-row">
+          <input type="date" id="dateFrom" value="2026-01-01">
+          <input type="date" id="dateTo" value="2026-03-31">
+        </div>
+      </div>
+      <div class="field">
+        <label class="field-label">Brand</label>
+        <input type="text" id="searchBrand" placeholder="예: ORS, Kim & C">
+      </div>
+      <div class="field">
+        <label class="field-label">Customer</label>
+        <input type="text" id="searchCustomer" placeholder="예: Clore, Rex Beauty">
+      </div>
+      <div class="field">
+        <label class="field-label">SKU / Product</label>
+        <input type="text" id="searchSku" placeholder="예: ORS01234">
+      </div>
+      <div class="field">
+        <label class="field-label">Branch</label>
+        <select id="searchBranch">
+          <option value="">전체</option>
+          <option value="Asung Trading Inc.">Toronto</option>
+          <option value="Asung - Edmonton">Edmonton</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label">Source</label>
+        <select id="searchSource">
+          <option value="">전체</option>
+          <option value="B2B">B2B</option>
+          <option value="Shopify">Shopify</option>
+          <option value="Pos">POS</option>
+          <option value="Backend">Backend</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+      <button class="search-btn" id="searchBtn" onclick="runSearch()">🔍 검색</button>
+      <button class="search-btn" style="background:var(--surface2);color:var(--mid)" onclick="resetSearch()">초기화</button>
+      <span style="font-size:11px;color:var(--dim)" id="queryInfo"></span>
+    </div>
+  </div>
+
+  <!-- FILTER CHIPS -->
+  <div class="filter-row" id="filterRow">
+    <span class="filter-empty">검색 조건을 입력하고 검색 버튼을 누르세요</span>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content" id="mainContent">
+    <div class="empty-state">
+      <div class="empty-icon">📊</div>
+      <div class="empty-title">검색 결과가 여기 표시됩니다</div>
+      <div class="empty-desc">기간, 브랜드, 고객, SKU, Branch 등을 조합해서 검색하세요</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════
+const CLIENT_ID = '105948904172-t1fvd0e8t2tl3ki6u17a4ok9vp0catp2.apps.googleusercontent.com';
+const PROJECT_ID = 'geometric-rock-487814-k4';
+const DATASET = 'Cin7_Sales_Data';
+const TABLE = 'asung_sales_historical_data';
+const ALLOWED_DOMAIN = 'asung.ca';
+
+let accessToken = null;
+let currentUser = null;
+let sortCol = null, sortAsc = true;
+const charts = {};
+
+// ══════════════════════════════════════
+// AUTH
+// ══════════════════════════════════════
+function signIn() {
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    redirect_uri: window.location.origin + window.location.pathname,
+    response_type: 'token',
+    scope: 'https://www.googleapis.com/auth/bigquery.readonly https://www.googleapis.com/auth/userinfo.email',
+    prompt: 'select_account'
+  });
+  window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params;
+}
+
+function signOut() {
+  accessToken = null; currentUser = null;
+  document.getElementById('mainApp').style.display = 'none';
+  document.getElementById('authScreen').style.display = 'flex';
+}
+
+async function checkAuth() {
+  // Check hash for token (OAuth implicit flow)
+  const hash = new URLSearchParams(window.location.hash.slice(1));
+  const token = hash.get('access_token');
+  if (token) {
+    accessToken = token;
+    window.history.replaceState(null, '', window.location.pathname);
+    await loadUser();
+    return;
+  }
+  // Check sessionStorage
+  const saved = sessionStorage.getItem('asung_token');
+  if (saved) {
+    accessToken = saved;
+    await loadUser();
+    return;
+  }
+  document.getElementById('authScreen').style.display = 'flex';
+}
+
+async function loadUser() {
+  try {
+    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: 'Bearer ' + accessToken }
+    });
+    if (!res.ok) throw new Error('Token invalid');
+    const user = await res.json();
+
+    if (!user.email.endsWith('@' + ALLOWED_DOMAIN)) {
+      document.getElementById('authErr').textContent = `접근 권한이 없습니다. @${ALLOWED_DOMAIN} 계정만 가능합니다.`;
+      accessToken = null;
+      return;
+    }
+
+    currentUser = user;
+    sessionStorage.setItem('asung_token', accessToken);
+
+    document.getElementById('userAvatar').src = user.picture || '';
+    document.getElementById('userName').textContent = user.name || user.email;
+    document.getElementById('authScreen').style.display = 'none';
+    document.getElementById('mainApp').style.display = 'block';
+
+    // Default date range
+    const today = new Date();
+    const from = new Date(today.getFullYear(), today.getMonth() - 2, 1);
+    document.getElementById('dateFrom').value = from.toISOString().slice(0,10);
+    document.getElementById('dateTo').value = today.toISOString().slice(0,10);
+
+    runSearch();
+  } catch(e) {
+    document.getElementById('authErr').textContent = '로그인 오류: ' + e.message;
+    accessToken = null;
+  }
+}
+
+// ══════════════════════════════════════
+// BIGQUERY
+// ══════════════════════════════════════
+async function bqQuery(sql) {
+  const url = `https://bigquery.googleapis.com/bigquery/v2/projects/${PROJECT_ID}/queries`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: sql, useLegacySql: false, timeoutMs: 30000, location: 'US' })
+  });
+  if (res.status === 401) { signOut(); throw new Error('Session expired'); }
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+
+  const fields = data.schema?.fields || [];
+  const rows = (data.rows || []).map(row =>
+    Object.fromEntries(fields.map((f,i) => [f.name, row.f[i]?.v ?? null]))
+  );
+  return rows;
+}
+
+function buildWhere(params) {
+  const conds = [];
+  if (params.dateFrom) conds.push(`Date >= '${params.dateFrom}'`);
+  if (params.dateTo)   conds.push(`Date <= '${params.dateTo}'`);
+  if (params.brand)    conds.push(`LOWER(Brand_Clean) LIKE LOWER('%${params.brand.replace(/'/g,"''")}%')`);
+  if (params.customer) conds.push(`LOWER(Customer_Clean) LIKE LOWER('%${params.customer.replace(/'/g,"''")}%')`);
+  if (params.sku)      conds.push(`(LOWER(SKU) LIKE LOWER('%${params.sku.replace(/'/g,"''")}%') OR LOWER(Product_Name) LIKE LOWER('%${params.sku.replace(/'/g,"''")}%'))`);
+  if (params.branch)   conds.push(`Location = '${params.branch.replace(/'/g,"''")}'`);
+  if (params.source)   conds.push(`Source_Clean = '${params.source.replace(/'/g,"''")}'`);
+  return conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+}
+
+// ══════════════════════════════════════
+// SEARCH
+// ══════════════════════════════════════
+let currentParams = {};
+
+async function runSearch() {
+  const params = {
+    dateFrom: document.getElementById('dateFrom').value,
+    dateTo:   document.getElementById('dateTo').value,
+    brand:    document.getElementById('searchBrand').value.trim(),
+    customer: document.getElementById('searchCustomer').value.trim(),
+    sku:      document.getElementById('searchSku').value.trim(),
+    branch:   document.getElementById('searchBranch').value,
+    source:   document.getElementById('searchSource').value,
+  };
+  currentParams = params;
+  updateChips(params);
+
+  const btn = document.getElementById('searchBtn');
+  btn.disabled = true; btn.textContent = '⏳ 쿼리 중...';
+  document.getElementById('mainContent').innerHTML = '<div class="loading"><div class="spinner"></div> BigQuery 쿼리 중...</div>';
+
+  try {
+    const where = buildWhere(params);
+    const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
+
+    const [kpiRows, trendRows, brandRows, custRows, sourceRows, locationRows, detailRows] = await Promise.all([
+      // KPI
+      bqQuery(`SELECT COUNT(DISTINCT OrderNumber) as orders, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(COGS) as cogs, SUM(Gross_Profit) as gp, COUNT(DISTINCT Customer_Clean) as customers FROM ${fullTable} ${where}`),
+      // Monthly trend
+      bqQuery(`SELECT FORMAT_DATE('%Y-%m', Date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY month ORDER BY month`),
+      // Brand top 15
+      bqQuery(`SELECT Brand_Clean as brand, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY brand ORDER BY revenue DESC LIMIT 15`),
+      // Customer top 15
+      bqQuery(`SELECT Customer_Clean as customer, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY customer ORDER BY revenue DESC LIMIT 15`),
+      // Source
+      bqQuery(`SELECT Source_Clean as source, SUM(Total) as revenue, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY source ORDER BY revenue DESC`),
+      // Location
+      bqQuery(`SELECT Location as location, SUM(Total) as revenue, SUM(Gross_Profit) as gp FROM ${fullTable} ${where} GROUP BY location ORDER BY revenue DESC`),
+      // Detail rows (top 200)
+      bqQuery(`SELECT Date, OrderNumber, Customer_Clean as customer, Brand_Clean as brand, SKU, Product_Name as product, Quantity as qty, Unit_Price as price, Total as total, Gross_Profit as gp, Location as location, Source_Clean as source FROM ${fullTable} ${where} ORDER BY Date DESC LIMIT 200`),
+    ]);
+
+    document.getElementById('queryInfo').textContent = `${detailRows.length}+ rows`;
+    btn.disabled = false; btn.textContent = '🔍 검색';
+    renderResults({ kpiRows, trendRows, brandRows, custRows, sourceRows, locationRows, detailRows });
+  } catch(e) {
+    btn.disabled = false; btn.textContent = '🔍 검색';
+    document.getElementById('mainContent').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">쿼리 오류</div><div class="empty-desc">${e.message}</div></div>`;
+  }
+}
+
+function resetSearch() {
+  document.getElementById('searchBrand').value = '';
+  document.getElementById('searchCustomer').value = '';
+  document.getElementById('searchSku').value = '';
+  document.getElementById('searchBranch').value = '';
+  document.getElementById('searchSource').value = '';
+  runSearch();
+}
+
+function updateChips(params) {
+  const row = document.getElementById('filterRow');
+  const chips = [];
+  if (params.dateFrom || params.dateTo) chips.push(`📅 ${params.dateFrom||'~'} ~ ${params.dateTo||'~'}`);
+  if (params.brand)    chips.push(`🏷 ${params.brand}`);
+  if (params.customer) chips.push(`👤 ${params.customer}`);
+  if (params.sku)      chips.push(`📦 ${params.sku}`);
+  if (params.branch)   chips.push(`🏢 ${params.branch === 'Asung Trading Inc.' ? 'Toronto' : 'Edmonton'}`);
+  if (params.source)   chips.push(`📡 ${params.source}`);
+  row.innerHTML = chips.length
+    ? chips.map(c => `<span class="filter-chip">${c}</span>`).join('')
+    : '<span class="filter-empty">전체 데이터 표시 중</span>';
+}
+
+// ══════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════
+const fmtK = n => { n = parseFloat(n)||0; return n>=1000000?'$'+(n/1e6).toFixed(2)+'M':n>=1000?'$'+(n/1000).toFixed(1)+'K':'$'+n.toFixed(0); };
+const fmt  = n => '$'+(parseFloat(n)||0).toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2});
+const pct  = (a,b) => b > 0 ? ((a/b)*100).toFixed(1)+'%' : '—';
+const TOOLTIP = {backgroundColor:'#0f1218',titleColor:'#f1f5f9',bodyColor:'#94a3b8',borderColor:'#222a38',borderWidth:1};
+function mkChart(id,cfg){if(charts[id])charts[id].destroy();const c=document.getElementById(id);if(c)charts[id]=new Chart(c,cfg);}
+function baseOpts(rot){return{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#94a3b8',font:{size:10}}},tooltip:TOOLTIP},scales:{x:{grid:{color:'#1a2233'},ticks:{color:'#475569',font:{size:10},maxRotation:rot||0}},y:{grid:{color:'#1a2233'},ticks:{color:'#475569',font:{size:10}}}}};}
+
+function renderResults(data) {
+  const { kpiRows, trendRows, brandRows, custRows, sourceRows, locationRows, detailRows } = data;
+  const k = kpiRows[0] || {};
+  const revenue = parseFloat(k.revenue)||0;
+  const gp = parseFloat(k.gp)||0;
+  const gmPct = revenue > 0 ? (gp/revenue*100).toFixed(1) : '0';
+
+  const locMap = {};
+  locationRows.forEach(r => { locMap[r.location] = parseFloat(r.revenue)||0; });
+  const torRev = locMap['Asung Trading Inc.']||0;
+  const edmRev = locMap['Asung - Edmonton']||0;
+
+  document.getElementById('mainContent').innerHTML = `
+    <div class="kpi-strip">
+      <div class="kpi blue"><div class="kpi-lbl">총 매출</div><div class="kpi-val">${fmtK(revenue)}</div><div class="kpi-sub">${parseInt(k.orders)||0} orders</div></div>
+      <div class="kpi green"><div class="kpi-lbl">Gross Profit</div><div class="kpi-val">${fmtK(gp)}</div><div class="kpi-sub">GM ${gmPct}%</div></div>
+      <div class="kpi yellow"><div class="kpi-lbl">총 수량</div><div class="kpi-val">${parseInt(k.qty)||0}</div><div class="kpi-sub">units sold</div></div>
+      <div class="kpi purple"><div class="kpi-lbl">고객 수</div><div class="kpi-val">${parseInt(k.customers)||0}</div><div class="kpi-sub">unique customers</div></div>
+      <div class="kpi blue"><div class="kpi-lbl">Toronto</div><div class="kpi-val">${fmtK(torRev)}</div><div class="kpi-sub">${revenue>0?(torRev/revenue*100).toFixed(1):0}%</div></div>
+      <div class="kpi teal"><div class="kpi-lbl">Edmonton</div><div class="kpi-val">${fmtK(edmRev)}</div><div class="kpi-sub">${revenue>0?(edmRev/revenue*100).toFixed(1):0}%</div></div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">월별 매출 / GP 추이</span><span class="card-badge">${trendRows.length}개월</span></div>
+        <div class="chart-box tall"><canvas id="cTrend"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">채널별 매출</span></div>
+        <div class="chart-box tall"><canvas id="cSource"></canvas></div>
+      </div>
+    </div>
+
+    <div class="charts-row">
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">브랜드 Top 10</span></div>
+        <div class="chart-box"><canvas id="cBrand"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">고객 Top 10</span></div>
+        <div class="chart-box"><canvas id="cCust"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">Branch 비교</span></div>
+        <div class="chart-box"><canvas id="cLocation"></canvas></div>
+      </div>
+    </div>
+
+    <div class="charts-row">
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">브랜드별 GM%</span></div>
+        <div id="brandGmList" style="max-height:200px;overflow-y:auto"></div>
+      </div>
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">고객별 GM%</span></div>
+        <div id="custGmList" style="max-height:200px;overflow-y:auto"></div>
+      </div>
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">월별 수량</span></div>
+        <div class="chart-box"><canvas id="cQty"></canvas></div>
+      </div>
+    </div>
+
+    <div class="tbl-card">
+      <div class="tbl-hdr">
+        <span class="tbl-title">브랜드별 상세</span>
+        <span class="tbl-count">${brandRows.length}개 브랜드</span>
+      </div>
+      <div class="tbl-wrap">${renderBrandTable(brandRows)}</div>
+    </div>
+
+    <div class="tbl-card">
+      <div class="tbl-hdr">
+        <span class="tbl-title">고객별 상세</span>
+        <span class="tbl-count">${custRows.length}개 고객</span>
+      </div>
+      <div class="tbl-wrap">${renderCustTable(custRows)}</div>
+    </div>
+
+    <div class="tbl-card">
+      <div class="tbl-hdr">
+        <span class="tbl-title">오더 라인 상세</span>
+        <span class="tbl-count">최근 200건</span>
+      </div>
+      <div class="tbl-wrap">${renderDetailTable(detailRows)}</div>
+    </div>
+  `;
+
+  // Charts
+  const tLabels = trendRows.map(r=>r.month);
+  mkChart('cTrend',{type:'bar',data:{labels:tLabels,datasets:[
+    {label:'매출',data:trendRows.map(r=>parseFloat(r.revenue)||0),backgroundColor:'rgba(59,130,246,0.7)',borderRadius:4,yAxisID:'y'},
+    {label:'GP',data:trendRows.map(r=>parseFloat(r.gp)||0),backgroundColor:'rgba(34,197,94,0.7)',borderRadius:4,yAxisID:'y'},
+  ]},options:{...baseOpts(),plugins:{...baseOpts().plugins,tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>' '+ctx.dataset.label+': '+fmt(ctx.raw)}}},scales:{...baseOpts().scales,y:{...baseOpts().scales.y}}}});
+
+  mkChart('cQty',{type:'bar',data:{labels:tLabels,datasets:[{label:'수량',data:trendRows.map(r=>parseInt(r.qty)||0),backgroundColor:'rgba(168,85,247,0.7)',borderRadius:4}]},options:baseOpts()});
+
+  mkChart('cSource',{type:'doughnut',data:{labels:sourceRows.map(r=>r.source),datasets:[{data:sourceRows.map(r=>parseFloat(r.revenue)||0),backgroundColor:['rgba(34,197,94,0.8)','rgba(59,130,246,0.8)','rgba(249,115,22,0.8)','rgba(168,85,247,0.8)'],borderWidth:1,borderColor:'#080a0f'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:10},boxWidth:10}},tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}}}});
+
+  const top10brands = brandRows.slice(0,10);
+  mkChart('cBrand',{type:'bar',indexAxis:'y',data:{labels:top10brands.map(r=>r.brand),datasets:[{label:'매출',data:top10brands.map(r=>parseFloat(r.revenue)||0),backgroundColor:'rgba(59,130,246,0.7)',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}},scales:{x:{grid:{color:'#1a2233'},ticks:{color:'#475569',font:{size:9}}},y:{grid:{color:'#1a2233'},ticks:{color:'#94a3b8',font:{size:9}}}}}});
+
+  const top10custs = custRows.slice(0,10);
+  mkChart('cCust',{type:'bar',indexAxis:'y',data:{labels:top10custs.map(r=>r.customer.length>20?r.customer.slice(0,20)+'…':r.customer),datasets:[{label:'매출',data:top10custs.map(r=>parseFloat(r.revenue)||0),backgroundColor:'rgba(20,184,166,0.7)',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}},scales:{x:{grid:{color:'#1a2233'},ticks:{color:'#475569',font:{size:9}}},y:{grid:{color:'#1a2233'},ticks:{color:'#94a3b8',font:{size:9}}}}}});
+
+  mkChart('cLocation',{type:'doughnut',data:{labels:locationRows.map(r=>r.location==='Asung Trading Inc.'?'Toronto':'Edmonton'),datasets:[{data:locationRows.map(r=>parseFloat(r.revenue)||0),backgroundColor:['rgba(59,130,246,0.8)','rgba(249,115,22,0.8)'],borderWidth:1,borderColor:'#080a0f'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:10},boxWidth:10}},tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}}}});
+
+  // GM bars
+  document.getElementById('brandGmList').innerHTML = brandRows.slice(0,10).map(r=>{
+    const rev=parseFloat(r.revenue)||0, gp=parseFloat(r.gp)||0;
+    const g=rev>0?(gp/rev*100):0;
+    return `<div style="padding:6px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
+        <span style="color:var(--text)">${r.brand}</span>
+        <span style="color:${g>=30?'var(--green)':g>=20?'var(--yellow)':'var(--red)';font-family:monospace">${g.toFixed(1)}%</span>
+      </div>
+      <div class="gm-bar"><div class="gm-fill" style="width:${Math.min(g,60)/60*100}%;background:${g>=30?'var(--green)':g>=20?'var(--yellow)':'var(--red)'}"></div></div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('custGmList').innerHTML = custRows.slice(0,10).map(r=>{
+    const rev=parseFloat(r.revenue)||0, gp=parseFloat(r.gp)||0;
+    const g=rev>0?(gp/rev*100):0;
+    return `<div style="padding:6px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
+        <span style="color:var(--text)">${r.customer.length>22?r.customer.slice(0,22)+'…':r.customer}</span>
+        <span style="color:${g>=30?'var(--green)':g>=20?'var(--yellow)':'var(--red)'};font-family:monospace">${g.toFixed(1)}%</span>
+      </div>
+      <div class="gm-bar"><div class="gm-fill" style="width:${Math.min(g,60)/60*100}%;background:${g>=30?'var(--green)':g>=20?'var(--yellow)':'var(--red)'}"></div></div>
+    </div>`;
+  }).join('');
+}
+
+function renderBrandTable(rows) {
+  if(!rows.length) return '<div style="padding:20px;text-align:center;color:var(--dim)">데이터 없음</div>';
+  const totalRev = rows.reduce((a,r)=>a+(parseFloat(r.revenue)||0),0);
+  return `<table><thead><tr>
+    <th>브랜드</th><th class="num">매출</th><th class="num">GP</th><th class="num">GM%</th><th class="num">수량</th><th class="num">오더수</th><th class="num">매출비중</th>
+  </tr></thead><tbody>${rows.map(r=>{
+    const rev=parseFloat(r.revenue)||0,gp=parseFloat(r.gp)||0,g=rev>0?(gp/rev*100):0;
+    return `<tr>
+      <td>${r.brand||'—'}</td>
+      <td class="num">${fmt(rev)}</td>
+      <td class="num ${gp>=0?'pos':'neg'}">${fmt(gp)}</td>
+      <td class="num" style="color:${g>=30?'var(--green)':g>=20?'var(--yellow)':'var(--red)'}">${g.toFixed(1)}%</td>
+      <td class="num">${parseInt(r.qty)||0}</td>
+      <td class="num">${parseInt(r.orders)||0}</td>
+      <td class="num">${totalRev>0?(rev/totalRev*100).toFixed(1):0}%</td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+function renderCustTable(rows) {
+  if(!rows.length) return '<div style="padding:20px;text-align:center;color:var(--dim)">데이터 없음</div>';
+  return `<table><thead><tr>
+    <th>고객</th><th class="num">매출</th><th class="num">GP</th><th class="num">GM%</th><th class="num">수량</th><th class="num">오더수</th>
+  </tr></thead><tbody>${rows.map(r=>{
+    const rev=parseFloat(r.revenue)||0,gp=parseFloat(r.gp)||0,g=rev>0?(gp/rev*100):0;
+    return `<tr>
+      <td>${r.customer||'—'}</td>
+      <td class="num">${fmt(rev)}</td>
+      <td class="num ${gp>=0?'pos':'neg'}">${fmt(gp)}</td>
+      <td class="num" style="color:${g>=30?'var(--green)':g>=20?'var(--yellow)':'var(--red)'}">${g.toFixed(1)}%</td>
+      <td class="num">${parseInt(r.qty)||0}</td>
+      <td class="num">${parseInt(r.orders)||0}</td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+function renderDetailTable(rows) {
+  if(!rows.length) return '<div style="padding:20px;text-align:center;color:var(--dim)">데이터 없음</div>';
+  return `<table><thead><tr>
+    <th>날짜</th><th>Order #</th><th>고객</th><th>브랜드</th><th>SKU</th><th>제품명</th><th class="num">수량</th><th class="num">단가</th><th class="num">매출</th><th class="num">GP</th><th>Branch</th><th>채널</th>
+  </tr></thead><tbody>${rows.map(r=>{
+    const loc=r.location==='Asung Trading Inc.'?'<span class="tag tag-tor">Toronto</span>':'<span class="tag tag-edm">Edmonton</span>';
+    const src=r.source==='Shopify'?'<span class="tag tag-shopify">Shopify</span>':r.source==='B2B'?'<span class="tag tag-b2b">B2B</span>':r.source||'—';
+    const gp=parseFloat(r.gp)||0;
+    return `<tr>
+      <td style="white-space:nowrap">${r.Date||'—'}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:11px">${r.OrderNumber||'—'}</td>
+      <td>${r.customer||'—'}</td>
+      <td>${r.brand||'—'}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:11px">${r.SKU||'—'}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.product||''}">${r.product||'—'}</td>
+      <td class="num">${r.qty||0}</td>
+      <td class="num">${fmt(r.price)}</td>
+      <td class="num">${fmt(r.total)}</td>
+      <td class="num ${gp>=0?'pos':'neg'}">${fmt(gp)}</td>
+      <td>${loc}</td>
+      <td>${src}</td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+// ── INIT ──
+checkAuth();
+</script>
+</body>
+</html>
