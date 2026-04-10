@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Asung Analytics</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 :root {
   --bg: #080a0f;
@@ -147,10 +146,27 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
 .gm-bar { height: 4px; background: var(--surface3); border-radius: 2px; margin-top: 4px; overflow: hidden; }
 .gm-fill { height: 100%; border-radius: 2px; }
 
+/* ── TABS ── */
+.tab-nav { display: flex; align-items: center; gap: 4px; padding: 0 24px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: var(--dim); font-size: 12px; font-weight: 600; padding: 12px 16px; cursor: pointer; transition: all .2s; letter-spacing: .4px; white-space: nowrap; }
+.tab-btn:hover { color: var(--mid); }
+.tab-btn.active { color: var(--blue2); border-bottom-color: var(--blue2); }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ── PRICE ANALYSIS ── */
+.price-search { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.price-kpi-strip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 20px; }
+.price-table-wrap { overflow-x: auto; max-height: 340px; overflow-y: auto; }
+.price-highlight { background: rgba(59,130,246,.08) !important; }
+.price-bar-cell { position: relative; }
+.price-bar-bg { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(59,130,246,.12); border-radius: 0 3px 3px 0; }
+
 @media (max-width: 1100px) {
   .search-grid { grid-template-columns: 1fr 1fr; }
   .kpi-strip { grid-template-columns: repeat(3, 1fr); }
   .charts-grid, .charts-row { grid-template-columns: 1fr; }
+  .price-kpi-strip { grid-template-columns: repeat(3, 1fr); }
 }
 </style>
 </head>
@@ -165,7 +181,7 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
   <div class="auth-card">
     <div class="auth-title">Sign in to continue</div>
     <div class="auth-desc">회사 계정(@asung.ca)으로 로그인하세요.<br>다른 계정은 접근이 제한됩니다.</div>
-    <button class="google-btn" id="googleSignInBtn" onclick="signIn()">
+    <button class="google-btn" onclick="signIn()">
       <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
       Google 계정으로 로그인
     </button>
@@ -188,6 +204,15 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
       <button class="hdr-signout" onclick="signOut()">Sign out</button>
     </div>
   </div>
+
+  <!-- TAB NAV -->
+  <div class="tab-nav">
+    <button class="tab-btn active" onclick="switchTab('sales')">📊 Sales Overview</button>
+    <button class="tab-btn" onclick="switchTab('price')">💰 Price Analysis</button>
+  </div>
+
+  <!-- TAB: SALES (existing content) -->
+  <div class="tab-panel active" id="tab-sales">
 
   <!-- SEARCH -->
   <div class="search-panel">
@@ -250,7 +275,48 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
       <div class="empty-desc">기간, 브랜드, 고객, SKU, Branch 등을 조합해서 검색하세요</div>
     </div>
   </div>
-</div>
+
+  </div><!-- /tab-sales -->
+
+  <!-- TAB: PRICE ANALYSIS -->
+  <div class="tab-panel" id="tab-price">
+    <div class="price-search">
+      <div class="field">
+        <label class="field-label">기간</label>
+        <div class="date-row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;min-width:240px">
+          <input type="date" id="pDateFrom">
+          <input type="date" id="pDateTo">
+        </div>
+      </div>
+      <div class="field">
+        <label class="field-label">SKU <span style="color:var(--red)">*필수</span></label>
+        <input type="text" id="pSku" placeholder="예: ORS11108" style="min-width:160px">
+      </div>
+      <div class="field">
+        <label class="field-label">Customer (선택)</label>
+        <input type="text" id="pCustomer" placeholder="예: Clore" style="min-width:160px">
+      </div>
+      <div class="field">
+        <label class="field-label">Branch</label>
+        <select id="pBranch">
+          <option value="">전체</option>
+          <option value="Asung Trading Inc.">Toronto</option>
+          <option value="Asung - Edmonton">Edmonton</option>
+        </select>
+      </div>
+      <div>
+        <button class="search-btn" id="pSearchBtn" onclick="runPriceSearch()">🔍 분석</button>
+      </div>
+    </div>
+    <div class="content" id="priceContent">
+      <div class="empty-state">
+        <div class="empty-icon">💰</div>
+        <div class="empty-title">SKU를 입력하고 분석 버튼을 누르세요</div>
+        <div class="empty-desc">특정 SKU의 가격대별 판매량 · 매출 · GP를 분석합니다</div>
+      </div>
+    </div>
+  </div><!-- /tab-price -->
+</div><!-- /mainApp -->
 
 <script>
 // ══════════════════════════════════════
@@ -268,75 +334,52 @@ let sortCol = null, sortAsc = true;
 const charts = {};
 
 // ══════════════════════════════════════
-// AUTH  (Google Identity Services - popup)
+// TABS
 // ══════════════════════════════════════
-let tokenClient = null;
-
-function initGIS() {
-  if (!window.google?.accounts?.oauth2) {
-    // GIS not loaded yet — retry in 200ms
-    setTimeout(initGIS, 200);
-    return;
-  }
-  tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: CLIENT_ID,
-    scope: [
-      'https://www.googleapis.com/auth/bigquery.readonly',
-      'https://www.googleapis.com/auth/userinfo.email',
-      'openid'
-    ].join(' '),
-    callback: async (resp) => {
-      if (resp.error) {
-        document.getElementById('authErr').textContent = '로그인 오류: ' + resp.error;
-        return;
-      }
-      accessToken = resp.access_token;
-      // Store with expiry (default Google token ~1hr, we use 55min)
-      sessionStorage.setItem('asung_token', accessToken);
-      sessionStorage.setItem('asung_token_exp', Date.now() + 55 * 60 * 1000);
-      await loadUser();
-    },
-    error_callback: (err) => {
-      if (err.type !== 'popup_closed') {
-        document.getElementById('authErr').textContent = '팝업 오류: ' + (err.message || err.type);
-      }
-    }
-  });
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelector(`.tab-btn[onclick="switchTab('${tab}')"]`).classList.add('active');
+  document.getElementById('tab-' + tab).classList.add('active');
 }
 
+// ══════════════════════════════════════
+// AUTH
+// ══════════════════════════════════════
 function signIn() {
-  if (!tokenClient) {
-    document.getElementById('authErr').textContent = 'Google 라이브러리 로딩 중입니다. 잠시 후 다시 시도하세요.';
-    return;
-  }
-  document.getElementById('authErr').textContent = '';
-  tokenClient.requestAccessToken({ prompt: 'select_account' });
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    redirect_uri: window.location.origin + window.location.pathname,
+    response_type: 'token',
+    scope: 'https://www.googleapis.com/auth/bigquery.readonly https://www.googleapis.com/auth/userinfo.email',
+    prompt: 'select_account'
+  });
+  window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params;
 }
 
 function signOut() {
-  if (accessToken) {
-    google.accounts.oauth2.revoke(accessToken, () => {});
-  }
-  accessToken = null;
-  currentUser = null;
-  sessionStorage.removeItem('asung_token');
-  sessionStorage.removeItem('asung_token_exp');
+  accessToken = null; currentUser = null;
   document.getElementById('mainApp').style.display = 'none';
   document.getElementById('authScreen').style.display = 'flex';
-  document.getElementById('authErr').textContent = '';
 }
 
 async function checkAuth() {
-  // Check sessionStorage for a non-expired token
+  // Check hash for token (OAuth implicit flow)
+  const hash = new URLSearchParams(window.location.hash.slice(1));
+  const token = hash.get('access_token');
+  if (token) {
+    accessToken = token;
+    window.history.replaceState(null, '', window.location.pathname);
+    await loadUser();
+    return;
+  }
+  // Check sessionStorage
   const saved = sessionStorage.getItem('asung_token');
-  const exp   = parseInt(sessionStorage.getItem('asung_token_exp') || '0');
-  if (saved && Date.now() < exp) {
+  if (saved) {
     accessToken = saved;
     await loadUser();
     return;
   }
-  sessionStorage.removeItem('asung_token');
-  sessionStorage.removeItem('asung_token_exp');
   document.getElementById('authScreen').style.display = 'flex';
 }
 
@@ -367,14 +410,13 @@ async function loadUser() {
     const from = new Date(today.getFullYear(), today.getMonth() - 2, 1);
     document.getElementById('dateFrom').value = from.toISOString().slice(0,10);
     document.getElementById('dateTo').value = today.toISOString().slice(0,10);
+    document.getElementById('pDateFrom').value = '2022-01-01';
+    document.getElementById('pDateTo').value = today.toISOString().slice(0,10);
 
     runSearch();
   } catch(e) {
-    sessionStorage.removeItem('asung_token');
-    sessionStorage.removeItem('asung_token_exp');
-    accessToken = null;
     document.getElementById('authErr').textContent = '로그인 오류: ' + e.message;
-    document.getElementById('authScreen').style.display = 'flex';
+    accessToken = null;
   }
 }
 
@@ -690,8 +732,244 @@ function renderDetailTable(rows) {
   }).join('')}</tbody></table>`;
 }
 
+// ══════════════════════════════════════
+// PRICE ANALYSIS
+// ══════════════════════════════════════
+async function runPriceSearch() {
+  const sku      = document.getElementById('pSku').value.trim();
+  const customer = document.getElementById('pCustomer').value.trim();
+  const branch   = document.getElementById('pBranch').value;
+  const dateFrom = document.getElementById('pDateFrom').value;
+  const dateTo   = document.getElementById('pDateTo').value;
+
+  if (!sku) {
+    document.getElementById('priceContent').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">SKU를 입력하세요</div></div>`;
+    return;
+  }
+
+  const btn = document.getElementById('pSearchBtn');
+  btn.disabled = true; btn.textContent = '⏳ 쿼리 중...';
+  document.getElementById('priceContent').innerHTML = '<div class="loading"><div class="spinner"></div> BigQuery 쿼리 중...</div>';
+
+  const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
+  const conds = [`LOWER(SKU) = LOWER('${sku.replace(/'/g,"''")}' )`];
+  if (customer) conds.push(`LOWER(Customer_Clean) LIKE LOWER('%${customer.replace(/'/g,"''")}%')`);
+  if (branch)   conds.push(`Location = '${branch.replace(/'/g,"''")}'`);
+  if (dateFrom) conds.push(`Date >= '${dateFrom}'`);
+  if (dateTo)   conds.push(`Date <= '${dateTo}'`);
+  const where = 'WHERE ' + conds.join(' AND ');
+
+  try {
+    const [priceRows, summaryRows, custRows] = await Promise.all([
+      // Price band breakdown
+      bqQuery(`
+        SELECT
+          ROUND(Unit_Price, 2) as price,
+          SUM(Quantity) as qty,
+          SUM(Total) as revenue,
+          SUM(Gross_Profit) as gp,
+          COUNT(DISTINCT OrderNumber) as orders,
+          COUNT(DISTINCT Customer_Clean) as customers
+        FROM ${fullTable} ${where}
+        GROUP BY price
+        ORDER BY price
+      `),
+      // Overall summary
+      bqQuery(`
+        SELECT
+          SKU, MAX(Product_Name) as product, MAX(Brand_Clean) as brand,
+          SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp,
+          COUNT(DISTINCT OrderNumber) as orders,
+          MIN(Unit_Price) as min_price, MAX(Unit_Price) as max_price,
+          ROUND(SUM(Total)/NULLIF(SUM(Quantity),0),2) as avg_price
+        FROM ${fullTable} ${where}
+        GROUP BY SKU
+      `),
+      // Top customers at each common price
+      bqQuery(`
+        SELECT Customer_Clean as customer, ROUND(Unit_Price,2) as price,
+          SUM(Quantity) as qty, SUM(Total) as revenue
+        FROM ${fullTable} ${where}
+        GROUP BY customer, price
+        ORDER BY revenue DESC
+        LIMIT 200
+      `)
+    ]);
+
+    btn.disabled = false; btn.textContent = '🔍 분석';
+    if (!priceRows.length) {
+      document.getElementById('priceContent').innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">결과 없음</div><div class="empty-desc">SKU "${sku}"에 해당하는 데이터가 없습니다</div></div>`;
+      return;
+    }
+    renderPriceAnalysis({ priceRows, summaryRows, custRows, sku });
+  } catch(e) {
+    btn.disabled = false; btn.textContent = '🔍 분석';
+    document.getElementById('priceContent').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">쿼리 오류</div><div class="empty-desc">${e.message}</div></div>`;
+  }
+}
+
+function renderPriceAnalysis({ priceRows, summaryRows, custRows, sku }) {
+  const s = summaryRows[0] || {};
+  const totalQty = priceRows.reduce((a,r) => a + (parseInt(r.qty)||0), 0);
+  const totalRev = priceRows.reduce((a,r) => a + (parseFloat(r.revenue)||0), 0);
+  const totalGp  = priceRows.reduce((a,r) => a + (parseFloat(r.gp)||0), 0);
+  const gmPct    = totalRev > 0 ? (totalGp/totalRev*100).toFixed(1) : '0';
+
+  // Best/worst price band by qty
+  const sorted = [...priceRows].sort((a,b) => (parseInt(b.qty)||0) - (parseInt(a.qty)||0));
+  const bestPrice  = sorted[0];
+  const worstPrice = sorted[sorted.length-1];
+
+  const maxQty = Math.max(...priceRows.map(r => parseInt(r.qty)||0));
+  const maxRev = Math.max(...priceRows.map(r => parseFloat(r.revenue)||0));
+
+  document.getElementById('priceContent').innerHTML = `
+    <div style="padding:20px 24px 0">
+      <div style="margin-bottom:14px">
+        <span style="font-size:13px;font-weight:700;color:var(--text)">${s.product || sku}</span>
+        <span style="font-size:11px;color:var(--dim);margin-left:8px">${s.brand||''} · ${sku}</span>
+      </div>
+
+      <div class="price-kpi-strip">
+        <div class="kpi blue"><div class="kpi-lbl">총 매출</div><div class="kpi-val">${fmtK(totalRev)}</div><div class="kpi-sub">${parseInt(s.orders)||0} orders</div></div>
+        <div class="kpi green"><div class="kpi-lbl">Gross Profit</div><div class="kpi-val">${fmtK(totalGp)}</div><div class="kpi-sub">GM ${gmPct}%</div></div>
+        <div class="kpi yellow"><div class="kpi-lbl">총 수량</div><div class="kpi-val">${parseInt(totalQty).toLocaleString()}</div><div class="kpi-sub">units</div></div>
+        <div class="kpi green"><div class="kpi-lbl">🔝 Best Price</div><div class="kpi-val">$${parseFloat(bestPrice.price).toFixed(2)}</div><div class="kpi-sub">수량 ${parseInt(bestPrice.qty).toLocaleString()}</div></div>
+        <div class="kpi red"><div class="kpi-lbl">📉 Worst Price</div><div class="kpi-val">$${parseFloat(worstPrice.price).toFixed(2)}</div><div class="kpi-sub">수량 ${parseInt(worstPrice.qty).toLocaleString()}</div></div>
+      </div>
+
+      <div class="charts-grid" style="margin-bottom:16px">
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">가격대별 수량 · 매출 · GP</span><span class="card-badge">${priceRows.length}개 가격대</span></div>
+          <div class="chart-box tall"><canvas id="cPriceBar"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">가격대별 GM%</span></div>
+          <div class="chart-box tall"><canvas id="cPriceGm"></canvas></div>
+        </div>
+      </div>
+
+      <div class="tbl-card" style="margin-bottom:16px">
+        <div class="tbl-hdr">
+          <span class="tbl-title">가격대별 상세</span>
+          <span class="tbl-count">${priceRows.length}개 가격대</span>
+        </div>
+        <div class="price-table-wrap">
+          <table>
+            <thead><tr>
+              <th>Unit Price</th>
+              <th class="num">수량</th><th class="num">수량 비중</th>
+              <th class="num">매출</th><th class="num">매출 비중</th>
+              <th class="num">GP</th><th class="num">GM%</th>
+              <th class="num">오더수</th><th class="num">고객수</th>
+            </tr></thead>
+            <tbody>
+              ${priceRows.map(r => {
+                const qty = parseInt(r.qty)||0;
+                const rev = parseFloat(r.revenue)||0;
+                const gp  = parseFloat(r.gp)||0;
+                const gm  = rev > 0 ? (gp/rev*100).toFixed(1) : '0';
+                const qtyPct = totalQty > 0 ? (qty/totalQty*100).toFixed(1) : 0;
+                const revPct = totalRev > 0 ? (rev/totalRev*100).toFixed(1) : 0;
+                const isTop  = qty === maxQty;
+                return `<tr ${isTop ? 'style="background:rgba(34,197,94,.06)"' : ''}>
+                  <td style="font-family:monospace;font-weight:${isTop?'700':'400'};color:${isTop?'var(--green)':'var(--text)'}">
+                    $${parseFloat(r.price).toFixed(2)}${isTop?' 🔝':''}
+                  </td>
+                  <td class="num">${qty.toLocaleString()}</td>
+                  <td class="num">
+                    <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
+                      <div style="width:60px;height:5px;background:var(--surface3);border-radius:3px;overflow:hidden">
+                        <div style="width:${qtyPct}%;height:100%;background:var(--blue);border-radius:3px"></div>
+                      </div>
+                      <span>${qtyPct}%</span>
+                    </div>
+                  </td>
+                  <td class="num">${fmt(rev)}</td>
+                  <td class="num">${revPct}%</td>
+                  <td class="num ${gp>=0?'pos':'neg'}">${fmt(gp)}</td>
+                  <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
+                  <td class="num">${parseInt(r.orders)||0}</td>
+                  <td class="num">${parseInt(r.customers)||0}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tbl-card" style="margin-bottom:24px">
+        <div class="tbl-hdr">
+          <span class="tbl-title">고객별 가격 내역</span>
+          <span class="tbl-count">Top 200</span>
+        </div>
+        <div class="price-table-wrap">
+          <table>
+            <thead><tr>
+              <th>고객</th><th class="num">Unit Price</th>
+              <th class="num">수량</th><th class="num">매출</th>
+            </tr></thead>
+            <tbody>
+              ${custRows.map(r => `<tr>
+                <td>${r.customer||'—'}</td>
+                <td class="num" style="font-family:monospace">$${parseFloat(r.price).toFixed(2)}</td>
+                <td class="num">${parseInt(r.qty)||0}</td>
+                <td class="num">${fmt(r.revenue)}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Chart: grouped bar (qty) + line (revenue + GP)
+  const labels = priceRows.map(r => '$' + parseFloat(r.price).toFixed(2));
+  mkChart('cPriceBar', {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: '수량', data: priceRows.map(r => parseInt(r.qty)||0), backgroundColor: 'rgba(59,130,246,0.75)', borderRadius: 4, yAxisID: 'yQty' },
+        { label: '매출', data: priceRows.map(r => parseFloat(r.revenue)||0), type: 'line', borderColor: '#f97316', backgroundColor: 'rgba(249,115,22,0.1)', borderWidth: 2, pointRadius: 4, fill: true, tension: 0.3, yAxisID: 'yRev' },
+        { label: 'GP',   data: priceRows.map(r => parseFloat(r.gp)||0),      type: 'line', borderColor: '#a855f7', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 3, borderDash: [4,3], tension: 0.3, yAxisID: 'yRev' },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#94a3b8', font: { size: 10 } } }, tooltip: { ...TOOLTIP, mode: 'index', callbacks: { label: ctx => ' ' + ctx.dataset.label + ': ' + (ctx.dataset.yAxisID === 'yQty' ? ctx.raw.toLocaleString() : fmt(ctx.raw)) } } },
+      scales: {
+        x: { grid: { color: '#1a2233' }, ticks: { color: '#475569', font: { size: 10 }, maxRotation: 45 } },
+        yQty: { position: 'left',  grid: { color: '#1a2233' }, ticks: { color: '#475569', font: { size: 9 } }, title: { display: true, text: '수량', color: '#475569', font: { size: 9 } } },
+        yRev: { position: 'right', grid: { display: false },   ticks: { color: '#475569', font: { size: 9 }, callback: v => '$' + (v>=1000?(v/1000).toFixed(0)+'K':v) }, title: { display: true, text: '매출/GP', color: '#475569', font: { size: 9 } } }
+      }
+    }
+  });
+
+  // Chart: GM% by price
+  mkChart('cPriceGm', {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'GM%',
+        data: priceRows.map(r => { const rev = parseFloat(r.revenue)||0, gp = parseFloat(r.gp)||0; return rev > 0 ? parseFloat((gp/rev*100).toFixed(1)) : 0; }),
+        backgroundColor: priceRows.map(r => { const rev = parseFloat(r.revenue)||0, gp = parseFloat(r.gp)||0, gm = rev > 0 ? gp/rev*100 : 0; return gm >= 30 ? 'rgba(34,197,94,0.75)' : gm >= 20 ? 'rgba(234,179,8,0.75)' : 'rgba(239,68,68,0.75)'; }),
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { ...TOOLTIP, callbacks: { label: ctx => ' GM%: ' + ctx.raw + '%' } } },
+      scales: {
+        x: { grid: { color: '#1a2233' }, ticks: { color: '#475569', font: { size: 10 }, maxRotation: 45 } },
+        y: { grid: { color: '#1a2233' }, ticks: { color: '#475569', font: { size: 9 }, callback: v => v + '%' }, suggestedMax: 50 }
+      }
+    }
+  });
+}
+
 // ── INIT ──
-initGIS();
 checkAuth();
 </script>
 </body>
