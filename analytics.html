@@ -600,6 +600,19 @@ function signOut() {
 }
 
 async function checkAuth() {
+  // Case 1: GIS redirect fallback - access_token in URL hash
+  const hash = new URLSearchParams(window.location.hash.slice(1));
+  const hashToken = hash.get('access_token');
+  if (hashToken) {
+    accessToken = hashToken;
+    sessionStorage.setItem('asung_token', accessToken);
+    sessionStorage.setItem('asung_token_exp', Date.now() + 55 * 60 * 1000);
+    window.history.replaceState(null, '', window.location.pathname);
+    await loadUser();
+    return;
+  }
+
+  // Case 2: sessionStorage에 유효한 토큰
   const saved = sessionStorage.getItem('asung_token');
   const exp   = parseInt(sessionStorage.getItem('asung_token_exp') || '0');
   if (saved && Date.now() < exp) {
@@ -607,6 +620,7 @@ async function checkAuth() {
     await loadUser();
     return;
   }
+
   sessionStorage.removeItem('asung_token');
   sessionStorage.removeItem('asung_token_exp');
   document.getElementById('authScreen').style.display = 'flex';
