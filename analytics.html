@@ -359,10 +359,12 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
           <input type="date" id="bDateTo">
         </div>
       </div>
-      <div class="field">
-        <label class="field-label">Brand <span style="color:var(--red)">*필수</span></label>
-        <div class="ac-wrap">
-          <input type="text" id="bBrand" placeholder="예: ORS, Kim & C" autocomplete="off" oninput="acInput(this,'bBrand','brand')" onkeydown="acKey(event,'bBrand')" onfocus="acInput(this,'bBrand','brand')" style="min-width:180px">
+      <div class="field" style="flex:1;min-width:280px">
+        <label class="field-label">Brand <span style="color:var(--red)">*필수</span> <span style="color:var(--dim);font-weight:400">(최대 5개, Enter로 추가)</span></label>
+        <div class="ac-wrap" style="position:relative">
+          <div id="bBrandChips" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:34px;padding:4px 8px;background:#0f1625;border:1px solid #1f2a3d;border-radius:6px">
+            <input type="text" id="bBrand" placeholder="브랜드명 입력 후 Enter" autocomplete="off" oninput="acInput(this,'bBrand','brand')" onkeydown="bBrandKey(event)" onfocus="acInput(this,'bBrand','brand')" style="flex:1;min-width:140px;background:transparent;border:none;outline:none;color:var(--text);font-size:12px;padding:4px">
+          </div>
           <div class="ac-list" id="ac-bBrand" style="display:none"></div>
         </div>
       </div>
@@ -1259,15 +1261,61 @@ function renderPriceAnalysis({ priceRows, summaryRows, custRows, sku }) {
 // ══════════════════════════════════════
 // BRAND PERFORMANCE
 // ══════════════════════════════════════
+// ─── Multi-brand chip state ───
+let bBrandList = [];
+const BRAND_COLORS = ['#3b82f6','#22c55e','#f59e0b','#a855f7','#ef4444'];
+
+function bBrandKey(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const v = e.target.value.trim();
+    if (v) addBrandChip(v);
+    return;
+  }
+  acKey(e, 'bBrand');
+}
+function addBrandChip(name) {
+  if (!name) return;
+  if (bBrandList.length >= 5) { alert('최대 5개 브랜드까지 비교 가능합니다'); return; }
+  if (bBrandList.some(b => b.toLowerCase() === name.toLowerCase())) return;
+  bBrandList.push(name);
+  const inp = document.getElementById('bBrand');
+  inp.value = '';
+  document.getElementById('ac-bBrand').style.display = 'none';
+  renderBrandChips();
+  inp.focus();
+}
+function removeBrandChip(name) {
+  bBrandList = bBrandList.filter(b => b !== name);
+  renderBrandChips();
+}
+function renderBrandChips() {
+  const container = document.getElementById('bBrandChips');
+  const inp = document.getElementById('bBrand');
+  container.querySelectorAll('.brand-chip').forEach(n => n.remove());
+  bBrandList.forEach((b, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'brand-chip';
+    chip.style.cssText = `display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:${BRAND_COLORS[i]}22;border:1px solid ${BRAND_COLORS[i]};color:${BRAND_COLORS[i]};border-radius:12px;font-size:11px;font-weight:600`;
+    chip.innerHTML = `${b}<span style="cursor:pointer;font-weight:700" onclick="removeBrandChip('${b.replace(/'/g,"\\'")}')">×</span>`;
+    container.insertBefore(chip, inp);
+  });
+}
+// (bBrand chip behavior is wired directly into acSelect below)
+
 async function runBrandSearch() {
-  const brand    = document.getElementById('bBrand').value.trim();
+  // Allow free-text remaining in input as an extra brand
+  const remaining = document.getElementById('bBrand').value.trim();
+  if (remaining) addBrandChip(remaining);
+
+  const brands   = [...bBrandList];
   const branch   = document.getElementById('bBranch').value;
   const source   = document.getElementById('bSource').value;
   const dateFrom = document.getElementById('bDateFrom').value;
   const dateTo   = document.getElementById('bDateTo').value;
 
-  if (!brand) {
-    document.getElementById('brandContent').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">브랜드를 입력하세요</div></div>`;
+  if (!brands.length) {
+    document.getElementById('brandContent').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">브랜드를 1개 이상 입력하세요</div></div>`;
     return;
   }
   const btn = document.getElementById('bSearchBtn');
@@ -1275,39 +1323,166 @@ async function runBrandSearch() {
   document.getElementById('brandContent').innerHTML = '<div class="loading"><div class="spinner"></div> BigQuery 쿼리 중...</div>';
 
   const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
-  const conds = [`LOWER(Brand_Clean) LIKE LOWER('%${brand.replace(/'/g,"''")}%')`];
+  // Each brand uses LIKE for fuzzy match, joined by OR
+  const brandClauses = brands.map(b => `LOWER(Brand_Clean) LIKE LOWER('%${b.replace(/'/g,"''")}%')`);
+  const conds = ['(' + brandClauses.join(' OR ') + ')'];
   if (branch)   conds.push(`Location = '${branch.replace(/'/g,"''")}'`);
   if (source)   conds.push(`Source_Clean = '${source.replace(/'/g,"''")}'`);
   if (dateFrom) conds.push(`Date >= '${dateFrom}'`);
   if (dateTo)   conds.push(`Date <= '${dateTo}'`);
   const where = 'WHERE ' + conds.join(' AND ');
 
+  // Build a CASE expression to bucket rows into the user-typed brand label
+  const caseExpr = 'CASE ' + brands.map(b =>
+    `WHEN LOWER(Brand_Clean) LIKE LOWER('%${b.replace(/'/g,"''")}%') THEN '${b.replace(/'/g,"''")}'`
+  ).join(' ') + ' ELSE NULL END';
+
   try {
-    const [summaryRows, trendRows, skuRows, custRows] = await Promise.all([
-      bqQuery(`SELECT MAX(Brand_Clean) as brand, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders, COUNT(DISTINCT Customer_Clean) as customers, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where}`),
-      bqQuery(`SELECT FORMAT_DATE('%Y-%m', Date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY month ORDER BY month`),
-      bqQuery(`SELECT SKU, MAX(Product_Name) as product, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY SKU ORDER BY revenue DESC LIMIT 50`),
-      bqQuery(`SELECT Customer_Clean as customer, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY customer ORDER BY revenue DESC LIMIT 50`)
-    ]);
+    const queries = [
+      // Summary per brand bucket
+      bqQuery(`SELECT ${caseExpr} as brand_label, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders, COUNT(DISTINCT Customer_Clean) as customers, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY brand_label HAVING brand_label IS NOT NULL`),
+      // Monthly trend per brand bucket
+      bqQuery(`SELECT ${caseExpr} as brand_label, FORMAT_DATE('%Y-%m', Date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty FROM ${fullTable} ${where} GROUP BY brand_label, month HAVING brand_label IS NOT NULL ORDER BY month`),
+    ];
+    // Single-brand mode also loads SKU / Customer deep dive
+    if (brands.length === 1) {
+      queries.push(
+        bqQuery(`SELECT SKU, MAX(Product_Name) as product, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY SKU ORDER BY revenue DESC LIMIT 50`),
+        bqQuery(`SELECT Customer_Clean as customer, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY customer ORDER BY revenue DESC LIMIT 50`)
+      );
+    }
+    const results = await Promise.all(queries);
+    const summaryRows = results[0];
+    const trendRows   = results[1];
+    const skuRows     = results[2] || [];
+    const custRows    = results[3] || [];
 
     btn.disabled = false; btn.textContent = '🔍 분석';
-    if (!trendRows.length) {
-      document.getElementById('brandContent').innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">결과 없음</div><div class="empty-desc">브랜드 "${brand}"에 해당하는 데이터가 없습니다</div></div>`;
+    if (!summaryRows.length) {
+      document.getElementById('brandContent').innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">결과 없음</div><div class="empty-desc">입력한 브랜드에 해당하는 데이터가 없습니다</div></div>`;
       return;
     }
-    renderBrandPerformance({ summaryRows, trendRows, skuRows, custRows, brand });
+    renderBrandPerformance({ summaryRows, trendRows, skuRows, custRows, brands });
   } catch(e) {
     btn.disabled = false; btn.textContent = '🔍 분석';
     document.getElementById('brandContent').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">쿼리 오류</div><div class="empty-desc">${e.message}</div></div>`;
   }
 }
 
-function renderBrandPerformance({ summaryRows, trendRows, skuRows, custRows, brand }) {
+function renderBrandPerformance({ summaryRows, trendRows, skuRows, custRows, brands }) {
+  const isMulti = brands.length > 1;
+  const brand = brands[0]; // for single-brand exports
+
+  // ── MULTI-BRAND COMPARISON VIEW ──
+  if (isMulti) {
+    // Order summary rows to match the chip order (brands array)
+    const summaryByBrand = {};
+    summaryRows.forEach(r => { summaryByBrand[r.brand_label] = r; });
+    const orderedSummary = brands.map(b => summaryByBrand[b]).filter(Boolean);
+
+    // Build month universe across all brands
+    const monthSet = new Set();
+    trendRows.forEach(r => monthSet.add(r.month));
+    const months = [...monthSet].sort();
+
+    // Pivot: brand -> month -> {rev, gp, qty}
+    const pivot = {};
+    brands.forEach(b => { pivot[b] = {}; months.forEach(m => pivot[b][m] = { rev:0, gp:0, qty:0 }); });
+    trendRows.forEach(r => {
+      if (pivot[r.brand_label] && pivot[r.brand_label][r.month]) {
+        pivot[r.brand_label][r.month] = { rev: parseFloat(r.revenue)||0, gp: parseFloat(r.gp)||0, qty: parseInt(r.qty)||0 };
+      }
+    });
+
+    // Cache export
+    exportData.brandCompare = [];
+    brands.forEach(b => months.forEach(m => {
+      const c = pivot[b][m];
+      exportData.brandCompare.push({ Brand:b, Month:m, Revenue:c.rev, Gross_Profit:c.gp, GM_Pct: c.rev>0?(c.gp/c.rev*100).toFixed(1):0, Quantity:c.qty });
+    }));
+
+    // KPI cards
+    const kpiCards = orderedSummary.map((s, i) => {
+      const color = BRAND_COLORS[brands.indexOf(s.brand_label)] || '#3b82f6';
+      const rev = parseFloat(s.revenue)||0, gp = parseFloat(s.gp)||0;
+      const gm = rev > 0 ? (gp/rev*100).toFixed(1) : '0';
+      // Growth: compare first half vs second half of months
+      const bMonths = months.map(m => pivot[s.brand_label][m].rev);
+      const mid = Math.floor(bMonths.length/2);
+      const firstHalf = bMonths.slice(0,mid).reduce((a,b)=>a+b,0);
+      const secondHalf = bMonths.slice(mid).reduce((a,b)=>a+b,0);
+      const growth = firstHalf>0 ? ((secondHalf-firstHalf)/firstHalf*100).toFixed(1) : 'N/A';
+      const growthColor = growth === 'N/A' ? 'var(--dim)' : (parseFloat(growth)>=0 ? 'var(--green)' : 'var(--red)');
+      const growthSign = growth !== 'N/A' && parseFloat(growth)>=0 ? '+' : '';
+      return `
+        <div style="background:#0f1625;border:1px solid ${color};border-left:3px solid ${color};border-radius:6px;padding:12px 14px;min-width:180px">
+          <div style="font-size:12px;font-weight:700;color:${color};margin-bottom:8px">${s.brand_label}</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:11px">
+            <div><div style="color:var(--dim);font-size:10px">매출</div><div style="font-weight:600;color:var(--text)">${fmtK(rev)}</div></div>
+            <div><div style="color:var(--dim);font-size:10px">GP</div><div style="font-weight:600;color:var(--text)">${fmtK(gp)}</div></div>
+            <div><div style="color:var(--dim);font-size:10px">GM%</div><div style="font-weight:600;color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</div></div>
+            <div><div style="color:var(--dim);font-size:10px">성장률</div><div style="font-weight:600;color:${growthColor}">${growth==='N/A'?'N/A':growthSign+growth+'%'}</div></div>
+            <div><div style="color:var(--dim);font-size:10px">주문</div><div style="font-weight:600;color:var(--text)">${parseInt(s.orders)||0}</div></div>
+            <div><div style="color:var(--dim);font-size:10px">고객</div><div style="font-weight:600;color:var(--text)">${parseInt(s.customers)||0}</div></div>
+          </div>
+        </div>`;
+    }).join('');
+
+    document.getElementById('brandContent').innerHTML = `
+      <div style="padding:20px 24px 24px">
+        <div style="margin-bottom:14px">
+          <span style="font-size:13px;font-weight:700;color:var(--text)">🏷 브랜드 비교 (${brands.length}개)</span>
+          <button class="export-btn" style="margin-left:12px" onclick="exportCSV(exportData.brandCompare,'brand_compare.csv')">⬇ CSV</button>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px">${kpiCards}</div>
+        <div class="charts-grid" style="margin-bottom:16px">
+          <div class="card">
+            <div class="card-hdr"><span class="card-title">월별 매출 추이</span><span class="card-badge">${months.length}개월</span></div>
+            <div class="chart-box tall"><canvas id="cBrandCmpRev"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-hdr"><span class="card-title">월별 GP% 추이</span></div>
+            <div class="chart-box tall"><canvas id="cBrandCmpGm"></canvas></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const revDatasets = brands.map((b,i) => ({
+      label: b, data: months.map(m => pivot[b][m].rev),
+      borderColor: BRAND_COLORS[i], backgroundColor: BRAND_COLORS[i]+'33',
+      tension: 0.3, borderWidth: 2, pointRadius: 3
+    }));
+    mkChart('cBrandCmpRev', { type:'line', data:{ labels:months, datasets:revDatasets },
+      options:{...baseOpts(), plugins:{...baseOpts().plugins, legend:{display:true,position:'top',labels:{color:'#94a3b8',font:{size:10}}}, tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>' '+ctx.dataset.label+': '+fmt(ctx.raw)}}}}});
+
+    const gmDatasets = brands.map((b,i) => ({
+      label: b,
+      data: months.map(m => { const c = pivot[b][m]; return c.rev>0 ? +(c.gp/c.rev*100).toFixed(1) : null; }),
+      borderColor: BRAND_COLORS[i], backgroundColor: BRAND_COLORS[i]+'33',
+      tension: 0.3, borderWidth: 2, pointRadius: 3, spanGaps: true
+    }));
+    mkChart('cBrandCmpGm', { type:'line', data:{ labels:months, datasets:gmDatasets },
+      options:{...baseOpts(), plugins:{...baseOpts().plugins, legend:{display:true,position:'top',labels:{color:'#94a3b8',font:{size:10}}}, tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>' '+ctx.dataset.label+': '+(ctx.raw==null?'—':ctx.raw+'%')}}}, scales:{...baseOpts().scales, y:{...baseOpts().scales.y, ticks:{...baseOpts().scales.y.ticks, callback:v=>v+'%'}}}}});
+    return;
+  }
+
+  // ── SINGLE BRAND DEEP-DIVE (original) ──
+  // Convert comparison-style trendRows to single-brand shape
+  trendRows.forEach(r => { if (r.orders == null) r.orders = 0; });
+  const s0 = summaryRows[0] || {};
+  const singleSummary = [{
+    brand: s0.brand_label || brand,
+    revenue: s0.revenue, gp: s0.gp, qty: s0.qty,
+    orders: s0.orders, customers: s0.customers,
+    first_date: s0.first_date, last_date: s0.last_date
+  }];
+
   // Cache for export
   exportData.brandTrend = trendRows.map(r => ({ Brand: brand, Month: r.month, Revenue: r.revenue, Gross_Profit: r.gp, Quantity: r.qty, Orders: r.orders }));
   exportData.brandSkus  = skuRows.map(r => ({ Brand: brand, SKU: r.SKU, Product: r.product, First_Date: r.first_date, Last_Date: r.last_date, Revenue: r.revenue, Gross_Profit: r.gp, GM_Pct: (parseFloat(r.revenue)>0?(parseFloat(r.gp)/parseFloat(r.revenue)*100).toFixed(1):0), Quantity: r.qty, Orders: r.orders }));
   exportData.brandCusts = custRows.map(r => ({ Brand: brand, Customer: r.customer, First_Date: r.first_date, Last_Date: r.last_date, Revenue: r.revenue, Gross_Profit: r.gp, GM_Pct: (parseFloat(r.revenue)>0?(parseFloat(r.gp)/parseFloat(r.revenue)*100).toFixed(1):0), Quantity: r.qty, Orders: r.orders }));
-  const s = summaryRows[0] || {};
+  const s = singleSummary[0] || {};
   const rev = parseFloat(s.revenue)||0, gp = parseFloat(s.gp)||0;
   const gm = rev > 0 ? (gp/rev*100).toFixed(1) : '0';
 
@@ -1623,6 +1798,10 @@ function acInput(input, fieldId, type='customer') {
 function acSelect(e, fieldId) {
   e.preventDefault();
   const val = e.currentTarget.dataset.val;
+  if (fieldId === 'bBrand') {
+    addBrandChip(val);
+    return;
+  }
   const input = document.getElementById(fieldId);
   input.value = val;
   document.getElementById('ac-' + fieldId).style.display = 'none';
