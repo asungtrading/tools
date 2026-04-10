@@ -2,41 +2,54 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Asung Tools">
 <meta name="theme-color" content="#080a0f">
 <title>Asung Tools</title>
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+* { -webkit-box-sizing: border-box; box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
-body {
+html, body {
+  height: 100%;
   background: #080a0f;
   color: #f1f5f9;
-  font-family: -apple-system, 'Segoe UI', sans-serif;
-  min-height: 100vh;
-  min-height: 100dvh;
+}
+
+body {
+  font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  min-height: 100%;
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
   display: flex;
+  -webkit-box-orient: vertical;
+  -webkit-box-direction: normal;
+  -webkit-flex-direction: column;
+  -ms-flex-direction: column;
   flex-direction: column;
+  -webkit-box-align: center;
+  -webkit-align-items: center;
+  -ms-flex-align: center;
   align-items: center;
+  -webkit-box-pack: center;
+  -webkit-justify-content: center;
+  -ms-flex-pack: center;
   justify-content: center;
-  padding: env(safe-area-inset-top, 24px) 24px env(safe-area-inset-bottom, 24px);
+  padding: 40px 24px;
 }
 
 .logo-wrap {
   text-align: center;
-  margin-bottom: 48px;
+  margin-bottom: 40px;
 }
 
 .logo {
-  font-size: 36px;
+  font-size: 34px;
   font-weight: 900;
   letter-spacing: -1px;
-  background: linear-gradient(135deg, #3b82f6, #14b8a6);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #3b82f6;
 }
 
 .logo-sub {
@@ -50,70 +63,86 @@ body {
 .menu {
   width: 100%;
   max-width: 360px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
 }
 
 .menu-item {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
   display: flex;
+  -webkit-box-align: center;
+  -webkit-align-items: center;
+  -ms-flex-align: center;
   align-items: center;
-  gap: 16px;
   background: #0f1218;
   border: 1px solid #222a38;
-  border-radius: 14px;
-  padding: 18px 20px;
+  border-radius: 12px;
+  padding: 16px 18px;
   text-decoration: none;
   color: #f1f5f9;
-  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  margin-bottom: 10px;
   cursor: pointer;
-  -webkit-user-select: none;
 }
 
 .menu-item:active {
   background: #161b24;
   border-color: #2a3446;
-  transform: scale(0.98);
 }
 
 .icon {
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   border-radius: 10px;
+  display: -webkit-box;
+  display: -webkit-flex;
   display: flex;
+  -webkit-box-align: center;
+  -webkit-align-items: center;
   align-items: center;
+  -webkit-box-pack: center;
+  -webkit-justify-content: center;
   justify-content: center;
   font-size: 20px;
+  margin-right: 14px;
+  -webkit-flex-shrink: 0;
   flex-shrink: 0;
 }
 
-.icon.red    { background: rgba(239,68,68,.15); }
-.icon.blue   { background: rgba(59,130,246,.15); }
-.icon.green  { background: rgba(34,197,94,.15); }
-.icon.purple { background: rgba(168,85,247,.15); }
+.icon-red    { background: #2a1010; }
+.icon-blue   { background: #0f1e38; }
+.icon-green  { background: #0a2010; }
+.icon-purple { background: #1a0f2a; }
 
-.item-text { flex: 1; }
-.item-name {
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.2;
+.item-text {
+  -webkit-box-flex: 1;
+  -webkit-flex: 1;
+  flex: 1;
 }
+
+.item-name {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
 .item-desc {
   font-size: 11px;
   color: #475569;
   margin-top: 3px;
 }
+
 .arrow {
   color: #2a3446;
-  font-size: 18px;
-  flex-shrink: 0;
+  font-size: 20px;
+  margin-left: 8px;
 }
 
 .footer {
-  margin-top: 40px;
+  margin-top: 32px;
   font-size: 11px;
   color: #2a3446;
   letter-spacing: 1px;
+  text-align: center;
 }
 </style>
 </head>
@@ -126,40 +155,40 @@ body {
 
 <div class="menu">
 
-  <a class="menu-item" href="https://asungtrading.github.io/tools/" target="_self">
-    <div class="icon red">🚨</div>
+  <a class="menu-item" href="https://asungtrading.github.io/tools/">
+    <div class="icon icon-red">🚨</div>
     <div class="item-text">
       <div class="item-name">긴급 발주 대시보드</div>
       <div class="item-desc">재고 긴급 발주 현황</div>
     </div>
-    <div class="arrow">›</div>
+    <div class="arrow">&#8250;</div>
   </a>
 
-  <a class="menu-item" href="https://asungtrading.github.io/tools/OpenOrders.html" target="_self">
-    <div class="icon blue">📋</div>
+  <a class="menu-item" href="https://asungtrading.github.io/tools/OpenOrders.html">
+    <div class="icon icon-blue">📋</div>
     <div class="item-text">
       <div class="item-name">데일리 오픈 오더</div>
       <div class="item-desc">오늘의 미처리 오더</div>
     </div>
-    <div class="arrow">›</div>
+    <div class="arrow">&#8250;</div>
   </a>
 
-  <a class="menu-item" href="https://asungtrading.github.io/tools/SalesOverview.html" target="_self">
-    <div class="icon green">📈</div>
+  <a class="menu-item" href="https://asungtrading.github.io/tools/SalesOverview.html">
+    <div class="icon icon-green">📈</div>
     <div class="item-text">
       <div class="item-name">최근 판매 현황</div>
       <div class="item-desc">최근 판매 데이터 요약</div>
     </div>
-    <div class="arrow">›</div>
+    <div class="arrow">&#8250;</div>
   </a>
 
-  <a class="menu-item" href="https://asungtrading.github.io/tools/analytics.html" target="_self">
-    <div class="icon purple">🔍</div>
+  <a class="menu-item" href="https://asungtrading.github.io/tools/analytics.html">
+    <div class="icon icon-purple">🔍</div>
     <div class="item-text">
       <div class="item-name">Historical Data</div>
       <div class="item-desc">2022년부터 전체 매출 분석</div>
     </div>
-    <div class="arrow">›</div>
+    <div class="arrow">&#8250;</div>
   </a>
 
 </div>
