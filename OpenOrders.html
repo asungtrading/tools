@@ -228,28 +228,7 @@ td.overdue-med{color:var(--yellow);font-weight:700}
 .modal-filter input{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:6px;font-size:11px;outline:none;width:200px}
 .modal-filter input:focus{border-color:var(--blue)}
 .modal-filter select{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:6px;font-size:11px;outline:none;cursor:pointer}
-
-/* ── MOBILE ── */
-html,body{overflow-x:hidden;max-width:100vw}
-*{min-width:0}
-@media(max-width:768px){
-  .hdr{padding:0 12px;height:48px}
-  .hdr-title{display:none}
-  .content{padding:10px}
-  .controls{flex-wrap:wrap;gap:8px;padding:10px 12px}
-  .branch-row{grid-template-columns:1fr}
-  .two-col{grid-template-columns:1fr}
-  .kpi-row{grid-template-columns:repeat(2,1fr);gap:8px}
-  .chart-wrap{height:180px}
-  .chart-wrap.tall{height:220px}
-  .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
-  table{min-width:480px}
-  th,td{padding:6px 8px;font-size:10px}
-  .filter-row{flex-wrap:wrap;gap:6px}
-  .filter-btn{font-size:11px;padding:5px 10px}
-  .modal-inner{width:95vw;max-height:90vh;overflow-y:auto}
-  .modal-filter input{width:100%}
-}
+</style>
 </head>
 <body>
 
@@ -1677,4 +1656,3 @@ function resetDashboard() {
 </script>
 </body>
 </html>
-</style>
