@@ -1000,8 +1000,8 @@ function renderPriceAnalysis({ priceRows, summaryRows, custRows, sku }) {
         <div class="kpi blue"><div class="kpi-lbl">총 매출</div><div class="kpi-val">${fmtK(totalRev)}</div><div class="kpi-sub">${parseInt(s.orders)||0} orders</div></div>
         <div class="kpi green"><div class="kpi-lbl">Gross Profit</div><div class="kpi-val">${fmtK(totalGp)}</div><div class="kpi-sub">GM ${gmPct}%</div></div>
         <div class="kpi yellow"><div class="kpi-lbl">총 수량</div><div class="kpi-val">${parseInt(totalQty).toLocaleString()}</div><div class="kpi-sub">units</div></div>
-        <div class="kpi green"><div class="kpi-lbl">🔝 Best Price</div><div class="kpi-val">$${parseFloat(bestPrice.price).toFixed(2)}</div><div class="kpi-sub">수량 ${parseInt(bestPrice.qty).toLocaleString()}</div></div>
-        <div class="kpi red"><div class="kpi-lbl">📉 Worst Price</div><div class="kpi-val">$${parseFloat(worstPrice.price).toFixed(2)}</div><div class="kpi-sub">수량 ${parseInt(worstPrice.qty).toLocaleString()}</div></div>
+        <div class="kpi green"><div class="kpi-lbl">📦 Best Volume Price</div><div class="kpi-val">$${parseFloat(bestPrice.price).toFixed(2)}</div><div class="kpi-sub">최다 판매가</div></div>
+        <div class="kpi purple"><div class="kpi-lbl">💎 Premium Price</div><div class="kpi-val">$${parseFloat(worstPrice.price).toFixed(2)}</div><div class="kpi-sub">고마진 가격대</div></div>
       </div>
 
       <div class="charts-grid" style="margin-bottom:16px">
@@ -1044,7 +1044,7 @@ function renderPriceAnalysis({ priceRows, summaryRows, custRows, sku }) {
                 const isTop  = qty === maxQty;
                 return `<tr ${isTop ? 'style="background:rgba(34,197,94,.06)"' : ''}>
                   <td style="font-family:monospace;font-weight:${isTop?'700':'400'};color:${isTop?'var(--green)':'var(--text)'}">
-                    $${parseFloat(r.price).toFixed(2)}${isTop?' 🔝':''}
+                    $${parseFloat(r.price).toFixed(2)}${isTop?'  ★':''}
                   </td>
                   <td style="font-size:11px;color:var(--dim)">${r.first_date||'—'}</td>
                   <td style="font-size:11px;color:var(--dim)">${r.last_date||'—'}</td>
