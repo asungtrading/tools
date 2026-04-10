@@ -175,11 +175,73 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
 .price-bar-cell { position: relative; }
 .price-bar-bg { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(59,130,246,.12); border-radius: 0 3px 3px 0; }
 
+/* ── MOBILE FIX: prevent horizontal overflow ── */
+html, body { overflow-x: hidden; max-width: 100vw; }
+* { min-width: 0; }
+
 @media (max-width: 1100px) {
   .search-grid { grid-template-columns: 1fr 1fr; }
   .kpi-strip { grid-template-columns: repeat(3, 1fr); }
   .charts-grid, .charts-row { grid-template-columns: 1fr; }
   .price-kpi-strip { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 768px) {
+  /* Auth */
+  .auth-card { padding: 28px 20px; min-width: unset; width: calc(100vw - 40px); }
+
+  /* Header */
+  .hdr { padding: 0 12px; height: 48px; }
+  .hdr-title { display: none; }
+  .hdr-name { display: none; }
+  .hdr-sep { display: none; }
+
+  /* Tab nav - scrollable */
+  .tab-nav { overflow-x: auto; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; padding: 0 8px; gap: 0; }
+  .tab-btn { font-size: 11px; padding: 10px 10px; white-space: nowrap; flex-shrink: 0; }
+
+  /* Search panels */
+  .search-panel { padding: 12px; }
+  .search-grid { grid-template-columns: 1fr; gap: 8px; }
+  .date-row { grid-template-columns: 1fr 1fr; }
+  .price-search { padding: 12px; gap: 8px; flex-direction: column; }
+  .price-search .field { width: 100%; }
+  .price-search input, .price-search select { width: 100%; min-width: unset !important; }
+  .price-search > div[style*="date-row"] { min-width: unset !important; }
+
+  /* Filter chips */
+  .filter-row { padding: 8px 12px; }
+
+  /* Content */
+  .content { padding: 12px; }
+
+  /* KPI strips */
+  .kpi-strip { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .price-kpi-strip { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .kpi { padding: 12px; }
+  .kpi-val { font-size: 16px; }
+
+  /* Charts */
+  .charts-grid, .charts-row { grid-template-columns: 1fr; gap: 10px; }
+  .chart-box { height: 180px; }
+  .chart-box.tall { height: 220px; }
+
+  /* Tables - horizontal scroll */
+  .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; max-height: 320px; }
+  .tbl-card { margin-bottom: 10px; }
+  table { min-width: 600px; }
+  tbody td, thead th { padding: 8px 10px; font-size: 11px; }
+
+  /* Quick select buttons */
+  .quick-select-row { overflow-x: auto; -webkit-overflow-scrolling: touch; flex-wrap: nowrap !important; padding-bottom: 4px; }
+  .export-btn { white-space: nowrap; flex-shrink: 0; }
+
+  /* Monthly comparison date inputs */
+  #mFrom1, #mTo1, #mFrom2, #mTo2 { font-size: 11px; padding: 7px 6px; }
+
+  /* AC dropdown */
+  .ac-wrap { width: 100%; }
+  .ac-list { max-height: 200px; }
 }
 </style>
 </head>
@@ -305,26 +367,26 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
     <div class="price-search">
       <div class="field">
         <label class="field-label">기간</label>
-        <div class="date-row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;min-width:240px">
+        <div class="date-row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           <input type="date" id="pDateFrom">
           <input type="date" id="pDateTo">
         </div>
       </div>
       <div class="field">
         <label class="field-label">SKU <span style="color:var(--red)">*필수</span></label>
-        <input type="text" id="pSku" placeholder="예: ORS11108" style="min-width:160px">
+        <input type="text" id="pSku" placeholder="예: ORS11108" style="">
       </div>
       <div class="field">
         <label class="field-label">Brand (선택)</label>
         <div class="ac-wrap">
-          <input type="text" id="pBrand" placeholder="예: ORS, Kim & C" autocomplete="off" oninput="acInput(this,'pBrand','brand')" onkeydown="acKey(event,'pBrand')" onfocus="acInput(this,'pBrand','brand')" style="min-width:160px">
+          <input type="text" id="pBrand" placeholder="예: ORS, Kim & C" autocomplete="off" oninput="acInput(this,'pBrand','brand')" onkeydown="acKey(event,'pBrand')" onfocus="acInput(this,'pBrand','brand')" style="">
           <div class="ac-list" id="ac-pBrand" style="display:none"></div>
         </div>
       </div>
       <div class="field">
         <label class="field-label">Customer (선택)</label>
         <div class="ac-wrap">
-          <input type="text" id="pCustomer" placeholder="예: Clore" autocomplete="off" oninput="acInput(this,'pCustomer')" onkeydown="acKey(event,'pCustomer')" onfocus="acInput(this,'pCustomer')" style="min-width:160px">
+          <input type="text" id="pCustomer" placeholder="예: Clore" autocomplete="off" oninput="acInput(this,'pCustomer')" onkeydown="acKey(event,'pCustomer')" onfocus="acInput(this,'pCustomer')" style="">
           <div class="ac-list" id="ac-pCustomer" style="display:none"></div>
         </div>
       </div>
@@ -354,7 +416,7 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
     <div class="price-search">
       <div class="field">
         <label class="field-label">기간</label>
-        <div class="date-row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;min-width:240px">
+        <div class="date-row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           <input type="date" id="bDateFrom">
           <input type="date" id="bDateTo">
         </div>
@@ -363,7 +425,7 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
         <label class="field-label">Brand <span style="color:var(--red)">*필수</span> <span style="color:var(--dim);font-weight:400">(최대 5개, Enter로 추가)</span></label>
         <div class="ac-wrap" style="position:relative">
           <div id="bBrandChips" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:34px;padding:4px 8px;background:#0f1625;border:1px solid #1f2a3d;border-radius:6px">
-            <input type="text" id="bBrand" placeholder="브랜드명 입력 후 Enter" autocomplete="off" oninput="acInput(this,'bBrand','brand')" onkeydown="bBrandKey(event)" onfocus="acInput(this,'bBrand','brand')" style="flex:1;min-width:140px;background:transparent;border:none;outline:none;color:var(--text);font-size:12px;padding:4px">
+            <input type="text" id="bBrand" placeholder="브랜드명 입력 후 Enter" autocomplete="off" oninput="acInput(this,'bBrand','brand')" onkeydown="bBrandKey(event)" onfocus="acInput(this,'bBrand','brand')" style="flex:1background:transparent;border:none;outline:none;color:var(--text);font-size:12px;padding:4px">
           </div>
           <div class="ac-list" id="ac-bBrand" style="display:none"></div>
         </div>
@@ -404,7 +466,7 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
     <div class="price-search">
       <div class="field">
         <label class="field-label">기간</label>
-        <div class="date-row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;min-width:240px">
+        <div class="date-row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           <input type="date" id="cDateFrom">
           <input type="date" id="cDateTo">
         </div>
@@ -413,7 +475,7 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
         <label class="field-label">Customer <span style="color:var(--red)">*필수</span> <span style="color:var(--dim);font-weight:400">(최대 5개, Enter로 추가)</span></label>
         <div class="ac-wrap" style="position:relative">
           <div id="cCustChips" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:34px;padding:4px 8px;background:#0f1625;border:1px solid #1f2a3d;border-radius:6px">
-            <input type="text" id="cCustomer" placeholder="고객명 입력 후 Enter" autocomplete="off" oninput="acInput(this,'cCustomer')" onkeydown="cCustKey(event)" onfocus="acInput(this,'cCustomer')" style="flex:1;min-width:140px;background:transparent;border:none;outline:none;color:var(--text);font-size:12px;padding:4px">
+            <input type="text" id="cCustomer" placeholder="고객명 입력 후 Enter" autocomplete="off" oninput="acInput(this,'cCustomer')" onkeydown="cCustKey(event)" onfocus="acInput(this,'cCustomer')" style="flex:1background:transparent;border:none;outline:none;color:var(--text);font-size:12px;padding:4px">
           </div>
           <div class="ac-list" id="ac-cCustomer" style="display:none"></div>
         </div>
@@ -450,7 +512,7 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
   </div><!-- /tab-customer -->
   <!-- TAB: MONTHLY COMPARISON -->
   <div class="tab-panel" id="tab-monthly">
-    <div class="price-search" style="flex-wrap:wrap;gap:16px;align-items:flex-end">
+    <div class="price-search" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
       <div class="field">
         <label class="field-label">기간 1 (연도)</label>
         <select id="mYear1">
@@ -482,14 +544,14 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
       <div class="field">
         <label class="field-label">Brand (선택)</label>
         <div class="ac-wrap">
-          <input type="text" id="mBrand" placeholder="전체 브랜드" autocomplete="off" oninput="acInput(this,'mBrand','brand')" onkeydown="acKey(event,'mBrand')" onfocus="acInput(this,'mBrand','brand')" style="min-width:150px">
+          <input type="text" id="mBrand" placeholder="전체 브랜드" autocomplete="off" oninput="acInput(this,'mBrand','brand')" onkeydown="acKey(event,'mBrand')" onfocus="acInput(this,'mBrand','brand')" style="">
           <div class="ac-list" id="ac-mBrand" style="display:none"></div>
         </div>
       </div>
       <div class="field">
         <label class="field-label">Customer (선택)</label>
         <div class="ac-wrap">
-          <input type="text" id="mCustomer" placeholder="전체 고객" autocomplete="off" oninput="acInput(this,'mCustomer')" onkeydown="acKey(event,'mCustomer')" onfocus="acInput(this,'mCustomer')" style="min-width:150px">
+          <input type="text" id="mCustomer" placeholder="전체 고객" autocomplete="off" oninput="acInput(this,'mCustomer')" onkeydown="acKey(event,'mCustomer')" onfocus="acInput(this,'mCustomer')" style="">
           <div class="ac-list" id="ac-mCustomer" style="display:none"></div>
         </div>
       </div>
@@ -497,7 +559,7 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
     </div>
 
     <!-- 빠른 선택 -->
-    <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+    <div class="quick-select-row" style="background:var(--surface);border-bottom:1px solid var(--border);padding:10px 12px;display:flex;align-items:center;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch">
       <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin-right:4px">빠른 선택</span>
       <button class="export-btn" onclick="runQuick('rolling12')">📅 최근 12개월 vs 이전 12개월</button>
       <button class="export-btn" onclick="runQuick('fy_cur')">📊 현재 FY vs 이전 FY</button>
