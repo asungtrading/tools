@@ -146,6 +146,15 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
 .gm-bar { height: 4px; background: var(--surface3); border-radius: 2px; margin-top: 4px; overflow: hidden; }
 .gm-fill { height: 100%; border-radius: 2px; }
 
+/* ── AUTOCOMPLETE ── */
+.ac-wrap { position: relative; }
+.ac-list { position: absolute; top: 100%; left: 0; right: 0; background: var(--surface2); border: 1px solid var(--border2); border-radius: 8px; max-height: 220px; overflow-y: auto; z-index: 999; margin-top: 2px; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+.ac-item { padding: 9px 12px; font-size: 12px; color: var(--mid); cursor: pointer; border-bottom: 1px solid var(--border); transition: background .1s; }
+.ac-item:last-child { border-bottom: none; }
+.ac-item:hover, .ac-item.selected { background: var(--surface3); color: var(--text); }
+.ac-item mark { background: none; color: var(--blue2); font-weight: 700; }
+.ac-loading { padding: 10px 12px; font-size: 11px; color: var(--dim); }
+
 .export-btn { background: none; border: 1px solid var(--border2); color: var(--mid); font-size: 10px; font-weight: 600; padding: 4px 10px; border-radius: 6px; cursor: pointer; transition: all .2s; letter-spacing: .4px; }
 .export-btn:hover { background: var(--surface2); color: var(--text); border-color: var(--blue); }
 
@@ -231,11 +240,17 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
       </div>
       <div class="field">
         <label class="field-label">Brand</label>
-        <input type="text" id="searchBrand" placeholder="예: ORS, Kim & C">
+        <div class="ac-wrap">
+          <input type="text" id="searchBrand" placeholder="예: ORS, Kim & C" autocomplete="off" oninput="acInput(this,'searchBrand','brand')" onkeydown="acKey(event,'searchBrand')" onfocus="acInput(this,'searchBrand','brand')">
+          <div class="ac-list" id="ac-searchBrand" style="display:none"></div>
+        </div>
       </div>
       <div class="field">
         <label class="field-label">Customer</label>
-        <input type="text" id="searchCustomer" placeholder="예: Clore, Rex Beauty">
+        <div class="ac-wrap">
+          <input type="text" id="searchCustomer" placeholder="예: Clore, Rex Beauty" autocomplete="off" oninput="acInput(this,'searchCustomer')" onkeydown="acKey(event,'searchCustomer')" onfocus="acInput(this,'searchCustomer')">
+          <div class="ac-list" id="ac-searchCustomer" style="display:none"></div>
+        </div>
       </div>
       <div class="field">
         <label class="field-label">SKU / Product</label>
@@ -299,11 +314,17 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
       </div>
       <div class="field">
         <label class="field-label">Brand (선택)</label>
-        <input type="text" id="pBrand" placeholder="예: ORS, Kim & C" style="min-width:160px">
+        <div class="ac-wrap">
+          <input type="text" id="pBrand" placeholder="예: ORS, Kim & C" autocomplete="off" oninput="acInput(this,'pBrand','brand')" onkeydown="acKey(event,'pBrand')" onfocus="acInput(this,'pBrand','brand')" style="min-width:160px">
+          <div class="ac-list" id="ac-pBrand" style="display:none"></div>
+        </div>
       </div>
       <div class="field">
         <label class="field-label">Customer (선택)</label>
-        <input type="text" id="pCustomer" placeholder="예: Clore" style="min-width:160px">
+        <div class="ac-wrap">
+          <input type="text" id="pCustomer" placeholder="예: Clore" autocomplete="off" oninput="acInput(this,'pCustomer')" onkeydown="acKey(event,'pCustomer')" onfocus="acInput(this,'pCustomer')" style="min-width:160px">
+          <div class="ac-list" id="ac-pCustomer" style="display:none"></div>
+        </div>
       </div>
       <div class="field">
         <label class="field-label">Branch</label>
@@ -338,7 +359,10 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
       </div>
       <div class="field">
         <label class="field-label">Brand <span style="color:var(--red)">*필수</span></label>
-        <input type="text" id="bBrand" placeholder="예: ORS, Kim & C" style="min-width:180px">
+        <div class="ac-wrap">
+          <input type="text" id="bBrand" placeholder="예: ORS, Kim & C" autocomplete="off" oninput="acInput(this,'bBrand','brand')" onkeydown="acKey(event,'bBrand')" onfocus="acInput(this,'bBrand','brand')" style="min-width:180px">
+          <div class="ac-list" id="ac-bBrand" style="display:none"></div>
+        </div>
       </div>
       <div class="field">
         <label class="field-label">Branch</label>
@@ -383,7 +407,10 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
       </div>
       <div class="field">
         <label class="field-label">Customer <span style="color:var(--red)">*필수</span></label>
-        <input type="text" id="cCustomer" placeholder="예: Clore, Rex Beauty" style="min-width:180px">
+        <div class="ac-wrap">
+          <input type="text" id="cCustomer" placeholder="예: Clore, Rex Beauty" autocomplete="off" oninput="acInput(this,'cCustomer')" onkeydown="acKey(event,'cCustomer')" onfocus="acInput(this,'cCustomer')" style="min-width:180px">
+          <div class="ac-list" id="ac-cCustomer" style="display:none"></div>
+        </div>
       </div>
       <div class="field">
         <label class="field-label">Branch</label>
@@ -519,6 +546,8 @@ async function loadUser() {
     document.getElementById('cDateTo').value = today.toISOString().slice(0,10);
 
     runSearch();
+    loadCustomerList(); // preload for autocomplete
+    loadBrandList();    // preload for autocomplete
   } catch(e) {
     document.getElementById('authErr').textContent = '로그인 오류: ' + e.message;
     accessToken = null;
@@ -1430,6 +1459,103 @@ function renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows,
   const COLORS = ['rgba(59,130,246,0.8)','rgba(34,197,94,0.8)','rgba(249,115,22,0.8)','rgba(168,85,247,0.8)','rgba(20,184,166,0.8)','rgba(234,179,8,0.8)','rgba(239,68,68,0.8)','rgba(99,102,241,0.8)'];
   mkChart('cCustBrand', { type:'doughnut', data:{ labels: brandRows.slice(0,8).map(r=>r.brand), datasets:[{ data: brandRows.slice(0,8).map(r=>parseFloat(r.revenue)||0), backgroundColor: COLORS, borderWidth:1, borderColor:'#080a0f' }]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:10},boxWidth:10}},tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}}}});
 }
+
+// ══════════════════════════════════════
+// AUTOCOMPLETE
+// ══════════════════════════════════════
+let customerList = [];
+let brandList = [];
+let acSelIdx = {};
+
+async function loadCustomerList() {
+  if (customerList.length) return;
+  try {
+    const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
+    const rows = await bqQuery(`SELECT DISTINCT Customer_Clean as name FROM ${fullTable} WHERE Customer_Clean IS NOT NULL ORDER BY name LIMIT 2000`);
+    customerList = rows.map(r => r.name).filter(Boolean);
+  } catch(e) { console.warn('Customer list load failed:', e.message); }
+}
+
+async function loadBrandList() {
+  if (brandList.length) return;
+  try {
+    const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
+    const rows = await bqQuery(`SELECT DISTINCT Brand_Clean as name FROM ${fullTable} WHERE Brand_Clean IS NOT NULL ORDER BY name LIMIT 500`);
+    brandList = rows.map(r => r.name).filter(Boolean);
+  } catch(e) { console.warn('Brand list load failed:', e.message); }
+}
+
+function acInput(input, fieldId, type='customer') {
+  const q = input.value.trim().toLowerCase();
+  const list = document.getElementById('ac-' + fieldId);
+  acSelIdx[fieldId] = -1;
+  const sourceList = type === 'brand' ? brandList : customerList;
+
+  if (!sourceList.length) {
+    list.innerHTML = '<div class="ac-loading">목록 불러오는 중...</div>';
+    list.style.display = 'block';
+    (type === 'brand' ? loadBrandList() : loadCustomerList()).then(() => acInput(input, fieldId, type));
+    return;
+  }
+
+  const matches = q
+    ? sourceList.filter(n => n.toLowerCase().includes(q)).slice(0, 40)
+    : sourceList.slice(0, 40);
+
+  if (!matches.length) { list.style.display = 'none'; return; }
+
+  list.innerHTML = matches.map((name, i) => {
+    const hi = q ? name.replace(new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + ')', 'gi'), '<mark>$1</mark>') : name;
+    return `<div class="ac-item" data-idx="${i}" data-val="${name}" onmousedown="acSelect(event,'${fieldId}')">${hi}</div>`;
+  }).join('');
+  list.style.display = 'block';
+}
+
+function acSelect(e, fieldId) {
+  e.preventDefault();
+  const val = e.currentTarget.dataset.val;
+  const input = document.getElementById(fieldId);
+  input.value = val;
+  document.getElementById('ac-' + fieldId).style.display = 'none';
+  input.focus();
+}
+
+function acKey(e, fieldId) {
+  const list = document.getElementById('ac-' + fieldId);
+  if (list.style.display === 'none') return;
+  const items = list.querySelectorAll('.ac-item');
+  if (!items.length) return;
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    acSelIdx[fieldId] = Math.min((acSelIdx[fieldId]||0) + 1, items.length - 1);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    acSelIdx[fieldId] = Math.max((acSelIdx[fieldId]||0) - 1, 0);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    const idx = acSelIdx[fieldId];
+    if (idx >= 0 && items[idx]) {
+      document.getElementById(fieldId).value = items[idx].dataset.val;
+      list.style.display = 'none';
+    }
+    return;
+  } else if (e.key === 'Escape') {
+    list.style.display = 'none';
+    return;
+  } else { return; }
+
+  items.forEach(el => el.classList.remove('selected'));
+  items[acSelIdx[fieldId]]?.classList.add('selected');
+  items[acSelIdx[fieldId]]?.scrollIntoView({ block: 'nearest' });
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', e => {
+  document.querySelectorAll('.ac-list').forEach(list => {
+    if (!list.parentElement.contains(e.target)) list.style.display = 'none';
+  });
+});
 
 // ══════════════════════════════════════
 // CSV EXPORT
