@@ -418,35 +418,55 @@ async function loadSalesDataFromBQ(){
     showLoading('판매 데이터 쿼리 중...');
     updateBQStatus('load','판매 데이터 로딩 중...');
 
+    // ── Step 0: 스키마 자동 감지 (날짜 컬럼명 확인)
+    updateBQStatus('load', '스키마 확인 중...');
+    const schemaSQL = `
+      SELECT column_name
+      FROM \`${BQ_PROJECT}.${BQ_DATASET}\`.INFORMATION_SCHEMA.COLUMNS
+      WHERE table_name = '${BQ_SALES}'
+    `;
+    const schemaRows = await runBQQuery(schemaSQL);
+    const colNames = schemaRows.map(r => r.column_name);
+    console.log('Sales table columns:', colNames);
+
+    // 날짜 컬럼 자동 감지
+    const dateCol = colNames.find(c => ['Invoice_Date','invoice_date','Date','date','Sale_Date','sale_date','Order_Date'].includes(c)) || 'Invoice_Date';
+    // Status 컬럼 존재 여부
+    const hasStatus = colNames.some(c => c.toLowerCase() === 'status');
+    const statusFilter = hasStatus ? "AND Status NOT IN ('Voided','Void')" : '';
+    const skuCol = colNames.find(c => ['SKU','sku','Sku'].includes(c)) || 'SKU';
+    const qtyCol = colNames.find(c => ['Quantity','quantity','Qty','qty'].includes(c)) || 'Quantity';
+    console.log('Using date column:', dateCol, '| SKU:', skuCol, '| Qty:', qtyCol);
+
     // ── ADU 쿼리: SKU별 최근 90일 일별 판매량
     const aduSQL = `
       SELECT
-        SKU,
-        CAST(Invoice_Date AS STRING) AS sale_date,
-        SUM(Quantity) AS qty
+        ${skuCol} AS SKU,
+        CAST(${dateCol} AS STRING) AS sale_date,
+        SUM(${qtyCol}) AS qty
       FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_SALES}\`
-      WHERE Invoice_Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
-        AND Invoice_Date < CURRENT_DATE()
-        AND Quantity > 0
-        AND Status NOT IN ('Voided','Void')
-      GROUP BY SKU, Invoice_Date
-      ORDER BY SKU, Invoice_Date
+      WHERE ${dateCol} >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
+        AND ${dateCol} < CURRENT_DATE()
+        AND ${qtyCol} > 0
+        ${statusFilter}
+      GROUP BY ${skuCol}, ${dateCol}
+      ORDER BY ${skuCol}, ${dateCol}
     `;
 
     // ── 계절성 쿼리: 작년 동기 90일 판매량
     const seaSQL = `
       SELECT
-        SKU,
-        SUM(Quantity) AS qty_ly
+        ${skuCol} AS SKU,
+        SUM(${qtyCol}) AS qty_ly
       FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_SALES}\`
-      WHERE Invoice_Date >= DATE_SUB(DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR), INTERVAL 90 DAY)
-        AND Invoice_Date < DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR)
-        AND Quantity > 0
-        AND Status NOT IN ('Voided','Void')
-      GROUP BY SKU
+      WHERE ${dateCol} >= DATE_SUB(DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR), INTERVAL 90 DAY)
+        AND ${dateCol} < DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR)
+        AND ${qtyCol} > 0
+        ${statusFilter}
+      GROUP BY ${skuCol}
     `;
 
-    // ── 백오더 쿼리: 미납 주문 중 Toronto 재고 0인 SKU
+    // ── 백오더 쿼리
     const boSQL = `
       SELECT
         SKU,
