@@ -132,6 +132,16 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .sh{cursor:pointer!important;user-select:none}
 .sh:hover{color:var(--text)!important}
 .sort-arrow{font-size:8px;margin-left:2px}
+#sparkline-tooltip{
+  position:fixed;display:none;z-index:9999;
+  background:var(--bg2);border:1px solid var(--border2);
+  border-radius:8px;padding:10px 12px;
+  font-family:var(--mono);font-size:10.5px;color:var(--text);
+  box-shadow:0 4px 20px rgba(0,0,0,.5);
+  pointer-events:none;min-width:200px;
+}
+#sparkline-tooltip .sp-title{color:var(--accent);font-size:11px;font-weight:600;margin-bottom:6px}
+#sparkline-tooltip .sp-stats{color:#94a3b8;font-size:10px;margin-top:5px;line-height:1.6}
 /* loading overlay */
 #loading{display:none;position:fixed;inset:0;background:rgba(13,15,20,.75);z-index:300;align-items:center;justify-content:center;flex-direction:column;gap:12px}
 #loading.show{display:flex}
@@ -173,8 +183,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
       <span id="bq-lbl">판매 BQ 미연결 — 클릭하여 연결</span>
     </div>
     <div class="hsep"></div>
-    <button class="btn primary" onclick="dlCSV('order')">↓ 발주 CSV</button>
-    <button class="btn" onclick="dlCSV('supplier')">↓ Supplier별</button>
+    <button class="btn primary" onclick="dlCSV('order_current')">↓ 발주 CSV</button>
+    <button class="btn" onclick="dlCSV('order')">↓ 전체 발주</button>
     <button class="btn" onclick="dlCSV('all')">↓ 전체 CSV</button>
   </div>
 </header>
@@ -333,6 +343,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
   </main>
 </div>
 
+<div id="sparkline-tooltip">
+  <div class="sp-title" id="sp-title"></div>
+  <svg id="sp-svg" width="200" height="60" viewBox="0 0 200 60"></svg>
+  <div class="sp-stats" id="sp-stats"></div>
+</div>
 <div id="loading"><div class="spinner"></div><div class="ltxt" id="ltxt">처리 중...</div></div>
 
 <script>
@@ -356,7 +371,7 @@ const SCOPES     = 'https://www.googleapis.com/auth/bigquery.readonly';
 // ═══════════════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════════════
-const S = { brandFilter:'', abcFilter:'', skuOverrides:{}, sortCol:null, sortDir:1,
+const S = { brandFilter:'', abcFilter:'', skuOverrides:{}, sortCol:null, sortDir:1, wmaW1:3, wmaW2:2, wmaW3:1,
   branch:'toronto', supplier:null, filter:'all', search:'',
   fcPeriod:30, settings:{},
   computed:[], salesData:{}, backorderData:{},
@@ -374,6 +389,26 @@ function saveSetting(key,val){
   if(!S.settings[S.supplier])S.settings[S.supplier]={};
   S.settings[S.supplier][key]=parseInt(val)||{leadtime:30,target:60}[key];
   saveSettings(); updateSettingsDisplay(); recompute(); renderTable();
+}
+function saveWMA(key,val){
+  const v = parseInt(val)||1;
+  const k = {w1:'wmaW1', w2:'wmaW2', w3:'wmaW3'}[key];
+  if(k){ S[k] = Math.min(10, Math.max(1, v)); }
+  // localStorage에 저장
+  try { localStorage.setItem('asung_wma', JSON.stringify({w1:S.wmaW1,w2:S.wmaW2,w3:S.wmaW3})); } catch(e){}
+  if(S.bqReady){ recompute(); renderTable(); }
+}
+function loadWMASettings(){
+  try {
+    const saved = localStorage.getItem('asung_wma');
+    if(saved){
+      const w = JSON.parse(saved);
+      S.wmaW1 = w.w1||3; S.wmaW2 = w.w2||2; S.wmaW3 = w.w3||1;
+      document.getElementById('inp-w1').value = S.wmaW1;
+      document.getElementById('inp-w2').value = S.wmaW2;
+      document.getElementById('inp-w3').value = S.wmaW3;
+    }
+  } catch(e){}
 }
 function saveOverride(key,val){
   if(!S.supplier){ alert('먼저 Supplier를 선택하세요.'); return; }
@@ -865,31 +900,18 @@ function bv(sku,field){
 // ═══════════════════════════════════════════════════════
 //  COMPUTE
 // ═══════════════════════════════════════════════════════
-// ── 가중 이동평균 ADU (최근 30일 × 3, 31-60일 × 2, 61-90일 × 1)
+// ── 가중 이동평균 ADU (State 가중치 사용, 기본 30일×W1, 31-60일×W2, 61-90일×W3)
 function calcWMA(days) {
   if(!days||!days.length) return 0;
   const n = days.length;
-  // 3구간으로 나눔
+  const w1 = S.wmaW1||3, w2 = S.wmaW2||2, w3 = S.wmaW3||1;
   const seg = Math.floor(n/3)||1;
   let wSum=0, wTot=0;
   days.forEach((v,i)=>{
-    const w = i >= n-seg ? 3 : i >= n-seg*2 ? 2 : 1;
+    const w = i >= n-seg ? w1 : i >= n-seg*2 ? w2 : w3;
     wSum += v*w; wTot += w;
   });
   return wTot>0 ? wSum/wTot : 0;
-}
-
-// ── Stockout 보정 ADU (재고=0인 날 제외)
-function calcStockoutADU(sku, rawDays) {
-  if(!rawDays||!rawDays.length) return 0;
-  // 재고가 있었던 날만 카운트 (판매>0이면 재고 있었다고 가정)
-  const activeDays = rawDays.filter(v=>v>0);
-  if(!activeDays.length) return 0;
-  // 전체 기간 대비 실제 판매일 비율로 보정
-  const ratio = activeDays.length / rawDays.length;
-  const rawAvg = rawDays.reduce((a,b)=>a+b,0)/rawDays.length;
-  // Stockout 기간이 길면 실제 수요는 더 높음
-  return ratio < 0.8 ? rawAvg / Math.max(ratio, 0.1) : rawAvg;
 }
 
 // ── Safety Stock: Z × σ_demand × √LT
@@ -945,18 +967,25 @@ function recompute(){
     .map(([sku,meta])=>{
       const avail=bv(sku,'avail'), qoh=bv(sku,'qoh'), alloc=bv(sku,'alloc');
       const onOrder=bv(sku,'oo'), inTrans=bv(sku,'it');
-      const extOO=Math.max(0,onOrder-inTrans);
-      // extOO = 공급업체 순발주잔 (Transfer 제외) → Ordered 컬럼
-      // inTrans = Edmonton Transfer만 → In Transit 컬럼 T배지
-      // 공급업체 선적중(Shipped) 데이터는 Cin7에서 별도 분리 필요
+      // Ordered 계산: Toronto On Order가 공급업체 발주
+      // Edmonton On Order는 대부분 Transfer(oo==it)이므로 제외
+      const torOO = STOCK[sku]?.toronto?.oo ?? 0;
+      const edmOO = STOCK[sku]?.edmonton?.oo ?? 0;
+      const edmIT = STOCK[sku]?.edmonton?.it ?? 0;
+      // Edmonton에서 oo > it 이면 초과분이 공급업체 발주
+      const edmSupOO = Math.max(0, edmOO - edmIT);
+      // 실제 공급업체 발주 = Toronto OO + Edmonton 순발주
+      const extOO = torOO + edmSupOO;
       const sd=S.salesData[sku];
 
-      // ── ADU: 가중 이동평균 + Stockout 보정
+      // ── ADU: 순수 가중 이동평균 (Stockout 보정 제거)
+      // BQ에서 판매있는 날만 옴 → 전체 90일 대비 일평균으로 환산
       const rawDays = sd?.days || [];
       const wmaADU = calcWMA(rawDays);
-      const soADU  = calcStockoutADU(sku, rawDays);
-      // 두 방식의 평균 (보수적)
-      const adu = rawDays.length>0 ? (wmaADU*0.6 + soADU*0.4) : 0;
+      // WMA는 판매있는 날 기준 → 90일 전체 기준으로 환산
+      // rawDays.length / 90 비율 적용 (단, 최소 0.3 cap으로 과대 방지)
+      const activeFraction = Math.min(1, Math.max(0.3, rawDays.length / 90));
+      const adu = rawDays.length>0 ? wmaADU * activeFraction : 0;
 
       const sea = sd?.sea??1, trd = sd?.trd??1;
       // Supplier 전체 override 또는 SKU별 override 적용
@@ -1159,7 +1188,7 @@ function renderTable(){
             ? `<span class="vz">0</span>`
             : `<span class="vp" style="${recStyle}" ${recTitle} ${recClick}>+${r.rec.toLocaleString()}</span>`;
       h+=`<tr${trStyle}>
-        <td>${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}" title="ABC 등급: A=상위20%(핵심제품) B=상위21~50%(중간) C=하위50%(저판매) | ADU 기준 자동분류">${r.abc}</span>`:''}</td>
+        <td onmouseenter="showSparkline('${xe(r.sku)}','${xe(r.name)}',event)" onmouseleave="hideSparkline()" style="cursor:default">${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}" title="ABC 등급: A=상위20%(핵심제품) B=상위21~50%(중간) C=하위50%(저판매) | ADU 기준 자동분류">${r.abc}</span>`:''}</td>
         <td style="max-width:var(--name-col-width,180px);overflow:hidden;text-overflow:ellipsis;cursor:default" title="${xe(r.name)}">${xe(r.name)}</td>
         <td class="${r.adu>0?'':'vz'}" title="${r.adu>0?'가중이동평균 ADU':'판매 데이터 없음'}">${r.adu>0?r.adu.toFixed(2):'—'}</td>
         <td class="${r.sea>1.1?'vp':r.sea<0.9?'vw':''}" onclick="editSkuOverride('${xe(r.sku)}','sea',${r.sea},event)" title="클릭해서 수동 수정 (BQ자동: ×${r.seaAuto})">${r.adu>0?`×${r.sea.toFixed(2)}${r.seaOv!==null?'<span style=\'color:var(--yellow);font-size:8px\'>✎</span>':''}`:'—'}</td>
@@ -1189,6 +1218,80 @@ function renderTable(){
   body.innerHTML=h;
 }
 
+// ── 스파크라인 툴팁
+function showSparkline(sku, name, evt){
+  const sd = S.salesData[sku];
+  if(!sd||!sd.days||!sd.days.length){ hideSparkline(); return; }
+  const days = sd.days;
+  const n = days.length;
+  const tip = document.getElementById('sparkline-tooltip');
+  const svg = document.getElementById('sp-svg');
+  const title = document.getElementById('sp-title');
+  const stats = document.getElementById('sp-stats');
+
+  // 스파크라인 SVG 생성
+  const W=200, H=60, pad=4;
+  const max = Math.max(...days, 1);
+  const min = 0;
+  const range = max - min || 1;
+
+  // 데이터 포인트
+  const pts = days.map((v,i)=>{
+    const x = pad + (i/(n-1||1))*(W-pad*2);
+    const y = H-pad - ((v-min)/range)*(H-pad*2);
+    return [x,y];
+  });
+
+  // 이동평균선 (7일)
+  const maLine = days.map((_,i)=>{
+    const slice = days.slice(Math.max(0,i-6),i+1);
+    const avg = slice.reduce((a,b)=>a+b,0)/slice.length;
+    const x = pad + (i/(n-1||1))*(W-pad*2);
+    const y = H-pad - ((avg-min)/range)*(H-pad*2);
+    return [x,y];
+  });
+
+  const polyline = pts.map(p=>p.join(',')).join(' ');
+  const maPolyline = maLine.map(p=>p.join(',')).join(' ');
+
+  // 영역 채우기
+  const areaPath = `M${pts[0][0]},${H-pad} ` +
+    pts.map(p=>`L${p[0]},${p[1]}`).join(' ') +
+    ` L${pts[n-1][0]},${H-pad} Z`;
+
+  svg.innerHTML = `
+    <defs>
+      <linearGradient id="sg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#4f8ef7" stop-opacity="0.3"/>
+        <stop offset="100%" stop-color="#4f8ef7" stop-opacity="0.0"/>
+      </linearGradient>
+    </defs>
+    <path d="${areaPath}" fill="url(#sg)"/>
+    <polyline points="${polyline}" fill="none" stroke="#4f8ef7" stroke-width="1.5" stroke-linejoin="round"/>
+    <polyline points="${maPolyline}" fill="none" stroke="#f7c44f" stroke-width="1" stroke-dasharray="2,2" opacity="0.8"/>
+    <line x1="${pad}" y1="${H-pad}" x2="${W-pad}" y2="${H-pad}" stroke="#2a2f3f" stroke-width="0.5"/>
+  `;
+
+  const avg90 = days.reduce((a,b)=>a+b,0)/90;
+  const avg30 = days.slice(-Math.min(30,n)).reduce((a,b)=>a+b,0)/30;
+  const trend = avg30 > avg90*1.1 ? '↑ 상승' : avg30 < avg90*0.9 ? '↓ 하락' : '→ 보합';
+  const trendColor = avg30>avg90*1.1?'#3ecf8e':avg30<avg90*0.9?'#f76f6f':'#94a3b8';
+
+  title.textContent = sku;
+  stats.innerHTML = `ADU(90일): <b style="color:#e2e6f0">${sd.adu.toFixed(2)}</b> &nbsp;|&nbsp; 최근30일평균: <b style="color:#e2e6f0">${avg30.toFixed(1)}</b><br>트렌드: <b style="color:${trendColor}">${trend}</b> &nbsp;|&nbsp; 판매일: <b style="color:#e2e6f0">${n}일/90일</b><br><span style="color:#4f8ef7">━</span> 일별판매 &nbsp;<span style="color:#f7c44f;border-bottom:1px dashed">━</span> 7일이동평균`;
+
+  // 위치
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let x = evt.clientX + 14, y = evt.clientY - 20;
+  if(x + 230 > vw) x = evt.clientX - 230;
+  if(y + 140 > vh) y = evt.clientY - 140;
+  tip.style.left = x+'px';
+  tip.style.top = y+'px';
+  tip.style.display = 'block';
+}
+function hideSparkline(){
+  document.getElementById('sparkline-tooltip').style.display='none';
+}
 function startResize(e, varName){
   e.preventDefault();
   const startX=e.clientX;
@@ -1362,6 +1465,21 @@ function dlForecastCSV(){
 // ═══════════════════════════════════════════════════════
 function dlCSV(mode){
   let rows;
+  if(mode==='order_current'){
+    // 현재 선택된 Supplier의 발주량>0 SKU만
+    if(!S.supplier){alert('Supplier를 먼저 선택해주세요.');return;}
+    const rows = getRows().filter(r=>{
+      const finalQty = r._ov ?? r.rec;
+      return finalQty > 0;
+    });
+    if(!rows.length){alert('발주할 항목이 없습니다.');return;}
+    const hdr=['Supplier','Brand','SKU','Name','일판매량(ADU)','계절보정','트렌드','Available Stock','Safety Stock','Ordered','백오더','추천발주','실발주량','Lead Time','목표재고일수'];
+    const toLine=r=>[r.supplier,r.brand,r.sku,`"${r.name}"`,
+      r.adu?.toFixed(2)??'',r.sea?.toFixed(2)??'',r.trd?.toFixed(2)??'',
+      r.avail,Math.round(r.ss||0),r.extOO,r.bo,r.rec??'',r._ov??r.rec??'',r.lt,r.tg].join(',');
+    dl([hdr.join(','),...rows.map(toLine)].join('\n'),`PO_${S.supplier.replace(/[^a-zA-Z0-9]/g,'_')}_${STOCK_DATE}.csv`);
+    return;
+  }
   if(mode==='order'){
     // 발주량 > 0인 것만 (전체 supplier)
     const allRows = Object.entries(MASTER).map(([sku,meta])=>{
@@ -1442,6 +1560,7 @@ function hideLoading(){ document.getElementById('loading').classList.remove('sho
 //  INIT
 // ═══════════════════════════════════════════════════════
 loadSettings();
+loadWMASettings();
 buildNav();
 renderTable();
 document.getElementById('order-view').style.display='flex';
