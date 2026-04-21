@@ -49,21 +49,21 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .sup-item{display:flex;align-items:center;gap:6px;padding:7px 12px;cursor:pointer;transition:background .12s;border-left:2px solid transparent}
 .sup-item:hover{background:var(--bg3)}
 .sup-item.active{background:var(--bg3);border-left-color:var(--accent)}
-.sup-item .sn{flex:1;font-size:11.5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sup-item .sn{flex:1;font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sup-item.active .sn{color:var(--text);font-weight:500}
 .sup-item .sc{font-family:var(--mono);font-size:9.5px;color:var(--text3);background:var(--bg4);padding:1px 4px;border-radius:3px;flex-shrink:0}
 .sup-alert{width:5px;height:5px;border-radius:50%;flex-shrink:0;background:var(--text3)}
 .sup-alert.r{background:var(--red)}
 .sup-alert.y{background:var(--yellow)}
 .sb-settings{border-top:1px solid var(--border);padding:11px 12px;background:var(--bg2);flex-shrink:0}
-.sb-settings-title{font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.1em;color:var(--text3);text-transform:uppercase;margin-bottom:8px}
-.sb-sup-name{font-family:var(--mono);font-size:9px;color:var(--accent);margin-bottom:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sr{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:7px}
+.sb-settings-title{font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.1em;color:#94a3b8;text-transform:uppercase;margin-bottom:8px}
+.sb-sup-name{font-family:var(--mono);font-size:10px;color:var(--accent);margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sr{display:grid;grid-template-columns:1fr 64px 20px;align-items:center;gap:6px;margin-bottom:8px}
 .sr:last-child{margin-bottom:0}
-.sl{font-size:11.5px;color:var(--text2);white-space:nowrap}
-.si{width:58px;background:var(--bg4);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:12px;padding:4px 6px;text-align:right;outline:none;transition:border-color .15s}
+.sl{font-size:12px;color:var(--text);white-space:nowrap}
+.si{width:100%;background:var(--bg4);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:12px;padding:4px 6px;text-align:right;outline:none;transition:border-color .15s;box-sizing:border-box}
 .si:focus{border-color:var(--accent)}
-.su{font-family:var(--mono);font-size:10px;color:var(--text3);white-space:nowrap}
+.su{font-family:var(--mono);font-size:10px;color:#94a3b8;white-space:nowrap}
 #main{flex:1;display:flex;flex-direction:column;overflow:hidden}
 #tab-bar{height:40px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:flex-end;padding:0 18px;flex-shrink:0}
 .mtab{background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);font-family:var(--sans);font-size:12.5px;font-weight:500;padding:9px 14px;cursor:pointer;transition:all .15s;margin-bottom:-1px}
@@ -71,22 +71,22 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .mtab.active{color:var(--accent);border-bottom-color:var(--accent)}
 #content{flex:1;overflow:hidden;display:flex;flex-direction:column}
 #order-view{flex:1;overflow:hidden;display:flex;flex-direction:column}
-.banner{padding:6px 14px;font-family:var(--mono);font-size:10.5px;display:flex;align-items:center;gap:8px;flex-shrink:0;border-bottom:1px solid}
+.banner{padding:6px 14px;font-family:var(--mono);font-size:11.5px;display:flex;align-items:center;gap:8px;flex-shrink:0;border-bottom:1px solid}
 .banner.warn{background:rgba(247,196,79,.06);border-color:rgba(247,196,79,.2);color:var(--yellow)}
 .banner.ok{background:rgba(62,207,142,.06);border-color:rgba(62,207,142,.2);color:var(--green)}
 .banner.load{background:rgba(79,142,247,.06);border-color:rgba(79,142,247,.2);color:var(--accent)}
 .banner a{cursor:pointer;text-decoration:underline;color:inherit}
 #sum-bar{display:flex;gap:1px;background:var(--border);border-bottom:1px solid var(--border);flex-shrink:0}
 .sc-card{flex:1;background:var(--bg2);padding:8px 12px}
-.sc-lbl{font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.06em;text-transform:uppercase}
-.sc-val{font-family:var(--mono);font-size:15px;font-weight:600;color:var(--text);line-height:1.3}
+.sc-lbl{font-family:var(--mono);font-size:10.5px;color:var(--text3);letter-spacing:.06em;text-transform:uppercase}
+.sc-val{font-family:var(--mono);font-size:16px;font-weight:600;color:var(--text);line-height:1.3}
 .sc-val.g{color:var(--green)}.sc-val.r{color:var(--red)}.sc-val.y{color:var(--yellow)}
-.sc-sub{font-size:10px;color:var(--text3)}
+.sc-sub{font-size:11px;color:#94a3b8}
 #toolbar{display:flex;align-items:center;gap:7px;padding:8px 14px;border-bottom:1px solid var(--border);background:var(--bg2);flex-shrink:0;flex-wrap:wrap}
 .sbox{display:flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:5px 9px;width:190px}
 .sbox input{background:none;border:none;color:var(--text);font-family:var(--sans);font-size:12px;outline:none;width:100%}
 .sbox input::placeholder{color:var(--text3)}
-.ftag{background:var(--bg4);border:1px solid var(--border);border-radius:4px;color:var(--text2);font-family:var(--mono);font-size:10px;padding:3px 8px;cursor:pointer;transition:all .12s;white-space:nowrap}
+.ftag{background:var(--bg4);border:1px solid var(--border);border-radius:4px;color:var(--text2);font-family:var(--mono);font-size:11px;padding:3px 8px;cursor:pointer;transition:all .12s;white-space:nowrap}
 .ftag:hover,.ftag.active{background:var(--accent);border-color:var(--accent);color:#fff}
 .tright{margin-left:auto;display:flex;gap:6px}
 #tbl-body{flex:1;overflow-y:auto;padding-bottom:20px}
@@ -104,18 +104,18 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .bg-hdr:hover{background:var(--bg4)}
 .bg-chev{font-size:10px;color:var(--text3);transition:transform .2s;width:11px;text-align:center;flex-shrink:0}
 .bg-hdr.coll .bg-chev{transform:rotate(-90deg)}
-.bg-name{font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--text);text-transform:uppercase}
-.bg-stats{display:flex;gap:10px;margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--text3)}
-.bg-stats span{color:var(--text2)}.bg-stats .urg{color:var(--red)}
+.bg-name{font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--text);text-transform:uppercase}
+.bg-stats{display:flex;gap:10px;margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--text3)}
+.bg-stats span{color:var(--text)}.bg-stats .urg{color:var(--red)}
 .sku-tbl{width:100%;border-collapse:collapse}
-.sku-tbl thead th{background:var(--bg2);font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text3);padding:5px 10px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:31px;z-index:1}
+.sku-tbl thead th{background:var(--bg2);font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text3);padding:5px 10px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:31px;z-index:1}
 .sku-tbl thead th:first-child,.sku-tbl thead th:nth-child(2){text-align:left}
 .sku-tbl thead th.sep{border-left:1px solid var(--border2)}
 .sku-tbl tbody tr{border-bottom:1px solid var(--border);transition:background .1s}
 .sku-tbl tbody tr:hover{background:var(--bg3)}
-.sku-tbl tbody td{padding:6px 10px;font-family:var(--mono);font-size:11px;text-align:right;color:var(--text2);white-space:nowrap}
-.sku-tbl tbody td:first-child{text-align:left;color:var(--accent);font-size:10.5px}
-.sku-tbl tbody td:nth-child(2){text-align:left;font-family:var(--sans);font-size:11.5px;color:var(--text);max-width:200px;overflow:hidden;text-overflow:ellipsis}
+.sku-tbl tbody td{padding:6px 10px;font-family:var(--mono);font-size:12px;text-align:right;color:var(--text);white-space:nowrap}
+.sku-tbl tbody td:first-child{text-align:left;color:var(--accent);font-size:12px}
+.sku-tbl tbody td:nth-child(2){text-align:left;font-family:var(--sans);font-size:12px;color:var(--text);max-width:200px;overflow:hidden;text-overflow:ellipsis}
 .sku-tbl tbody td.sep{border-left:1px solid var(--border)}
 .vp{color:var(--green)}.vn{color:var(--red)}.vw{color:var(--yellow)}.vz{color:var(--text3)}
 .badge{display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:600}
@@ -167,7 +167,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
       <button id="btn-all" onclick="setBranch('all')">합산</button>
     </div>
     <div class="hsep"></div>
-    <div class="spill"><div class="dot ok"></div><span>재고 2026-04-20</span></div>
+    <div class="spill" id="stock-freshness-pill"><div class="dot ok" id="stock-freshness-dot"></div><span id="stock-freshness-lbl">재고 확인 중...</span></div>
     <div class="spill" id="bq-pill" onclick="connectBQ()" style="cursor:pointer">
       <div class="dot warn" id="bq-dot"></div>
       <span id="bq-lbl">판매 BQ 미연결 — 클릭하여 연결</span>
@@ -199,7 +199,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
       </div>
       <!-- 계절/트렌드 Supplier 전체 override -->
       <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
-        <div style="font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">보정 Override</div>
+        <div style="font-family:var(--mono);font-size:9px;color:#94a3b8;letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px">보정 Override</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:6px;line-height:1.5">비워두면 BQ 자동값 사용<br>입력 시 Supplier 전체 적용</div>
         <div class="sr">
           <span class="sl">계절보정</span>
           <input type="number" class="si" id="inp-sea" step="0.1" min="0.3" max="3.0" placeholder="auto" onchange="saveOverride('sea',this.value)" style="width:54px">
@@ -308,9 +309,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
               <th class="sh" onclick="sortBy('adu')">일판매량<span class="sort-arrow"></span></th>
               <th class="sh" onclick="sortBy('sea')">계절보정<span class="sort-arrow"></span></th>
               <th class="sh" onclick="sortBy('trd')">트렌드<span class="sort-arrow"></span></th>
-              <th class="sep sh" onclick="sortFc('fc30')">30일 예측<span class="sort-arrow" id="fc-sort-30"></span></th>
-              <th class="sh" onclick="sortFc('fc60')">60일 예측<span class="sort-arrow" id="fc-sort-60"></span></th>
-              <th class="sh" onclick="sortFc('fc90')">90일 예측<span class="sort-arrow" id="fc-sort-90"></span></th>
+              <th class="sep sh" onclick="sortFc('fc30')" title="ADU×30일×계절×트렌드">30일 예측<span class="sort-arrow" id="fc-sort-30"></span></th>
+              <th style="color:#94a3b8;font-size:10px" title="실제 최근 30일 판매량">실제 30일</th>
+              <th class="sh" onclick="sortFc('fc60')" title="ADU×60일×계절×트렌드">60일 예측<span class="sort-arrow" id="fc-sort-60"></span></th>
+              <th style="color:#94a3b8;font-size:10px" title="실제 최근 60일 판매량">실제 60일</th>
+              <th class="sh" onclick="sortFc('fc90')" title="ADU×90일×계절×트렌드">90일 예측<span class="sort-arrow" id="fc-sort-90"></span></th>
+              <th style="color:#94a3b8;font-size:10px" title="실제 최근 90일 판매량">실제 90일</th>
               <th class="sep sh" onclick="sortBy('avail')">Available<span class="sort-arrow"></span></th>
               <th class="sh" onclick="sortBy('cov')">재고일수<span class="sort-arrow"></span></th>
               <th class="sh" onclick="sortBy('rec')">추천발주<span class="sort-arrow"></span></th>
@@ -404,6 +408,94 @@ function updateSettingsDisplay(){
 // ═══════════════════════════════════════════════════════
 //  BIGQUERY OAUTH
 // ═══════════════════════════════════════════════════════
+// ── 재고 데이터 freshness 체크
+function checkStockFreshness(latestDateStr){
+  const pill = document.getElementById('stock-freshness-pill');
+  const dot  = document.getElementById('stock-freshness-dot');
+  const lbl  = document.getElementById('stock-freshness-lbl');
+  if(!pill||!dot||!lbl) return;
+
+  if(!latestDateStr){
+    dot.className='dot err';
+    lbl.textContent='재고 날짜 없음 ❌';
+    pill.style.borderColor='var(--red)';
+    showStockWarningBanner('알 수 없음', 999);
+    return;
+  }
+
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const stockDate = new Date(latestDateStr);
+  stockDate.setHours(0,0,0,0);
+  const diffMs = today - stockDate;
+  const diffDays = Math.round(diffMs / (1000*60*60*24));
+
+  if(diffDays <= 1){
+    // 정상: 오늘 또는 어제
+    dot.className='dot ok';
+    lbl.textContent=`재고 ${latestDateStr} ✓`;
+    pill.style.borderColor='';
+    hideStockWarningBanner();
+  } else if(diffDays <= 3){
+    // 경고: 2~3일 지연
+    dot.className='dot warn';
+    lbl.textContent=`재고 ${latestDateStr} ⚠ ${diffDays}일 지연`;
+    pill.style.borderColor='var(--yellow)';
+    pill.style.color='var(--yellow)';
+    showStockWarningBanner(latestDateStr, diffDays);
+  } else {
+    // 위험: 4일 이상 지연
+    dot.className='dot err';
+    lbl.textContent=`재고 ${latestDateStr} ❌ ${diffDays}일 지연`;
+    pill.style.borderColor='var(--red)';
+    pill.style.color='var(--red)';
+    showStockWarningBanner(latestDateStr, diffDays);
+  }
+}
+
+function showStockWarningBanner(dateStr, diffDays){
+  let banner = document.getElementById('stock-warning-banner');
+  if(!banner){
+    banner = document.createElement('div');
+    banner.id = 'stock-warning-banner';
+    // order-view 맨 위에 삽입
+    const orderView = document.getElementById('order-view');
+    const bqBanner  = document.getElementById('bq-banner');
+    if(orderView && bqBanner) orderView.insertBefore(banner, bqBanner.nextSibling);
+  }
+  const isError = diffDays >= 4;
+  banner.style.cssText=`
+    padding:7px 14px;
+    font-family:var(--mono);
+    font-size:11px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    flex-shrink:0;
+    border-bottom:1px solid ${isError?'rgba(247,111,111,.3)':'rgba(247,196,79,.3)'};
+    background:${isError?'rgba(247,111,111,.08)':'rgba(247,196,79,.06)'};
+    color:${isError?'var(--red)':'var(--yellow)'};
+  `;
+  banner.innerHTML=`
+    <span>${isError?'❌':'⚠'} 재고 데이터 <b>${diffDays}일 지연</b>
+    (최종: ${dateStr}) — 발주 판단에 주의하세요.</span>
+    <span style="margin-left:auto;font-size:10px;color:var(--text3)">
+      System_Automation 트리거를 확인하세요
+      <a href="https://script.google.com" target="_blank"
+         style="color:var(--accent);text-decoration:underline;margin-left:6px">
+        Apps Script →
+      </a>
+    </span>
+    <span onclick="this.parentElement.style.display='none'"
+          style="cursor:pointer;color:var(--text3);padding:0 4px;font-size:13px">✕</span>
+  `;
+}
+
+function hideStockWarningBanner(){
+  const b=document.getElementById('stock-warning-banner');
+  if(b) b.style.display='none';
+}
+
 function connectBQ(){
   const redirectUri = window.location.href.split('?')[0].split('#')[0];
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
@@ -550,11 +642,14 @@ async function loadSalesDataFromBQ(){
       runBQQuery(boSQL),
       runBQQuery(dateSQL),
     ]);
-    // 재고 날짜 업데이트
+    // 재고 날짜 업데이트 + 지연 경고
     if(dateRows[0]?.latest_date){
       const latestDate = dateRows[0].latest_date;
       document.getElementById('sv-date').textContent = latestDate;
       document.querySelectorAll('.stock-date-lbl').forEach(el=>el.textContent=`재고 ${latestDate}`);
+      checkStockFreshness(latestDate);
+    } else {
+      checkStockFreshness(null);
     }
 
     // ── ADU 계산 (SKU별 일별 데이터 집계)
@@ -691,7 +786,58 @@ function applyAllRec(){
   alert(`${rows.length}개 SKU에 추천 발주량이 적용됐습니다.`);
 }
 function setFilter(el,f){ S.filter=f; document.querySelectorAll('.ftag').forEach(e=>e.classList.remove('active')); el.classList.add('active'); renderTable(); }
-function doSearch(){ S.search=document.getElementById('srch').value.toLowerCase(); renderTable(); }
+function doSearch(){
+  S.search=document.getElementById('srch').value.toLowerCase();
+  if(S.search && !S.supplier){ renderGlobalSearch(); return; }
+  renderTable();
+}
+function renderGlobalSearch(){
+  const body=document.getElementById('tbl-body');
+  const q=S.search;
+  if(!q){renderTable();return;}
+  const results=Object.entries(MASTER)
+    .filter(([sku,m])=>sku.toLowerCase().includes(q)||m.name.toLowerCase().includes(q)||m.brand.toLowerCase().includes(q))
+    .slice(0,100)
+    .map(([sku,meta])=>{
+      const avail=bv(sku,'avail'),qoh=bv(sku,'qoh');
+      const onOrder=bv(sku,'oo'),inTrans=bv(sku,'it'),extOO=Math.max(0,onOrder-inTrans);
+      const sd=S.salesData[sku];
+      const adu=sd?.adu??0;
+      const cov=adu>0?Math.round(avail/adu):9999;
+      return {...meta,sku,adu,avail,qoh,onOrder,inTrans,extOO,cov,
+        sea:sd?.sea??1,trd:sd?.trd??1,adj:sd?.adj??1,abc:calcABC(sku)};
+    });
+  if(!results.length){body.innerHTML=`<div class="select-prompt"><div class="sp-icon" style="font-size:32px">🔍</div><div class="sp-title">검색 결과 없음</div></div>`;return;}
+  const supMap={};
+  results.forEach(r=>{if(!supMap[r.supplier])supMap[r.supplier]=[];supMap[r.supplier].push(r);});
+  let h=`<div style="padding:8px 14px;font-family:var(--mono);font-size:11px;color:#94a3b8;border-bottom:1px solid var(--border);background:var(--bg3)">
+    🔍 전체 검색: ${results.length}개 SKU — 행 클릭시 해당 Supplier로 이동</div>`;
+  Object.entries(supMap).sort().forEach(([sup,srows])=>{
+    h+=`<div class="bg-group">
+      <div class="bg-hdr" onclick="toggleBrand(this)">
+        <span class="bg-chev">▾</span>
+        <span class="bg-name" style="color:var(--accent)">${xe(sup)}</span>
+        <div class="bg-stats"><span>${srows.length}개</span></div>
+      </div>
+      <div class="bg-rows"><div class="tscroll"><table class="sku-tbl">
+        <thead><tr><th>SKU</th><th>상품명</th><th style="text-align:left">Brand</th>
+        <th class="sep">일판매량</th><th>재고일수</th>
+        <th class="sep">Available</th></tr></thead><tbody>`;
+    srows.forEach(r=>{
+      const ac=r.avail<=0?'vn':r.avail<10?'vw':'';
+      h+=`<tr onclick="selectSupplier('${xe(r.supplier)}')" style="cursor:pointer">
+        <td>${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}" title="ABC 등급">${r.abc}</span>`:''}</td>
+        <td style="text-align:left">${xe(r.name)}</td>
+        <td style="text-align:left;color:#94a3b8;font-size:11px">${xe(r.brand)}</td>
+        <td class="sep">${r.adu>0?r.adu.toFixed(2):'—'}</td>
+        <td>${r.cov>=9999?'∞':r.cov}</td>
+        <td class="sep"><span class="${ac}">${r.avail.toLocaleString()}</span></td>
+      </tr>`;
+    });
+    h+=`</tbody></table></div></div></div>`;
+  });
+  body.innerHTML=h;
+}
 
 // ═══════════════════════════════════════════════════════
 //  STOCK HELPERS
@@ -899,14 +1045,54 @@ function renderTable(){
   }
   const rows=getRows();
   if(!rows.length){ body.innerHTML=`<div class="select-prompt"><div class="sp-icon" style="font-size:32px">🔍</div><div class="sp-title">검색 결과 없음</div></div>`; return; }
+  // ABC 정렬 시 flat 테이블 (Brand 그룹 없음)
+  if(S.sortCol==='abc'){
+    let h=`<div style="padding:6px 13px;background:var(--bg3);border-bottom:1px solid var(--border);font-family:var(--mono);font-size:11px;color:#94a3b8">
+      ABC 등급 정렬 — A: 상위 20% | B: 상위 21~50% | C: 하위 50% (ADU 기준)</div>
+      <div><div class="tscroll"><table class="sku-tbl">
+      <thead><tr>
+        <th class="sh" onclick="sortBy('abc')" style="cursor:pointer">등급<span class="sort-arrow" data-col="abc"></span></th>
+        <th>SKU</th>
+        <th style="cursor:col-resize;min-width:140px" onmousedown="startResize(event,'--name-col-width')">상품명 ↔</th>
+        <th style="text-align:left">Brand</th>
+        <th class="sep sh" onclick="sortBy('adu')">일판매량<span class="sort-arrow" data-col="adu"></span></th>
+        <th class="sh" onclick="sortBy('cov')">재고일수<span class="sort-arrow" data-col="cov"></span></th>
+        <th class="sep sh" onclick="sortBy('avail')">Available<span class="sort-arrow" data-col="avail"></span></th>
+        <th class="sh" onclick="sortBy('rec')">추천발주<span class="sort-arrow" data-col="rec"></span></th>
+        <th>실발주량</th>
+      </tr></thead><tbody>`;
+    rows.forEach(r=>{
+      const trStyle=r.sufficient?' style="opacity:0.55"':'';
+      const cc=r.adu===0?'vz':r.cov<=7?'vn':r.cov<=14?'vw':'vp';
+      const ct=r.adu===0||r.cov>=9999?'∞':r.cov;
+      const canClick=r.rec!==null&&r.rec>0;
+      const recTxt=r.rec===null?'—':r.sufficient?'✓ 충분':r.rec===0?'0':`<span class="vp" ${canClick?`onclick="applyRec('${xe(r.sku)}',${r.rec})" style="cursor:pointer;text-decoration:underline dotted"`:''}>+${r.rec.toLocaleString()}</span>`;
+      h+=`<tr${trStyle}>
+        <td style="text-align:center">${r.abc?`<span class="abc-${r.abc.toLowerCase()}" title="A=상위20% B=상위50% C=나머지">${r.abc}</span>`:'-'}</td>
+        <td style="color:var(--accent);font-size:12px">${xe(r.sku)}</td>
+        <td style="text-align:left;max-width:var(--name-col-width,180px);overflow:hidden;text-overflow:ellipsis" title="${xe(r.name)}">${xe(r.name)}</td>
+        <td style="text-align:left;color:#94a3b8;font-size:11px">${xe(r.brand)}</td>
+        <td class="sep">${r.adu>0?r.adu.toFixed(2):'—'}</td>
+        <td class="${cc}">${ct}</td>
+        <td class="sep"><span class="${r.avail<=0?'vn':r.avail<10?'vw':''}">${r.avail.toLocaleString()}</span></td>
+        <td>${recTxt}</td>
+        <td><input type="number" class="qov" value="${r._ov??''}" placeholder="${r.rec??'—'}" onchange="setOv('${xe(r.sku)}',this.value)"></td>
+      </tr>`;
+    });
+    h+=`</tbody></table></div></div>`;
+    body.innerHTML=h;
+    return;
+  }
+
   const bmap={};
   rows.forEach(r=>{if(!bmap[r.brand])bmap[r.brand]=[];bmap[r.brand].push(r);});
   let h='';
   Object.entries(bmap).sort(([a],[b])=>a.localeCompare(b)).forEach(([brand,brows])=>{
     const urg=brows.filter(r=>r.cov<=7&&r.adu>0).length;
     const ord=brows.filter(r=>r.rec!==null&&r.rec>0).length;
+    const isCollapsed = !S.search && !S.sortCol && brows.length > 30;
     h+=`<div class="bg-group">
-      <div class="bg-hdr" onclick="toggleBrand(this)">
+      <div class="bg-hdr${isCollapsed?' coll':''}" onclick="toggleBrand(this)">
         <span class="bg-chev">▾</span>
         <span class="bg-name">${xe(brand)}</span>
         <div class="bg-stats">
@@ -914,26 +1100,28 @@ function renderTable(){
           ${ord?`<span>발주 ${ord}/${brows.length}</span>`:`<span>${brows.length}개</span>`}
         </div>
       </div>
-      <div class="bg-rows"><div class="tscroll"><table class="sku-tbl">
+      <div class="bg-rows" ${isCollapsed?'style="display:none"':''}><div class="tscroll"><table class="sku-tbl">
         <thead><tr>
           <th class="sh" onclick="sortBy('abc')" style="cursor:pointer;user-select:none">SKU<span class="sort-arrow" data-col="abc"></span></th><th style="cursor:col-resize;user-select:none;min-width:120px" onmousedown="startResize(event,'--name-col-width')">상품명 ↔</th>
           <th class="sep sh" onclick="sortBy('adu')" title="일 평균 판매량 (가중 이동평균, Stockout 보정)">일판매량(ADU)<span class="sort-arrow" data-col="adu"></span></th>
-          <th class="sh" onclick="sortBy('sea')" title="계절성 보정: 올해/작년 동기 비율 | 클릭해서 수동수정">계절보정<span class="sort-arrow" data-col="sea"></span></th>
-          <th class="sh" onclick="sortBy('trd')" title="트렌드 보정: 90일 선형 회귀 | 클릭해서 수동수정">트렌드<span class="sort-arrow" data-col="trd"></span></th>
+          <th class="sh" onclick="sortBy('sea')" title="계절보정 = 올해 90일 판매합 ÷ 작년 동기 90일 판매합 | 1.0=작년과 동일, 1.5=50% 증가, 0.7=30% 감소 | 범위: 0.3~3.0 | 셀 클릭시 수동 수정 가능">계절보정<span class="sort-arrow" data-col="sea"></span></th>
+          <th class="sh" onclick="sortBy('trd')" title="트렌드 = 최근 90일 판매 추세(선형회귀) | 1.0=보합, 2.0=강한상승, 0.5=하락 | 범위: 0.5~2.0 | 셀 클릭시 수동 수정 가능">트렌드<span class="sort-arrow" data-col="trd"></span></th>
           <th class="sh" onclick="sortBy('cov')" title="현재 가용재고로 버틸 수 있는 일수">재고일수<span class="sort-arrow" data-col="cov"></span></th>
           <th class="sep sh" onclick="sortBy('avail')" title="Available Stock = QOH - Allocated">Available Stock<span class="sort-arrow" data-col="avail"></span></th>
-          <th class="sh" onclick="sortBy('ss')" title="Safety Stock = 1.65 × σ × √LT | 클수록 수요변동 큰 제품">Safety Stock<span class="sort-arrow" data-col="ss"></span></th>
+          <th class="sh" onclick="sortBy('ss')" title="Safety Stock = 1.65 × 수요표준편차(σ) × √리드타임 | 수요 변동이 클수록 높음 | 95% 서비스레벨 기준 | 0이면 수요가 매우 안정적">Safety Stock<span class="sort-arrow" data-col="ss"></span></th>
           <th class="sh" onclick="sortBy('extOO')" title="공급업체에 발주된 수량 (Transfer 제외)">Ordered<span class="sort-arrow" data-col="extOO"></span></th>
           <th class="sh" title="입고 예정 수량 | T=Edmonton Transfer">In Transit</th>
           <th class="sh" onclick="sortBy('bo')" title="백오더: Toronto 재고=0 + 중복주문 제거">백오더<span class="sort-arrow" data-col="bo"></span></th>
           <th class="sep sh" onclick="sortBy('rec')" title="추천발주 = ADU×목표×계절(max2.5) + SS - 가용 - Ordered + BO">추천발주<span class="sort-arrow" data-col="rec"></span></th>
           <th title="실제 발주할 수량 (추천발주 클릭시 자동 입력)">실발주량</th>
         </tr></thead><tbody>`;
-    brows.sort((a,b)=>{
+    // 정렬 중이거나 검색 중이면 brand 내부 재정렬 생략
+    const sortedBrows = (S.sortCol || S.search) ? brows : [...brows].sort((a,b)=>{
       if(a.cov!==9999&&b.cov===9999)return -1;
       if(a.cov===9999&&b.cov!==9999)return 1;
       return a.cov-b.cov;
-    }).forEach(r=>{
+    });
+    sortedBrows.forEach(r=>{
       const trStyle = r.sufficient ? ' style="opacity:0.55"' : '';
       const cc=r.adu===0?'vz':r.cov<=7?'vn':r.cov<=14?'vw':'vp';
       const rc=r.rec===null?'vz':r.rec<0?'vn':r.rec===0?'vz':r.cov<=7?'vn':'vp';
@@ -950,7 +1138,7 @@ function renderTable(){
             ? `<span class="vz">0</span>`
             : `<span class="vp" style="${recStyle}" ${recTitle} ${recClick}>+${r.rec.toLocaleString()}</span>`;
       h+=`<tr${trStyle}>
-        <td>${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}">${r.abc}</span>`:''}</td>
+        <td>${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}" title="ABC 등급: A=상위20%(핵심제품) B=상위21~50%(중간) C=하위50%(저판매) | ADU 기준 자동분류">${r.abc}</span>`:''}</td>
         <td style="max-width:var(--name-col-width,180px);overflow:hidden;text-overflow:ellipsis;cursor:default" title="${xe(r.name)}">${xe(r.name)}</td>
         <td class="${r.adu>0?'':'vz'}" title="${r.adu>0?'가중이동평균 ADU':'판매 데이터 없음'}">${r.adu>0?r.adu.toFixed(2):'—'}</td>
         <td class="${r.sea>1.1?'vp':r.sea<0.9?'vw':''}" onclick="editSkuOverride('${xe(r.sku)}','sea',${r.sea},event)" title="클릭해서 수동 수정 (BQ자동: ×${r.seaAuto})">${r.adu>0?`×${r.sea.toFixed(2)}${r.seaOv!==null?'<span style=\'color:var(--yellow);font-size:8px\'>✎</span>':''}`:'—'}</td>
@@ -1088,19 +1276,29 @@ function renderForecast(){
     const fc30=Math.round(r.adu*30*r.adj);
     const fc60=Math.round(r.adu*60*r.adj);
     const fc90=Math.round(r.adu*90*r.adj);
+    // 실제 판매량: salesData days 배열에서 계산
+    const sd=S.salesData[r.sku];
+    const days=sd?.days||[];
+    const act30=Math.round(days.slice(-30).reduce((a,b)=>a+b,0));
+    const act60=Math.round(days.slice(-60).reduce((a,b)=>a+b,0));
+    const act90=Math.round(days.reduce((a,b)=>a+b,0));
     const covClass=r.cov<=7?'vn':r.cov<=14?'vw':'vp';
     const recClass=r.rec>0?'vp':r.rec===0?'vz':'';
     const seaClass=r.sea>1.1?'vp':r.sea<0.9?'vw':'';
     const trdClass=r.trd>1.05?'vp':r.trd<0.95?'vw':'';
     return `<tr>
-      <td>${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}">${r.abc}</span>`:''}</td>
-      <td style="text-align:left;max-width:var(--name-col-width,180px);overflow:hidden;text-overflow:ellipsis" title="${xe(r.name)}">${xe(r.name)}</td>
+      <td>${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}" title="A=상위20% B=상위50% C=나머지">${r.abc}</span>`:''}</td>
+      <td style="text-align:left;max-width:var(--name-col-width,180px);overflow:hidden;text-overflow:ellipsis" title="${xe(r.name)}">${xe(r.name)}
+</td>
       <td>${r.adu.toFixed(2)}</td>
-      <td class="${seaClass}" onclick="editSkuOverride('${xe(r.sku)}','sea',${r.sea},event)" style="cursor:pointer" title="클릭해서 수동 수정 (BQ자동: ×${r.seaAuto})">×${r.sea.toFixed(2)}${r.seaOv!==null?'<span style="color:var(--yellow);font-size:8px">✎</span>':''}</td>
-      <td class="${trdClass}" onclick="editSkuOverride('${xe(r.sku)}','trd',${r.trd},event)" style="cursor:pointer" title="클릭해서 수동 수정 (BQ자동: ×${r.trdAuto})">×${r.trd.toFixed(2)}${r.trdOv!==null?'<span style="color:var(--yellow);font-size:8px">✎</span>':''}</td>
+      <td class="${seaClass}" onclick="editSkuOverride('${xe(r.sku)}','sea',${r.sea},event)" style="cursor:pointer" title="클릭해서 수동수정 | 1.0=작년동일 1.5=50%증가 0.7=30%감소">×${r.sea.toFixed(2)}${r.seaOv!==null?'<span style="color:var(--yellow);font-size:8px">✎</span>':''}</td>
+      <td class="${trdClass}" onclick="editSkuOverride('${xe(r.sku)}','trd',${r.trd},event)" style="cursor:pointer" title="클릭해서 수동수정 | 1.0=보합 2.0=강한상승 0.5=하락">×${r.trd.toFixed(2)}${r.trdOv!==null?'<span style="color:var(--yellow);font-size:8px">✎</span>':''}</td>
       <td class="sep">${fc30.toLocaleString()}</td>
+      <td style="color:#94a3b8" title="실제 최근 30일">${days.length>=30?act30:'—'}</td>
       <td>${fc60.toLocaleString()}</td>
+      <td style="color:#94a3b8" title="실제 최근 60일">${days.length>=60?act60:'—'}</td>
       <td>${fc90.toLocaleString()}</td>
+      <td style="color:#94a3b8" title="실제 최근 90일">${days.length>=90?act90:'—'}</td>
       <td class="sep"><span class="${r.avail<=0?'vn':r.avail<10?'vw':''}">${r.avail.toLocaleString()}</span></td>
       <td class="${covClass}">${r.cov>=9999?'∞':r.cov}</td>
       <td class="${recClass}">${r.rec!==null?(r.rec>0?'+':'')+r.rec.toLocaleString():'—'}</td>
@@ -1219,6 +1417,14 @@ renderTable();
 document.getElementById('order-view').style.display='flex';
 document.getElementById('fc-view').style.display='none';
 checkOAuthCallback(); // OAuth redirect 처리
+
+// BQ 미연결 시 pill 초기 상태
+const stockDot = document.getElementById('stock-freshness-dot');
+const stockLbl = document.getElementById('stock-freshness-lbl');
+if(stockDot && !S.bqReady){
+  stockDot.className='dot warn';
+  stockLbl.textContent='재고 날짜 BQ 연결 후 확인';
+}
 
 // sessionStorage에서 기존 토큰 복원
 const savedToken = sessionStorage.getItem('bq_token');
