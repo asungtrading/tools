@@ -89,7 +89,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .ftag{background:var(--bg4);border:1px solid var(--border);border-radius:4px;color:var(--text2);font-family:var(--mono);font-size:11px;padding:3px 8px;cursor:pointer;transition:all .12s;white-space:nowrap}
 .ftag:hover,.ftag.active{background:var(--accent);border-color:var(--accent);color:#fff}
 .tright{margin-left:auto;display:flex;gap:6px}
-#tbl-body{flex:1;overflow-y:auto;padding-bottom:20px}
+#tbl-body{flex:1;overflow-y:auto;padding-bottom:20px;position:relative}
 #tbl-body::-webkit-scrollbar{width:4px}
 #tbl-body::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
 .select-prompt{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:14px;color:var(--text3)}
@@ -100,7 +100,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .sup-chip{background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:4px 10px;font-size:11.5px;color:var(--text2);cursor:pointer;transition:all .12s}
 .sup-chip:hover{background:var(--bg4);color:var(--text);border-color:var(--border2)}
 .bg-group{border-bottom:1px solid var(--border)}
-.bg-hdr{display:flex;align-items:center;gap:8px;padding:6px 13px;background:var(--bg3);cursor:pointer;transition:background .12s;position:sticky;top:0;z-index:2;border-bottom:1px solid var(--border)}
+.bg-hdr{display:flex;align-items:center;gap:8px;padding:6px 13px;background:var(--bg3);cursor:pointer;transition:background .12s;border-bottom:1px solid var(--border)}
 .bg-hdr:hover{background:var(--bg4)}
 .bg-chev{font-size:10px;color:var(--text3);transition:transform .2s;width:11px;text-align:center;flex-shrink:0}
 .bg-hdr.coll .bg-chev{transform:rotate(-90deg)}
@@ -108,7 +108,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .bg-stats{display:flex;gap:10px;margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--text3)}
 .bg-stats span{color:var(--text)}.bg-stats .urg{color:var(--red)}
 .sku-tbl{width:100%;border-collapse:collapse}
-.sku-tbl thead th{background:var(--bg2);font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#94a3b8;padding:5px 10px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:3}
+.sku-tbl thead th{background:var(--bg2);font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#94a3b8;padding:5px 10px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:10;box-shadow:0 1px 0 var(--border)}
 .sku-tbl thead th:first-child,.sku-tbl thead th:nth-child(2){text-align:left}
 .sku-tbl thead th.sep{border-left:1px solid var(--border2)}
 .sku-tbl tbody tr{border-bottom:1px solid var(--border);transition:background .1s}
@@ -787,7 +787,7 @@ function renderSupplierList(sups,cnt){
     const zeros=Object.entries(MASTER).filter(([,m])=>m.supplier===sup)
       .filter(([sku])=>(STOCK[sku]?.toronto?.avail??0)+(STOCK[sku]?.edmonton?.avail??0)<=0).length;
     const alertCls=zeros>(cnt[sup]||1)*0.3?'r':zeros>0?'y':'';
-    h+=`<div class="sup-item ${isActive?'active':''}" data-supplier="${xe(sup)}" onclick="selectSupplier('${xe(sup)}')">
+    h+=`<div class="sup-item ${isActive?'active':''}" data-supplier="${xeq(sup)}" onclick="selectSupplier('${xeq(sup)}')">
       <div class="sup-alert ${alertCls}"></div>
       <div class="sn">${xe(sup)}</div>
       <div class="sc">${cnt[sup]||0}</div></div>`;
@@ -802,7 +802,7 @@ function filterSupplierList(){
 function selectSupplier(sup){
   S.supplier=sup;
   S.brandFilter='';
-  document.querySelectorAll('.sup-item').forEach(el=>el.classList.toggle('active',el.dataset.supplier===sup));
+  document.querySelectorAll('.sup-item').forEach(el=>el.classList.toggle('active',el.dataset.supplier===sup||el.dataset.supplier===xeq(sup)));
   updateSettingsDisplay();
   recompute();
   updateBrandDropdown();
@@ -848,7 +848,9 @@ function renderGlobalSearch(){
     .slice(0,100)
     .map(([sku,meta])=>{
       const avail=bv(sku,'avail'),qoh=bv(sku,'qoh');
-      const onOrder=bv(sku,'oo'),inTrans=bv(sku,'it'),extOO=Math.max(0,onOrder-inTrans);
+      const torOO2=STOCK[sku]?.toronto?.oo??0, edmOO2=STOCK[sku]?.edmonton?.oo??0, edmIT2=STOCK[sku]?.edmonton?.it??0;
+      const onOrder=torOO2+edmOO2, inTrans=edmIT2;
+      const extOO=S.branch==='edmonton'?Math.max(0,edmOO2-edmIT2):S.branch==='toronto'?torOO2:torOO2+Math.max(0,edmOO2-edmIT2);
       const sd=S.salesData[sku];
       const adu=sd?.adu??0;
       const cov=adu>0?Math.round(avail/adu):9999;
@@ -873,7 +875,7 @@ function renderGlobalSearch(){
         <th class="sep">Available</th></tr></thead><tbody>`;
     srows.forEach(r=>{
       const ac=r.avail<=0?'vn':r.avail<10?'vw':'';
-      h+=`<tr onclick="selectSupplier('${xe(r.supplier)}')" style="cursor:pointer">
+      h+=`<tr onclick="selectSupplier('${xeq(r.supplier)}')" style="cursor:pointer">
         <td>${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}" title="ABC 등급">${r.abc}</span>`:''}</td>
         <td style="text-align:left">${xe(r.name)}</td>
         <td style="text-align:left;color:#94a3b8;font-size:11px">${xe(r.brand)}</td>
@@ -900,7 +902,63 @@ function bv(sku,field){
 // ═══════════════════════════════════════════════════════
 //  COMPUTE
 // ═══════════════════════════════════════════════════════
-// ── 가중 이동평균 ADU (State 가중치 사용, 기본 30일×W1, 31-60일×W2, 61-90일×W3)
+// ══════════════════════════════════════════════════
+// 강건 수요 예측 알고리즘 (Robust ADU)
+// 지침: 윈저라이징 + 품절보정 + Huber 방식
+// ══════════════════════════════════════════════════
+
+// 1. 윈저라이징: 상위 5% 극단값을 95th percentile로 제한
+function winsorize(days, pct=0.95) {
+  if(!days||days.length<4) return days;
+  const sorted = [...days].sort((a,b)=>a-b);
+  const cap = sorted[Math.floor(sorted.length*pct)];
+  return days.map(v=>Math.min(v,cap));
+}
+
+// 2. 품절 보정: 0값을 직전 14일 이동평균으로 대체
+function imputeStockouts(days) {
+  if(!days||!days.length) return days;
+  const result = [...days];
+  for(let i=0; i<result.length; i++){
+    if(result[i] === 0){
+      // 직전 14일 평균 계산 (0 제외)
+      const prev = result.slice(Math.max(0,i-14),i).filter(v=>v>0);
+      if(prev.length > 0){
+        result[i] = prev.reduce((a,b)=>a+b,0)/prev.length;
+      }
+      // prev가 없으면 0 유지 (진짜 비수요 제품)
+    }
+  }
+  return result;
+}
+
+// 3. is_bulk_order 플래그: 평균 + 2σ 초과하는 날 감지
+function detectBulkOrders(days) {
+  if(!days||days.length<4) return new Array(days.length).fill(0);
+  const mean = days.reduce((a,b)=>a+b,0)/days.length;
+  const std = Math.sqrt(days.reduce((a,b)=>a+(b-mean)**2,0)/days.length);
+  return days.map(v => v > mean + 2*std ? 1 : 0);
+}
+
+// 4. Huber 방식 ADU: MAE 기반 강건 평균 (중앙값 활용)
+function calcHuberADU(days, delta=1.35) {
+  if(!days||!days.length) return 0;
+  // Huber: 이상치에 덜 민감한 중앙값 기반 추정
+  const sorted = [...days].sort((a,b)=>a-b);
+  const median = sorted[Math.floor(sorted.length/2)];
+  const mad = sorted.map(v=>Math.abs(v-median)).sort((a,b)=>a-b)[Math.floor(sorted.length/2)];
+  const scale = mad * 1.4826 || 1; // MAD to sigma
+  // Huber 가중 평균
+  let wSum=0, wTot=0;
+  days.forEach(v=>{
+    const u = Math.abs(v-median)/scale;
+    const w = u <= delta ? 1 : delta/u; // Huber 가중치
+    wSum += v*w; wTot += w;
+  });
+  return wTot>0 ? wSum/wTot : median;
+}
+
+// 5. 가중 이동평균 ADU (State 가중치 사용)
 function calcWMA(days) {
   if(!days||!days.length) return 0;
   const n = days.length;
@@ -966,31 +1024,42 @@ function recompute(){
     .filter(([,m])=>m.supplier===S.supplier)
     .map(([sku,meta])=>{
       const avail=bv(sku,'avail'), qoh=bv(sku,'qoh'), alloc=bv(sku,'alloc');
-      const onOrder=bv(sku,'oo');
-      // In Transit = Edmonton Transfer (branch 무관하게 edmonton it 사용)
-      const inTrans = STOCK[sku]?.edmonton?.it ?? 0;
-      // Ordered 계산: Branch에 따라 On Order 합산
-      // Toronto On Order = 공급업체 발주
-      // Edmonton On Order ≈ Transfer (oo==it인 경우가 대부분)
-      // Edmonton 순발주 = max(0, edmOO - edmIT)
+      // On Order 계산 헬퍼
       const torOO = STOCK[sku]?.toronto?.oo ?? 0;
       const edmOO = STOCK[sku]?.edmonton?.oo ?? 0;
       const edmIT = STOCK[sku]?.edmonton?.it ?? 0;
-      const edmSupOO = Math.max(0, edmOO - edmIT);
+      const edmSupOO = Math.max(0, edmOO - edmIT); // Edmonton 순발주(Transfer 제외)
+      const inTrans  = edmIT;  // Transfer = Edmonton In Transit
+      const onOrder  = torOO + edmOO; // 전체 On Order (표시용)
+      // Ordered(extOO): 공급업체 발주잔 (Branch 기준)
       let extOO = 0;
       if(S.branch === 'toronto')       extOO = torOO;
       else if(S.branch === 'edmonton') extOO = edmSupOO;
-      else                             extOO = torOO + edmSupOO; // 합산
+      else                             extOO = torOO + edmSupOO;
       const sd=S.salesData[sku];
 
-      // ── ADU: 순수 가중 이동평균 (Stockout 보정 제거)
-      // BQ에서 판매있는 날만 옴 → 전체 90일 대비 일평균으로 환산
+      // ── ADU: 강건 수요 예측 파이프라인
       const rawDays = sd?.days || [];
-      const wmaADU = calcWMA(rawDays);
-      // WMA는 판매있는 날 기준 → 90일 전체 기준으로 환산
-      // rawDays.length / 90 비율 적용 (단, 최소 0.3 cap으로 과대 방지)
-      const activeFraction = Math.min(1, Math.max(0.3, rawDays.length / 90));
-      const adu = rawDays.length>0 ? wmaADU * activeFraction : 0;
+      let adu = 0;
+      if(rawDays.length > 0){
+        // Step 1: 품절 보정 (0값 → 직전 14일 이동평균으로 대체)
+        const imputed = imputeStockouts(rawDays);
+        // Step 2: 윈저라이징 (상위 5% 극단값 제한)
+        const winsorized = winsorize(imputed, 0.95);
+        // Step 3: is_bulk_order 플래그로 대량주문 감지
+        const bulkFlags = detectBulkOrders(winsorized);
+        // Step 4: 대량주문 제외한 정상 판매일 데이터
+        const normalDays = winsorized.filter((_,i)=>bulkFlags[i]===0);
+        const useDays = normalDays.length >= 7 ? normalDays : winsorized;
+        // Step 5: Huber 방식 강건 평균 + WMA 혼합
+        const huberADU = calcHuberADU(useDays);
+        const wmaADU   = calcWMA(useDays);
+        // 70% Huber + 30% WMA (강건성 우선)
+        const baseADU = huberADU * 0.7 + wmaADU * 0.3;
+        // Step 6: 90일 전체 기준으로 환산 (활성 비율)
+        const activeFraction = Math.min(1, Math.max(0.2, rawDays.length / 90));
+        adu = baseADU * activeFraction;
+      }
 
       const sea = sd?.sea??1, trd = sd?.trd??1;
       // Supplier 전체 override 또는 SKU별 override 적용
@@ -1087,7 +1156,7 @@ function renderTable(){
       <div class="sp-icon">📦</div>
       <div class="sp-title">Supplier를 선택하세요</div>
       <div class="sp-sub">좌측 목록에서 Supplier를 선택하면<br>재고 현황과 발주 추천이 표시됩니다.</div>
-      <div class="sup-chips">${top.map(s=>`<div class="sup-chip" onclick="selectSupplier('${xe(s)}')">${xe(s)} <span style="color:var(--text3)">${cnt[s]}</span></div>`).join('')}</div>
+      <div class="sup-chips">${top.map(s=>`<div class="sup-chip" onclick="selectSupplier('${xeq(s)}')">${xe(s)} <span style="color:var(--text3)">${cnt[s]}</span></div>`).join('')}</div>
     </div>`;
     return;
   }
@@ -1114,7 +1183,7 @@ function renderTable(){
       const cc=r.adu===0?'vz':r.cov<=7?'vn':r.cov<=14?'vw':'vp';
       const ct=r.adu===0||r.cov>=9999?'∞':r.cov;
       const canClick=r.rec!==null&&r.rec>0;
-      const recTxt=r.rec===null?'—':r.sufficient?'✓ 충분':r.rec===0?'0':`<span class="vp" ${canClick?`onclick="applyRec('${xe(r.sku)}',${r.rec})" style="cursor:pointer;text-decoration:underline dotted"`:''}>+${r.rec.toLocaleString()}</span>`;
+      const recTxt=r.rec===null?'—':r.sufficient?'✓ 충분':r.rec===0?'0':`<span class="vp" ${canClick?`onclick="applyRec('${xeq(r.sku)}',${r.rec})" style="cursor:pointer;text-decoration:underline dotted"`:''}>+${r.rec.toLocaleString()}</span>`;
       h+=`<tr${trStyle}>
         <td style="text-align:center">${r.abc?`<span class="abc-${r.abc.toLowerCase()}" title="A=상위20% B=상위50% C=나머지">${r.abc}</span>`:'-'}</td>
         <td style="color:var(--accent);font-size:12px">${xe(r.sku)}</td>
@@ -1310,6 +1379,7 @@ function startResize(e, varName){
   document.addEventListener('mouseup',onUp);
 }
 function xe(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function xeq(s){ return xe(s).replace(/'/g,'&#39;'); }
 function setOv(sku,v){ const r=S.computed.find(r=>r.sku===sku); if(r)r._ov=v===''?null:parseInt(v)||0; }
 function editSkuOverride(sku,key,curVal,evt){
   evt.stopPropagation();
@@ -1489,7 +1559,9 @@ function dlCSV(mode){
     // 발주량 > 0인 것만 (전체 supplier)
     const allRows = Object.entries(MASTER).map(([sku,meta])=>{
       const avail=bv(sku,'avail'),qoh=bv(sku,'qoh'),alloc=bv(sku,'alloc');
-      const onOrder=bv(sku,'oo'),inTrans=bv(sku,'it'),extOO=Math.max(0,onOrder-inTrans);
+      const torOO2=STOCK[sku]?.toronto?.oo??0, edmOO2=STOCK[sku]?.edmonton?.oo??0, edmIT2=STOCK[sku]?.edmonton?.it??0;
+      const onOrder=torOO2+edmOO2, inTrans=edmIT2;
+      const extOO=S.branch==='edmonton'?Math.max(0,edmOO2-edmIT2):S.branch==='toronto'?torOO2:torOO2+Math.max(0,edmOO2-edmIT2);
       const sd=S.salesData[sku];
       const adu=sd?.adu??0,sea=sd?.sea??1,trd=sd?.trd??1,adj=Math.min(2.5,sea*trd);
       const bo=(S.bqReady&&(STOCK[sku]?.toronto?.avail??0)<=0)?(S.backorderData[sku]||0):0;
@@ -1523,7 +1595,9 @@ function dlCSV(mode){
   } else {
     rows=Object.entries(MASTER).map(([sku,meta])=>{
       const avail=bv(sku,'avail'),qoh=bv(sku,'qoh'),alloc=bv(sku,'alloc');
-      const onOrder=bv(sku,'oo'),inTrans=bv(sku,'it'),extOO=Math.max(0,onOrder-inTrans);
+      const torOO2=STOCK[sku]?.toronto?.oo??0, edmOO2=STOCK[sku]?.edmonton?.oo??0, edmIT2=STOCK[sku]?.edmonton?.it??0;
+      const onOrder=torOO2+edmOO2, inTrans=edmIT2;
+      const extOO=S.branch==='edmonton'?Math.max(0,edmOO2-edmIT2):S.branch==='toronto'?torOO2:torOO2+Math.max(0,edmOO2-edmIT2);
       const sd=S.salesData[sku];
       const adu=sd?.adu??0,sea=sd?.sea??1,trd=sd?.trd??1,adj=sd?.adj??1;
       const bo=(S.bqReady&&(STOCK[sku]?.toronto?.avail??0)<=0)?(S.backorderData[sku]||0):0;
