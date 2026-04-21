@@ -237,6 +237,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
             <span style="color:var(--text3);font-size:13px">⌕</span>
             <input type="text" id="srch" placeholder="SKU / 상품명" oninput="doSearch()">
           </div>
+          <select id="brand-sel" onchange="setBrandFilter(this.value)" style="background:var(--bg4);border:1px solid var(--border);border-radius:4px;color:var(--text2);font-family:var(--mono);font-size:10.5px;padding:3px 8px;outline:none;cursor:pointer;max-width:160px">
+            <option value="">브랜드 전체</option>
+          </select>
           <div class="ftag active" onclick="setFilter(this,'all')">전체</div>
           <div class="ftag" onclick="setFilter(this,'order')">발주필요</div>
           <div class="ftag" onclick="setFilter(this,'urgent')">긴급</div>
@@ -244,6 +247,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
           <div class="ftag" onclick="setFilter(this,'zero')">재고 0</div>
           <div class="ftag" onclick="setFilter(this,'transit')">Transfer중</div>
           <div class="tright">
+            <button class="btn" onclick="applyAllRec()">전체 추천 적용</button>
             <button class="btn" onclick="expandAll()">펼치기</button>
             <button class="btn" onclick="collapseAll()">접기</button>
           </div>
@@ -298,7 +302,7 @@ const SCOPES     = 'https://www.googleapis.com/auth/bigquery.readonly';
 // ═══════════════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════════════
-const S = {
+const S = { brandFilter:'',
   branch:'toronto', supplier:null, filter:'all', search:'',
   fcPeriod:30, settings:{},
   computed:[], salesData:{}, backorderData:{},
@@ -348,6 +352,7 @@ function checkOAuthCallback(){
   const token = params.get('access_token');
   if(token){
     S.accessToken = token;
+    sessionStorage.setItem('bq_token', token);
     window.history.replaceState(null,'',window.location.pathname);
     updateBQStatus('load','토큰 확인 중...');
     loadSalesDataFromBQ();
@@ -573,10 +578,30 @@ function filterSupplierList(){
 }
 function selectSupplier(sup){
   S.supplier=sup;
+  S.brandFilter='';
   document.querySelectorAll('.sup-item').forEach(el=>el.classList.toggle('active',el.dataset.supplier===sup));
   updateSettingsDisplay();
   recompute();
+  updateBrandDropdown();
   renderTable();
+}
+function setBrandFilter(brand){
+  S.brandFilter=brand;
+  renderTable();
+}
+function updateBrandDropdown(){
+  const sel=document.getElementById('brand-sel');
+  if(!sel||!S.supplier)return;
+  const brands=[...new Set(Object.values(MASTER).filter(m=>m.supplier===S.supplier).map(m=>m.brand))].sort();
+  sel.innerHTML='<option value="">브랜드 전체</option>'+brands.map(b=>`<option value="${xe(b)}">${xe(b)}</option>`).join('');
+  sel.value=S.brandFilter||'';
+}
+function applyAllRec(){
+  const rows=getRows().filter(r=>r.rec!==null&&r.rec>0);
+  if(!rows.length){alert('적용할 발주 추천이 없습니다.');return;}
+  rows.forEach(r=>{ r._ov=r.rec; });
+  renderTable();
+  alert(`${rows.length}개 SKU에 추천 발주량이 적용됐습니다.`);
 }
 function setFilter(el,f){ S.filter=f; document.querySelectorAll('.ftag').forEach(e=>e.classList.remove('active')); el.classList.add('active'); renderTable(); }
 function doSearch(){ S.search=document.getElementById('srch').value.toLowerCase(); renderTable(); }
@@ -636,6 +661,7 @@ function updateSummary(){
 // ═══════════════════════════════════════════════════════
 function getRows(){
   let rows=S.computed;
+  if(S.brandFilter) rows=rows.filter(r=>r.brand===S.brandFilter);
   if(S.filter==='order')   rows=rows.filter(r=>r.rec!==null&&r.rec>0);
   if(S.filter==='urgent')  rows=rows.filter(r=>r.cov<=7&&r.adu>0);
   if(S.filter==='excess')  rows=rows.filter(r=>r.rec!==null&&r.rec<0);
@@ -696,11 +722,14 @@ function renderTable(){
       const cc=r.adu===0?'vz':r.cov<=7?'vn':r.cov<=14?'vw':'vp';
       const rc=r.rec===null?'vz':r.rec<0?'vn':r.rec===0?'vz':r.cov<=7?'vn':'vp';
       const ct=r.adu===0||r.cov>=9999?'∞':r.cov;
+      const recStyle = r.rec!==null && r.rec!==0 ? 'cursor:pointer;text-decoration:underline dotted;' : '';
+      const recTitle = r.rec!==null && r.rec!==0 ? 'title="클릭하면 조정란에 자동 입력"' : '';
+      const recClick = r.rec!==null && r.rec!==0 ? `onclick="applyRec('${r.sku.replace(/'/g,"\\'")}',${r.rec})"` : '';
       const recTxt=r.rec===null
         ?`<span class="vz" style="font-size:9.5px">—</span>`
-        :r.rec<0?`<span class="vn">${r.rec.toLocaleString()}</span>`
+        :r.rec<0?`<span class="vn" style="${recStyle}" ${recTitle} ${recClick}>${r.rec.toLocaleString()}</span>`
         :r.rec===0?`<span class="vz">0</span>`
-        :`<span class="vp">+${r.rec.toLocaleString()}</span>`;
+        :`<span class="vp" style="${recStyle}" ${recTitle} ${recClick}>+${r.rec.toLocaleString()}</span>`;
       h+=`<tr>
         <td>${xe(r.sku)}</td>
         <td title="${xe(r.name)}">${xe(r.name.length>28?r.name.slice(0,28)+'…':r.name)}</td>
@@ -723,6 +752,16 @@ function renderTable(){
 
 function xe(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function setOv(sku,v){ const r=S.computed.find(r=>r.sku===sku); if(r)r._ov=v===''?null:parseInt(v)||0; }
+function applyRec(sku,val){
+  const r=S.computed.find(r=>r.sku===sku); if(!r)return;
+  r._ov=val;
+  // 해당 행의 input에 값 반영
+  const inputs=document.querySelectorAll('.qov');
+  inputs.forEach(inp=>{ if(inp.closest('tr')?.querySelector('td:first-child')?.textContent===sku){ inp.value=val; } });
+  // 행 하이라이트
+  const rows=document.querySelectorAll('.sku-tbl tbody tr');
+  rows.forEach(tr=>{ if(tr.querySelector('td:first-child')?.textContent===sku){ tr.style.background='rgba(79,142,247,.08)'; setTimeout(()=>tr.style.background='',1500); } });
+}
 function toggleBrand(hdr){ hdr.classList.toggle('coll'); hdr.nextElementSibling.style.display=hdr.classList.contains('coll')?'none':''; }
 function expandAll(){ document.querySelectorAll('.bg-hdr').forEach(h=>{h.classList.remove('coll');h.nextElementSibling.style.display='';});}
 function collapseAll(){ document.querySelectorAll('.bg-hdr').forEach(h=>{h.classList.add('coll');h.nextElementSibling.style.display='none';});}
@@ -832,6 +871,14 @@ renderTable();
 document.getElementById('order-view').style.display='flex';
 document.getElementById('fc-view').style.display='none';
 checkOAuthCallback(); // OAuth redirect 처리
+
+// sessionStorage에서 기존 토큰 복원
+const savedToken = sessionStorage.getItem('bq_token');
+if(savedToken && !S.accessToken) {
+  S.accessToken = savedToken;
+  updateBQStatus('load', '기존 토큰으로 재연결 중...');
+  loadSalesDataFromBQ();
+}
 </script>
 </body>
 </html>
