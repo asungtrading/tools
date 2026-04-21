@@ -170,8 +170,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
       <span id="bq-lbl">판매 BQ 미연결 — 클릭하여 연결</span>
     </div>
     <div class="hsep"></div>
-    <button class="btn primary" onclick="dlCSV('all')">↓ 전체 CSV</button>
+    <button class="btn primary" onclick="dlCSV('order')">↓ 발주 CSV</button>
     <button class="btn" onclick="dlCSV('supplier')">↓ Supplier별</button>
+    <button class="btn" onclick="dlCSV('all')">↓ 전체 CSV</button>
   </div>
 </header>
 
@@ -220,9 +221,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
             <div class="sc-sub">재고 소진 임박</div>
           </div>
           <div class="sc-card">
-            <div class="sc-lbl">과잉재고</div>
+            <div class="sc-lbl">재고 충분</div>
             <div class="sc-val" id="sv-exc">—</div>
-            <div class="sc-sub">추천발주 음수</div>
+            <div class="sc-sub">발주 불필요 SKU</div>
           </div>
           <div class="sc-card">
             <div class="sc-lbl">재고 0 / Transfer중</div>
@@ -246,9 +247,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
           <div class="ftag active" onclick="setFilter(this,'all')">전체</div>
           <div class="ftag" onclick="setFilter(this,'order')">발주필요</div>
           <div class="ftag" onclick="setFilter(this,'urgent')">긴급</div>
-          <div class="ftag" onclick="setFilter(this,'excess')">과잉</div>
+          <div class="ftag" onclick="setFilter(this,'sufficient')">재고충분</div>
           <div class="ftag" onclick="setFilter(this,'zero')">재고 0</div>
-          <div class="ftag" onclick="setFilter(this,'transit')">Transfer중</div>
+          <div class="ftag" onclick="setFilter(this,'transit')">이동중</div>
+          <div class="ftag" onclick="setFilter(this,'nodata')">판매없음</div>
           <div class="tright">
             <button class="btn" onclick="applyAllRec()">전체 추천 적용</button>
             <button class="btn" onclick="expandAll()">펼치기</button>
@@ -698,6 +700,9 @@ function recompute(){
       const avail=bv(sku,'avail'), qoh=bv(sku,'qoh'), alloc=bv(sku,'alloc');
       const onOrder=bv(sku,'oo'), inTrans=bv(sku,'it');
       const extOO=Math.max(0,onOrder-inTrans);
+      // extOO = 공급업체 순발주잔 (Transfer 제외) → Ordered 컬럼
+      // inTrans = Edmonton Transfer만 → In Transit 컬럼 T배지
+      // 공급업체 선적중(Shipped) 데이터는 Cin7에서 별도 분리 필요
       const sd=S.salesData[sku];
 
       // ── ADU: 가중 이동평균 + Stockout 보정
@@ -708,7 +713,8 @@ function recompute(){
       const adu = rawDays.length>0 ? (wmaADU*0.6 + soADU*0.4) : 0;
 
       const sea = sd?.sea??1, trd = sd?.trd??1;
-      const adj = sea*trd;
+      // 계절×트렌드 합산 상한 2.5배 (과도한 폭발 방지)
+      const adj = Math.min(2.5, sea*trd);
 
       // ── Safety Stock
       const ss = S.bqReady ? calcSafetyStock(rawDays, lt) : 0;
@@ -720,20 +726,24 @@ function recompute(){
       // ── ABC 분류
       const abc = calcABC(sku);
 
-      // ── 추천발주 공식 (ForesightAI 방식)
-      // = ADU × (목표일수 + LT) × 계절 × 트렌드 + Safety Stock - 가용재고 - 기발주 + 백오더
-      const rec = S.bqReady&&adu>0
-        ? Math.round(adu*(tg+lt)*adj + ss - avail - extOO + bo)
+      // ── 추천발주 공식
+      // = ADU × 목표재고일수 × (계절×트렌드, max 2.5) + 안전재고 - 가용재고 - 기발주 + 백오더
+      // 가용재고 충분하면 0 (음수 방지)
+      const recRaw = S.bqReady&&adu>0
+        ? Math.round(adu*tg*adj + ss - avail - extOO + bo)
         : null;
+      const rec = recRaw !== null ? Math.max(0, recRaw) : null;
+      // 발주 불필요 여부 (재고 충분)
+      const sufficient = recRaw !== null && recRaw <= 0;
 
-      // ── Reorder Point
+      // ── Reorder Point (발주 시점: 가용재고가 이 이하면 발주 필요)
       const rop = adu>0 ? Math.round(adu*lt + ss) : null;
 
       const cov = adu>0 ? Math.round(avail/adu) : 9999;
 
       return {...meta,sku,adu:Math.round(adu*100)/100,
         sea:Math.round(sea*100)/100,trd:Math.round(trd*100)/100,adj:Math.round(adj*100)/100,
-        ss,avail,qoh,alloc,onOrder,inTrans,extOO,bo,rec,rop,cov,lt,tg,abc,_ov:null};
+        ss,avail,qoh,alloc,onOrder,inTrans,extOO,bo,rec,rop,cov,lt,tg,abc,sufficient,_ov:null};
     });
   updateSummary();
 }
@@ -741,12 +751,12 @@ function updateSummary(){
   const r=S.computed;
   const need=r.filter(x=>x.rec!==null&&x.rec>0).length;
   const urg=r.filter(x=>x.cov<=7&&x.adu>0).length;
-  const exc=r.filter(x=>x.rec!==null&&x.rec<0).length;
+  const suff=r.filter(x=>x.sufficient===true).length;
   const zeros=r.filter(x=>x.avail<=0).length;
   const trans=r.filter(x=>x.inTrans>0).length;
   document.getElementById('sv-need').textContent=need||'—';
   document.getElementById('sv-urg').textContent=urg||'—';
-  document.getElementById('sv-exc').textContent=exc||'—';
+  document.getElementById('sv-exc').textContent=suff||'—';
   document.getElementById('sv-zero').textContent=`${zeros} / ${trans}`;
   document.getElementById('sv-sup').textContent=S.supplier||'Supplier 선택 필요';
 }
@@ -757,11 +767,12 @@ function updateSummary(){
 function getRows(){
   let rows=S.computed;
   if(S.brandFilter) rows=rows.filter(r=>r.brand===S.brandFilter);
-  if(S.filter==='order')   rows=rows.filter(r=>r.rec!==null&&r.rec>0);
-  if(S.filter==='urgent')  rows=rows.filter(r=>r.cov<=7&&r.adu>0);
-  if(S.filter==='excess')  rows=rows.filter(r=>r.rec!==null&&r.rec<0);
-  if(S.filter==='zero')    rows=rows.filter(r=>r.avail<=0);
-  if(S.filter==='transit') rows=rows.filter(r=>r.inTrans>0);
+  if(S.filter==='order')      rows=rows.filter(r=>r.rec!==null&&r.rec>0);
+  if(S.filter==='urgent')     rows=rows.filter(r=>r.cov<=7&&r.adu>0);
+  if(S.filter==='sufficient') rows=rows.filter(r=>r.sufficient===true);
+  if(S.filter==='zero')       rows=rows.filter(r=>r.avail<=0);
+  if(S.filter==='transit')    rows=rows.filter(r=>r.inTrans>0);
+  if(S.filter==='nodata')     rows=rows.filter(r=>r.adu===0);
   if(S.search) rows=rows.filter(r=>r.sku.toLowerCase().includes(S.search)||r.name.toLowerCase().includes(S.search));
   return rows;
 }
@@ -802,12 +813,12 @@ function renderTable(){
           <th title="계절성 보정: 올해/작년 동기 비율">계절보정</th>
           <th title="트렌드 보정: 90일 선형 회귀">트렌드</th>
           <th title="현재 가용재고로 버틸 수 있는 일수">재고일수</th>
-          <th class="sep" title="실제 판매 가능한 재고 (QOH - Allocated)">가용재고</th>
-          <th title="Safety Stock: 수요 변동성 기반 안전재고">안전재고</th>
-          <th title="공급업체에 이미 발주한 순수 잔량 (Transfer 제외)">기발주</th>
-          <th title="Toronto→Edmonton 이동 진행중" style="color:var(--purple)">이동중</th>
+          <th class="sep" title="Available Stock = QOH - Allocated (실제 판매 가능 재고)">Available Stock</th>
+          <th title="Safety Stock = 1.65 × 수요표준편차 × √LT | 클수록 수요변동 큰 제품">Safety Stock</th>
+          <th title="공급업체에 발주된 수량 (Transfer 제외)">Ordered</th>
+          <th title="입고 예정 수량 | T=Edmonton Transfer / 숫자만=공급업체 선적중">In Transit</th>
           <th title="백오더: Toronto 재고=0 + 중복주문 제거">백오더</th>
-          <th class="sep" title="추천발주 = ADU×(목표일+LT)×계절×트렌드 + 안전재고 - 가용재고 - 기발주 + 백오더">추천발주</th>
+          <th class="sep" title="추천발주 = ADU×목표일수×계절보정(최대2.5배) + 안전재고 - 가용재고 - 기발주 + 백오더">추천발주</th>
           <th title="실제 발주할 수량 (추천발주 클릭시 자동 입력)">실발주량</th>
         </tr></thead><tbody>`;
     brows.sort((a,b)=>{
@@ -815,18 +826,22 @@ function renderTable(){
       if(a.cov===9999&&b.cov!==9999)return 1;
       return a.cov-b.cov;
     }).forEach(r=>{
+      const trStyle = r.sufficient ? ' style="opacity:0.55"' : '';
       const cc=r.adu===0?'vz':r.cov<=7?'vn':r.cov<=14?'vw':'vp';
       const rc=r.rec===null?'vz':r.rec<0?'vn':r.rec===0?'vz':r.cov<=7?'vn':'vp';
       const ct=r.adu===0||r.cov>=9999?'∞':r.cov;
-      const recStyle = r.rec!==null && r.rec!==0 ? 'cursor:pointer;text-decoration:underline dotted;' : '';
-      const recTitle = r.rec!==null && r.rec!==0 ? 'title="클릭하면 조정란에 자동 입력"' : '';
-      const recClick = r.rec!==null && r.rec!==0 ? `onclick="applyRec('${r.sku.replace(/'/g,"\\'")}',${r.rec})"` : '';
-      const recTxt=r.rec===null
-        ?`<span class="vz" style="font-size:9.5px">—</span>`
-        :r.rec<0?`<span class="vn" style="${recStyle}" ${recTitle} ${recClick}>${r.rec.toLocaleString()}</span>`
-        :r.rec===0?`<span class="vz">0</span>`
-        :`<span class="vp" style="${recStyle}" ${recTitle} ${recClick}>+${r.rec.toLocaleString()}</span>`;
-      h+=`<tr>
+      const canClick = r.rec!==null && r.rec>0;
+      const recStyle = canClick ? 'cursor:pointer;text-decoration:underline dotted;' : '';
+      const recTitle = canClick ? 'title="클릭하면 실발주량에 자동 입력"' : '';
+      const recClick = canClick ? `onclick="applyRec('${r.sku.replace(/'/g,"\\'")}',${r.rec})"` : '';
+      const recTxt = r.rec===null
+        ? `<span class="vz" style="font-size:9.5px">—</span>`
+        : r.sufficient
+          ? `<span class="vz" style="font-size:10px">✓ 충분</span>`
+          : r.rec===0
+            ? `<span class="vz">0</span>`
+            : `<span class="vp" style="${recStyle}" ${recTitle} ${recClick}>+${r.rec.toLocaleString()}</span>`;
+      h+=`<tr${trStyle}>
         <td>${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}">${r.abc}</span>`:''}</td>
         <td title="${xe(r.name)}">${xe(r.name.length>28?r.name.slice(0,28)+'…':r.name)}</td>
         <td class="${r.adu>0?'':'vz'}" title="${r.adu>0?'가중이동평균 ADU':'판매 데이터 없음'}">${r.adu>0?r.adu.toFixed(2):'—'}</td>
@@ -834,9 +849,14 @@ function renderTable(){
         <td class="${r.trd>1.05?'vp':r.trd<0.95?'vw':''}">${r.adu>0?'×'+r.trd.toFixed(2):'—'}</td>
         <td class="sep ${cc}">${ct}</td>
         <td><span class="${r.avail<=0?'vn':r.avail<10?'vw':''}">${r.avail.toLocaleString()}</span></td>
-        <td>${r.ss>0?`<span class="vw">${Math.round(r.ss)}</span>`:'<span class="vz">—</span>'}</td>
-        <td>${r.extOO>0?`<span class="vp">${r.extOO}</span>`:'<span class="vz">0</span>'}</td>
-        <td>${r.inTrans>0?`<span style="color:var(--purple)">${r.inTrans} <span class="badge badge-tr">T</span></span>`:'<span class="vz">—</span>'}</td>
+        <td title="${r.ss>0?`σ=${(r.ss/(1.65*Math.sqrt(r.lt||30))).toFixed(1)}/일`:'판매데이터 없음'}">${r.ss>0?`<span class="vw">${Math.round(r.ss)}</span>`:'<span class="vz">—</span>'}</td>
+        <td>${r.extOO>0?`<span class="vp">${r.extOO.toLocaleString()}</span>`:'<span class="vz">0</span>'}</td>
+        <td>${(()=>{
+          const t=r.inTrans, oo=r.extOO;
+          if(t>0 && oo>0) return `<span style="color:var(--text2)">${oo}</span> + <span style="color:var(--purple)">${t}<span class="badge badge-tr" style="margin-left:2px">T</span></span>`;
+          if(t>0) return `<span style="color:var(--purple)">${t}<span class="badge badge-tr" style="margin-left:2px">T</span></span>`;
+          return '<span class="vz">—</span>';
+        })()}</td>
         <td>${r.bo>0?`<span class="vn">${r.bo}</span>`:'<span class="vz">—</span>'}</td>
         <td class="sep ${rc}">${recTxt}</td>
         <td><input type="number" class="qov" value="${r._ov??''}" placeholder="${r.rec??'—'}" onchange="setOv('${xe(r.sku)}',this.value)"></td>
@@ -916,7 +936,40 @@ function renderForecast(){
 // ═══════════════════════════════════════════════════════
 function dlCSV(mode){
   let rows;
-  if(mode==='supplier'&&S.supplier){
+  if(mode==='order'){
+    // 발주량 > 0인 것만 (전체 supplier)
+    const allRows = Object.entries(MASTER).map(([sku,meta])=>{
+      const avail=bv(sku,'avail'),qoh=bv(sku,'qoh'),alloc=bv(sku,'alloc');
+      const onOrder=bv(sku,'oo'),inTrans=bv(sku,'it'),extOO=Math.max(0,onOrder-inTrans);
+      const sd=S.salesData[sku];
+      const adu=sd?.adu??0,sea=sd?.sea??1,trd=sd?.trd??1,adj=Math.min(2.5,sea*trd);
+      const bo=(S.bqReady&&(STOCK[sku]?.toronto?.avail??0)<=0)?(S.backorderData[sku]||0):0;
+      const sup=meta.supplier,lt=getSetting(sup,'leadtime'),tg=getSetting(sup,'target');
+      const rawDays=sd?.days||[];
+      const ss=S.bqReady?calcSafetyStock(rawDays,lt):0;
+      const recRaw=S.bqReady&&adu>0?Math.round(adu*tg*adj+ss-avail-extOO+bo):null;
+      const rec=recRaw!==null?Math.max(0,recRaw):null;
+      const r=S.computed.find(r=>r.sku===sku);
+      const finalQty = r?._ov ?? rec;
+      return {...meta,sku,adu,sea,trd,avail,qoh,alloc,onOrder,inTrans,extOO,bo,ss:Math.round(ss),rec,finalQty,lt,tg};
+    }).filter(r=>r.finalQty>0);  // 발주량 있는 것만
+    rows = allRows;
+    if(!rows.length){alert('발주할 항목이 없습니다.');return;}
+    const hdr=['Supplier','Brand','SKU','Name','일판매량(ADU)','계절보정','트렌드','가용재고','안전재고','기발주','백오더','추천발주','실발주량','Lead Time','목표재고일수'];
+    const toLine=r=>[r.supplier,r.brand,r.sku,`"${r.name}"`,
+      r.adu?.toFixed(2)??'',r.sea?.toFixed(2)??'',r.trd?.toFixed(2)??'',
+      r.avail,r.ss,r.extOO,r.bo,r.rec??'',r.finalQty,r.lt,r.tg].join(',');
+    // Supplier별로 시트 구분해서 하나의 CSV로 (구분선 추가)
+    const bySup={};
+    rows.forEach(r=>{if(!bySup[r.supplier])bySup[r.supplier]=[];bySup[r.supplier].push(r);});
+    const lines=[hdr.join(',')];
+    Object.entries(bySup).sort().forEach(([sup,srows])=>{
+      lines.push(`"== ${sup} (${srows.length}개) =="`);
+      srows.forEach(r=>lines.push(toLine(r)));
+    });
+    dl(lines.join('\n'),`PO_발주목록_${STOCK_DATE}.csv`);
+    return;
+  } else if(mode==='supplier'&&S.supplier){
     rows=getRows();
   } else {
     rows=Object.entries(MASTER).map(([sku,meta])=>{
