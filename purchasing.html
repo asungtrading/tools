@@ -129,6 +129,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .abc-a{background:rgba(247,196,79,.2);color:var(--yellow);border-radius:3px;padding:1px 5px;font-size:9px;font-weight:700}
 .abc-b{background:rgba(79,142,247,.15);color:var(--accent);border-radius:3px;padding:1px 5px;font-size:9px;font-weight:700}
 .abc-c{background:rgba(139,146,168,.1);color:var(--text3);border-radius:3px;padding:1px 5px;font-size:9px;font-weight:700}
+.sh{cursor:pointer!important;user-select:none}
+.sh:hover{color:var(--text)!important}
+.sort-arrow{font-size:8px;margin-left:2px}
 /* loading overlay */
 #loading{display:none;position:fixed;inset:0;background:rgba(13,15,20,.75);z-index:300;align-items:center;justify-content:center;flex-direction:column;gap:12px}
 #loading.show{display:flex}
@@ -181,10 +184,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
     <div class="sb-search">
       <input type="text" id="sup-search" placeholder="Supplier 검색..." oninput="filterSupplierList()">
     </div>
-    <div id="sup-list"></div>
-    <div class="sb-settings">
-      <div class="sb-settings-title">발주 설정</div>
-      <div class="sb-sup-name" id="settings-sup-name">← Supplier 선택</div>
+    <!-- 설정: 상단 고정 -->
+    <div class="sb-settings" style="border-bottom:1px solid var(--border);border-top:none">
+      <div class="sb-sup-name" id="settings-sup-name" style="margin-bottom:6px">← Supplier 선택</div>
       <div class="sr">
         <span class="sl">Lead Time</span>
         <input type="number" class="si" id="inp-lt" value="30" min="1" max="365" onchange="saveSetting('leadtime',this.value)">
@@ -195,7 +197,25 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
         <input type="number" class="si" id="inp-tg" value="60" min="1" max="365" onchange="saveSetting('target',this.value)">
         <span class="su">일</span>
       </div>
+      <!-- 계절/트렌드 Supplier 전체 override -->
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+        <div style="font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">보정 Override</div>
+        <div class="sr">
+          <span class="sl">계절보정</span>
+          <input type="number" class="si" id="inp-sea" step="0.1" min="0.3" max="3.0" placeholder="auto" onchange="saveOverride('sea',this.value)" style="width:54px">
+          <span class="su">×</span>
+        </div>
+        <div class="sr">
+          <span class="sl">트렌드</span>
+          <input type="number" class="si" id="inp-trd" step="0.1" min="0.5" max="2.0" placeholder="auto" onchange="saveOverride('trd',this.value)" style="width:54px">
+          <span class="su">×</span>
+        </div>
+        <div style="margin-top:4px">
+          <button class="btn" style="width:100%;justify-content:center;font-size:9.5px;padding:3px" onclick="clearOverrides()">Override 초기화</button>
+        </div>
+      </div>
     </div>
+    <div id="sup-list"></div>
   </aside>
 
   <main id="main">
@@ -272,12 +292,31 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
             <span style="color:var(--text3)">⌕</span>
             <input type="text" id="fc-srch" placeholder="SKU 검색" oninput="renderForecast()">
           </div>
+          <button class="btn" onclick="dlForecastCSV()" style="margin-left:4px">↓ Forecast CSV</button>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-left:8px">계절/트렌드 셀 클릭시 수동 수정 가능</span>
         </div>
-        <div class="fc-grid" id="fc-grid">
-          <div style="grid-column:1/-1;padding:40px;text-align:center;color:var(--text3);font-family:var(--mono);font-size:11.5px;line-height:2" id="fc-empty">
-            판매 BigQuery 연결 후 Forecast가 활성화됩니다.<br>
-            <span style="font-size:10px">ADU × 계절성 × 트렌드 기반 30/60/90일 예측</span>
-          </div>
+        <!-- Forecast 테이블 -->
+        <div id="fc-empty" style="padding:40px;text-align:center;color:var(--text3);font-family:var(--mono);font-size:11.5px;line-height:2">
+          판매 BigQuery 연결 후 Forecast가 활성화됩니다.<br>
+          <span style="font-size:10px">ADU × 계절성 × 트렌드 기반 30/60/90일 예측</span>
+        </div>
+        <div id="fc-tbl-wrap" style="display:none;overflow:auto;flex:1">
+          <table class="sku-tbl" id="fc-tbl" style="min-width:900px">
+            <thead><tr>
+              <th class="sh" onclick="sortBy('abc')">SKU<span class="sort-arrow" data-col="abc"></span></th>
+              <th style="text-align:left;min-width:160px">상품명</th>
+              <th class="sh" onclick="sortBy('adu')">일판매량<span class="sort-arrow"></span></th>
+              <th class="sh" onclick="sortBy('sea')">계절보정<span class="sort-arrow"></span></th>
+              <th class="sh" onclick="sortBy('trd')">트렌드<span class="sort-arrow"></span></th>
+              <th class="sep sh" onclick="sortFc('fc30')">30일 예측<span class="sort-arrow" id="fc-sort-30"></span></th>
+              <th class="sh" onclick="sortFc('fc60')">60일 예측<span class="sort-arrow" id="fc-sort-60"></span></th>
+              <th class="sh" onclick="sortFc('fc90')">90일 예측<span class="sort-arrow" id="fc-sort-90"></span></th>
+              <th class="sep sh" onclick="sortBy('avail')">Available<span class="sort-arrow"></span></th>
+              <th class="sh" onclick="sortBy('cov')">재고일수<span class="sort-arrow"></span></th>
+              <th class="sh" onclick="sortBy('rec')">추천발주<span class="sort-arrow"></span></th>
+            </tr></thead>
+            <tbody id="fc-tbody"></tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -307,7 +346,7 @@ const SCOPES     = 'https://www.googleapis.com/auth/bigquery.readonly';
 // ═══════════════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════════════
-const S = { brandFilter:'',
+const S = { brandFilter:'', skuOverrides:{}, sortCol:null, sortDir:1,
   branch:'toronto', supplier:null, filter:'all', search:'',
   fcPeriod:30, settings:{},
   computed:[], salesData:{}, backorderData:{},
@@ -326,6 +365,23 @@ function saveSetting(key,val){
   S.settings[S.supplier][key]=parseInt(val)||{leadtime:30,target:60}[key];
   saveSettings(); updateSettingsDisplay(); recompute(); renderTable();
 }
+function saveOverride(key,val){
+  if(!S.supplier){ alert('먼저 Supplier를 선택하세요.'); return; }
+  if(!S.settings[S.supplier])S.settings[S.supplier]={};
+  const k = key==='sea'?'_seaOv':'_trdOv';
+  const v = parseFloat(val);
+  if(!val||isNaN(v)){ delete S.settings[S.supplier][k]; }
+  else { S.settings[S.supplier][k] = Math.min(key==='sea'?3.0:2.0, Math.max(key==='sea'?0.3:0.5, v)); }
+  saveSettings(); recompute(); renderTable();
+  if(document.getElementById('fc-view').style.display!=='none') renderForecast();
+}
+function clearOverrides(){
+  if(!S.supplier)return;
+  if(S.settings[S.supplier]){ delete S.settings[S.supplier]._seaOv; delete S.settings[S.supplier]._trdOv; }
+  document.getElementById('inp-sea').value='';
+  document.getElementById('inp-trd').value='';
+  saveSettings(); recompute(); renderTable();
+}
 function updateSettingsDisplay(){
   const sup=S.supplier||'';
   const lt=getSetting(sup,'leadtime'), tg=getSetting(sup,'target');
@@ -333,6 +389,16 @@ function updateSettingsDisplay(){
   document.getElementById('inp-tg').value=tg;
   document.getElementById('sv-tg').textContent=`목표: ${tg}일 / Lead: ${lt}일 / SL: 95%`;
   document.getElementById('settings-sup-name').textContent=sup||'← Supplier 선택';
+  // BQ 배너 우측에 LT/목표 표시
+  const bs=document.getElementById('banner-settings');
+  if(bs && sup){
+    bs.style.display='flex';
+    bs.innerHTML=`<span style="color:var(--text2)">Lead: <b style="color:var(--text)">${lt}일</b></span><span style="color:var(--text2)">목표: <b style="color:var(--text)">${tg}일</b></span>`;
+  }
+  // override 값 반영
+  const seaOv=S.settings[sup]?._seaOv, trdOv=S.settings[sup]?._trdOv;
+  document.getElementById('inp-sea').value=seaOv||'';
+  document.getElementById('inp-trd').value=trdOv||'';
 }
 
 // ═══════════════════════════════════════════════════════
@@ -475,12 +541,21 @@ async function loadSalesDataFromBQ(){
       GROUP BY SKU
     `;
 
+    // 재고 최신 날짜 조회
+    const dateSQL = `SELECT FORMAT_DATE('%Y-%m-%d', MAX(snapshot_date)) as latest_date FROM \`${BQ_PROJECT}.${BQ_DATASET}.asung_stock_daily\``;
     updateBQStatus('load','ADU 계산 중...');
-    const [aduRows, seaRows, boRows] = await Promise.all([
+    const [aduRows, seaRows, boRows, dateRows] = await Promise.all([
       runBQQuery(aduSQL),
       runBQQuery(seaSQL),
       runBQQuery(boSQL),
+      runBQQuery(dateSQL),
     ]);
+    // 재고 날짜 업데이트
+    if(dateRows[0]?.latest_date){
+      const latestDate = dateRows[0].latest_date;
+      document.getElementById('sv-date').textContent = latestDate;
+      document.querySelectorAll('.stock-date-lbl').forEach(el=>el.textContent=`재고 ${latestDate}`);
+    }
 
     // ── ADU 계산 (SKU별 일별 데이터 집계)
     const dailyMap = {};  // sku -> [qty per day over 90 days]
@@ -680,6 +755,18 @@ function calcABC(sku) {
   return 'C';
 }
 
+function sortBy(col){
+  if(S.sortCol===col){ S.sortDir*=-1; }
+  else { S.sortCol=col; S.sortDir=1; }
+  // 화살표 업데이트
+  document.querySelectorAll('.sort-arrow').forEach(el=>{
+    const dc=el.dataset.col;
+    if(dc===col){ el.textContent=S.sortDir===1?' ▲':' ▼'; el.style.color='var(--accent)'; }
+    else { el.textContent=''; }
+  });
+  renderTable();
+  if(document.getElementById('fc-view').style.display!=='none') renderForecast();
+}
 function buildABCThresholds() {
   const adus = Object.values(S.salesData).map(s=>s.adu).filter(v=>v>0).sort((a,b)=>b-a);
   if(!adus.length) return;
@@ -713,8 +800,16 @@ function recompute(){
       const adu = rawDays.length>0 ? (wmaADU*0.6 + soADU*0.4) : 0;
 
       const sea = sd?.sea??1, trd = sd?.trd??1;
-      // 계절×트렌드 합산 상한 2.5배 (과도한 폭발 방지)
-      const adj = Math.min(2.5, sea*trd);
+      // Supplier 전체 override 또는 SKU별 override 적용
+      const supSeaOv = S.settings[S.supplier]?._seaOv;
+      const supTrdOv = S.settings[S.supplier]?._trdOv;
+      const skuSeaOv = S.skuOverrides?.[sku]?.sea;
+      const skuTrdOv = S.skuOverrides?.[sku]?.trd;
+      // SKU별 > Supplier 전체 > BQ 자동계산 순으로 우선순위
+      const finalSea = skuSeaOv ?? supSeaOv ?? sea;
+      const finalTrd = skuTrdOv ?? supTrdOv ?? trd;
+      // 계절×트렌드 합산 상한 2.5배
+      const adj = Math.min(2.5, finalSea * finalTrd);
 
       // ── Safety Stock
       const ss = S.bqReady ? calcSafetyStock(rawDays, lt) : 0;
@@ -742,7 +837,9 @@ function recompute(){
       const cov = adu>0 ? Math.round(avail/adu) : 9999;
 
       return {...meta,sku,adu:Math.round(adu*100)/100,
-        sea:Math.round(sea*100)/100,trd:Math.round(trd*100)/100,adj:Math.round(adj*100)/100,
+        sea:Math.round(finalSea*100)/100,trd:Math.round(finalTrd*100)/100,adj:Math.round(adj*100)/100,
+        seaAuto:Math.round(sea*100)/100,trdAuto:Math.round(trd*100)/100,
+        seaOv:skuSeaOv??supSeaOv??null, trdOv:skuTrdOv??supTrdOv??null,
         ss,avail,qoh,alloc,onOrder,inTrans,extOO,bo,rec,rop,cov,lt,tg,abc,sufficient,_ov:null};
     });
   updateSummary();
@@ -774,6 +871,17 @@ function getRows(){
   if(S.filter==='transit')    rows=rows.filter(r=>r.inTrans>0);
   if(S.filter==='nodata')     rows=rows.filter(r=>r.adu===0);
   if(S.search) rows=rows.filter(r=>r.sku.toLowerCase().includes(S.search)||r.name.toLowerCase().includes(S.search));
+  // 정렬
+  if(S.sortCol){
+    rows=[...rows].sort((a,b)=>{
+      let va=a[S.sortCol], vb=b[S.sortCol];
+      if(S.sortCol==='abc'){ va={A:0,B:1,C:2}[va]||2; vb={A:0,B:1,C:2}[vb]||2; }
+      if(S.sortCol==='cov'){ va=va>=9999?99999:va; vb=vb>=9999?99999:vb; }
+      if(va===null||va===undefined) va=-Infinity;
+      if(vb===null||vb===undefined) vb=-Infinity;
+      return (va>vb?1:va<vb?-1:0)*S.sortDir;
+    });
+  }
   return rows;
 }
 function renderTable(){
@@ -808,17 +916,17 @@ function renderTable(){
       </div>
       <div class="bg-rows"><div class="tscroll"><table class="sku-tbl">
         <thead><tr>
-          <th>SKU</th><th>상품명</th>
-          <th class="sep" title="일 평균 판매량 (가중 이동평균, Stockout 보정)">일판매량(ADU)</th>
-          <th title="계절성 보정: 올해/작년 동기 비율">계절보정</th>
-          <th title="트렌드 보정: 90일 선형 회귀">트렌드</th>
-          <th title="현재 가용재고로 버틸 수 있는 일수">재고일수</th>
-          <th class="sep" title="Available Stock = QOH - Allocated (실제 판매 가능 재고)">Available Stock</th>
-          <th title="Safety Stock = 1.65 × 수요표준편차 × √LT | 클수록 수요변동 큰 제품">Safety Stock</th>
-          <th title="공급업체에 발주된 수량 (Transfer 제외)">Ordered</th>
-          <th title="입고 예정 수량 | T=Edmonton Transfer / 숫자만=공급업체 선적중">In Transit</th>
-          <th title="백오더: Toronto 재고=0 + 중복주문 제거">백오더</th>
-          <th class="sep" title="추천발주 = ADU×목표일수×계절보정(최대2.5배) + 안전재고 - 가용재고 - 기발주 + 백오더">추천발주</th>
+          <th class="sh" onclick="sortBy('abc')" style="cursor:pointer;user-select:none">SKU<span class="sort-arrow" data-col="abc"></span></th><th style="cursor:col-resize;user-select:none;min-width:120px" onmousedown="startResize(event,'--name-col-width')">상품명 ↔</th>
+          <th class="sep sh" onclick="sortBy('adu')" title="일 평균 판매량 (가중 이동평균, Stockout 보정)">일판매량(ADU)<span class="sort-arrow" data-col="adu"></span></th>
+          <th class="sh" onclick="sortBy('sea')" title="계절성 보정: 올해/작년 동기 비율 | 클릭해서 수동수정">계절보정<span class="sort-arrow" data-col="sea"></span></th>
+          <th class="sh" onclick="sortBy('trd')" title="트렌드 보정: 90일 선형 회귀 | 클릭해서 수동수정">트렌드<span class="sort-arrow" data-col="trd"></span></th>
+          <th class="sh" onclick="sortBy('cov')" title="현재 가용재고로 버틸 수 있는 일수">재고일수<span class="sort-arrow" data-col="cov"></span></th>
+          <th class="sep sh" onclick="sortBy('avail')" title="Available Stock = QOH - Allocated">Available Stock<span class="sort-arrow" data-col="avail"></span></th>
+          <th class="sh" onclick="sortBy('ss')" title="Safety Stock = 1.65 × σ × √LT | 클수록 수요변동 큰 제품">Safety Stock<span class="sort-arrow" data-col="ss"></span></th>
+          <th class="sh" onclick="sortBy('extOO')" title="공급업체에 발주된 수량 (Transfer 제외)">Ordered<span class="sort-arrow" data-col="extOO"></span></th>
+          <th class="sh" title="입고 예정 수량 | T=Edmonton Transfer">In Transit</th>
+          <th class="sh" onclick="sortBy('bo')" title="백오더: Toronto 재고=0 + 중복주문 제거">백오더<span class="sort-arrow" data-col="bo"></span></th>
+          <th class="sep sh" onclick="sortBy('rec')" title="추천발주 = ADU×목표×계절(max2.5) + SS - 가용 - Ordered + BO">추천발주<span class="sort-arrow" data-col="rec"></span></th>
           <th title="실제 발주할 수량 (추천발주 클릭시 자동 입력)">실발주량</th>
         </tr></thead><tbody>`;
     brows.sort((a,b)=>{
@@ -843,10 +951,10 @@ function renderTable(){
             : `<span class="vp" style="${recStyle}" ${recTitle} ${recClick}>+${r.rec.toLocaleString()}</span>`;
       h+=`<tr${trStyle}>
         <td>${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}">${r.abc}</span>`:''}</td>
-        <td title="${xe(r.name)}">${xe(r.name.length>28?r.name.slice(0,28)+'…':r.name)}</td>
+        <td style="max-width:var(--name-col-width,180px);overflow:hidden;text-overflow:ellipsis;cursor:default" title="${xe(r.name)}">${xe(r.name)}</td>
         <td class="${r.adu>0?'':'vz'}" title="${r.adu>0?'가중이동평균 ADU':'판매 데이터 없음'}">${r.adu>0?r.adu.toFixed(2):'—'}</td>
-        <td class="${r.sea>1.1?'vp':r.sea<0.9?'vw':''}">${r.adu>0?'×'+r.sea.toFixed(2):'—'}</td>
-        <td class="${r.trd>1.05?'vp':r.trd<0.95?'vw':''}">${r.adu>0?'×'+r.trd.toFixed(2):'—'}</td>
+        <td class="${r.sea>1.1?'vp':r.sea<0.9?'vw':''}" onclick="editSkuOverride('${xe(r.sku)}','sea',${r.sea},event)" title="클릭해서 수동 수정 (BQ자동: ×${r.seaAuto})">${r.adu>0?`×${r.sea.toFixed(2)}${r.seaOv!==null?'<span style=\'color:var(--yellow);font-size:8px\'>✎</span>':''}`:'—'}</td>
+        <td class="${r.trd>1.05?'vp':r.trd<0.95?'vw':''}" onclick="editSkuOverride('${xe(r.sku)}','trd',${r.trd},event)" title="클릭해서 수동 수정 (BQ자동: ×${r.trdAuto})">${r.adu>0?`×${r.trd.toFixed(2)}${r.trdOv!==null?'<span style=\'color:var(--yellow);font-size:8px\'>✎</span>':''}`:'—'}</td>
         <td class="sep ${cc}">${ct}</td>
         <td><span class="${r.avail<=0?'vn':r.avail<10?'vw':''}">${r.avail.toLocaleString()}</span></td>
         <td title="${r.ss>0?`σ=${(r.ss/(1.65*Math.sqrt(r.lt||30))).toFixed(1)}/일`:'판매데이터 없음'}">${r.ss>0?`<span class="vw">${Math.round(r.ss)}</span>`:'<span class="vz">—</span>'}</td>
@@ -867,8 +975,36 @@ function renderTable(){
   body.innerHTML=h;
 }
 
+function startResize(e, varName){
+  e.preventDefault();
+  const startX=e.clientX;
+  const startW=parseInt(getComputedStyle(document.documentElement).getPropertyValue(varName))||180;
+  const onMove=ev=>{
+    const w=Math.max(80,startW+(ev.clientX-startX));
+    document.documentElement.style.setProperty(varName,w+'px');
+  };
+  const onUp=()=>{ document.removeEventListener('mousemove',onMove); document.removeEventListener('mouseup',onUp); };
+  document.addEventListener('mousemove',onMove);
+  document.addEventListener('mouseup',onUp);
+}
 function xe(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function setOv(sku,v){ const r=S.computed.find(r=>r.sku===sku); if(r)r._ov=v===''?null:parseInt(v)||0; }
+function editSkuOverride(sku,key,curVal,evt){
+  evt.stopPropagation();
+  const newVal = prompt(`${sku} ${key==='sea'?'계절보정':'트렌드'} 수동 입력
+(BQ 자동값: ×${curVal.toFixed(2)}, 비우면 자동으로 복원)`, curVal.toFixed(2));
+  if(newVal===null) return; // 취소
+  if(!S.skuOverrides) S.skuOverrides={};
+  if(!S.skuOverrides[sku]) S.skuOverrides[sku]={};
+  if(newVal===''){ delete S.skuOverrides[sku][key]; }
+  else {
+    const v=parseFloat(newVal);
+    if(isNaN(v)){alert('숫자를 입력해주세요.');return;}
+    S.skuOverrides[sku][key]=key==='sea'?Math.min(3,Math.max(0.3,v)):Math.min(2,Math.max(0.5,v));
+  }
+  recompute(); renderTable();
+  if(document.getElementById('fc-view').style.display!=='none') renderForecast();
+}
 function applyRec(sku,val){
   const r=S.computed.find(r=>r.sku===sku); if(!r)return;
   r._ov=val;
@@ -887,48 +1023,110 @@ function collapseAll(){ document.querySelectorAll('.bg-hdr').forEach(h=>{h.class
 //  FORECAST
 // ═══════════════════════════════════════════════════════
 function setFcPeriod(p,btn){ S.fcPeriod=p; document.querySelectorAll('.ptog button').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); renderForecast(); }
+
+let _fcSortCol=null, _fcSortDir=1;
+function sortFc(col){
+  _fcSortCol=_fcSortCol===col?(_fcSortDir*=-1,col):(_fcSortDir=1,col);
+  renderForecast();
+}
+
 function renderForecast(){
-  const grid=document.getElementById('fc-grid');
   const empty=document.getElementById('fc-empty');
-  if(!S.bqReady){ if(empty)empty.style.display='block'; return; }
-  if(empty)empty.style.display='none';
+  const wrap=document.getElementById('fc-tbl-wrap');
+  if(!S.bqReady){ empty.style.display='block'; if(wrap)wrap.style.display='none'; return; }
+  empty.style.display='none';
+  if(wrap)wrap.style.display='block';
+
   const q=(document.getElementById('fc-srch').value||'').toLowerCase();
-  let rows=S.computed.filter(r=>r.adu>0);
-  if(!rows.length&&S.supplier){
-    // supplier selected but no BQ data for these SKUs — show all with adu from salesData
-    rows=Object.entries(MASTER)
-      .filter(([,m])=>m.supplier===S.supplier)
-      .filter(([sku])=>S.salesData[sku])
-      .map(([sku,meta])=>{
-        const sd=S.salesData[sku];
-        const avail=bv(sku,'avail'),onOrder=bv(sku,'oo'),inTrans=bv(sku,'it'),extOO=Math.max(0,onOrder-inTrans);
-        const tg=getSetting(S.supplier,'target');
-        const rec=Math.round(sd.adu*tg*sd.adj - avail - extOO);
-        return {...meta,sku,...sd,avail,extOO,rec,tg};
-      });
+  // Supplier 선택 여부에 따라 범위 결정
+  let rows = S.supplier
+    ? S.computed.filter(r=>r.adu>0)
+    : Object.entries(MASTER)
+        .filter(([sku])=>S.salesData[sku])
+        .map(([sku,meta])=>{
+          const sd=S.salesData[sku];
+          const avail=bv(sku,'avail'),onOrder=bv(sku,'oo'),inTrans=bv(sku,'it'),extOO=Math.max(0,onOrder-inTrans);
+          const sup=meta.supplier,lt=getSetting(sup,'leadtime'),tg=getSetting(sup,'target');
+          const supSeaOv=S.settings[sup]?._seaOv, supTrdOv=S.settings[sup]?._trdOv;
+          const skuSeaOv=S.skuOverrides?.[sku]?.sea, skuTrdOv=S.skuOverrides?.[sku]?.trd;
+          const finalSea=skuSeaOv??supSeaOv??sd.sea;
+          const finalTrd=skuTrdOv??supTrdOv??sd.trd;
+          const adj=Math.min(2.5,finalSea*finalTrd);
+          const recRaw=Math.round(sd.adu*tg*adj-avail-extOO);
+          const rec=Math.max(0,recRaw);
+          const cov=sd.adu>0?Math.round(avail/sd.adu):9999;
+          return {...meta,sku,adu:sd.adu,sea:Math.round(finalSea*100)/100,trd:Math.round(finalTrd*100)/100,
+            seaAuto:sd.sea,trdAuto:sd.trd,seaOv:skuSeaOv??supSeaOv??null,trdOv:skuTrdOv??supTrdOv??null,
+            adj,avail,extOO,rec,cov,lt,tg,abc:calcABC(sku)};
+        });
+
+  if(q) rows=rows.filter(r=>r.sku.toLowerCase().includes(q)||r.name.toLowerCase().includes(q));
+
+  // Forecast 정렬
+  if(_fcSortCol){
+    rows=[...rows].sort((a,b)=>{
+      let va,vb;
+      if(_fcSortCol==='fc30'){va=Math.round(a.adu*30*a.adj);vb=Math.round(b.adu*30*b.adj);}
+      else if(_fcSortCol==='fc60'){va=Math.round(a.adu*60*a.adj);vb=Math.round(b.adu*60*b.adj);}
+      else if(_fcSortCol==='fc90'){va=Math.round(a.adu*90*a.adj);vb=Math.round(b.adu*90*b.adj);}
+      else{va=a[_fcSortCol]??-Infinity;vb=b[_fcSortCol]??-Infinity;}
+      return (va>vb?1:va<vb?-1:0)*_fcSortDir;
+    });
+  } else {
+    rows=rows.sort((a,b)=>(b.rec||0)-(a.rec||0));
   }
-  if(q)rows=rows.filter(r=>r.sku.toLowerCase().includes(q)||r.name.toLowerCase().includes(q));
-  rows=rows.sort((a,b)=>(b.rec||0)-(a.rec||0)).slice(0,48);
-  const p=S.fcPeriod;
-  grid.innerHTML=rows.map(r=>{
-    const fc=Math.round(r.adu*p*r.adj);
-    const covClass=r.cov<=7?'r':r.cov<=14?'y':'g';
-    return `<div class="fc-card">
-      <div class="fc-sku">${xe(r.sku)}</div>
-      <div class="fc-name" title="${xe(r.name)}">${xe(r.name)}</div>
-      <div class="fc-row">
-        <div class="fc-kv"><div class="fk">${p}일 예측판매</div><div class="fv">${fc.toLocaleString()}</div></div>
-        <div class="fc-kv"><div class="fk">ADU</div><div class="fv">${r.adu.toFixed(1)}</div></div>
-        <div class="fc-kv"><div class="fk">계절×트렌드</div><div class="fv" style="font-size:11px">${r.sea.toFixed(2)}×${r.trd.toFixed(2)}</div></div>
-      </div>
-      <div class="fc-row" style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
-        <div class="fc-kv"><div class="fk">가용재고</div><div class="fv ${covClass}">${r.avail.toLocaleString()}</div></div>
-        <div class="fc-kv"><div class="fk">커버(일)</div><div class="fv ${covClass}">${r.cov>=9999?'∞':r.cov}</div></div>
-        <div class="fc-kv"><div class="fk">추천발주</div><div class="fv ${r.rec>0?'g':r.rec<0?'r':''}">${r.rec!==null?(r.rec>0?'+':'')+r.rec.toLocaleString():'—'}</div></div>
-      </div>
-    </div>`;
+
+  const tbody=document.getElementById('fc-tbody');
+  if(!tbody)return;
+
+  if(!rows.length){
+    tbody.innerHTML=`<tr><td colspan="11" style="text-align:center;color:var(--text3);padding:30px;font-family:var(--mono)">데이터 없음</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML=rows.map(r=>{
+    const fc30=Math.round(r.adu*30*r.adj);
+    const fc60=Math.round(r.adu*60*r.adj);
+    const fc90=Math.round(r.adu*90*r.adj);
+    const covClass=r.cov<=7?'vn':r.cov<=14?'vw':'vp';
+    const recClass=r.rec>0?'vp':r.rec===0?'vz':'';
+    const seaClass=r.sea>1.1?'vp':r.sea<0.9?'vw':'';
+    const trdClass=r.trd>1.05?'vp':r.trd<0.95?'vw':'';
+    return `<tr>
+      <td>${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}">${r.abc}</span>`:''}</td>
+      <td style="text-align:left;max-width:var(--name-col-width,180px);overflow:hidden;text-overflow:ellipsis" title="${xe(r.name)}">${xe(r.name)}</td>
+      <td>${r.adu.toFixed(2)}</td>
+      <td class="${seaClass}" onclick="editSkuOverride('${xe(r.sku)}','sea',${r.sea},event)" style="cursor:pointer" title="클릭해서 수동 수정 (BQ자동: ×${r.seaAuto})">×${r.sea.toFixed(2)}${r.seaOv!==null?'<span style="color:var(--yellow);font-size:8px">✎</span>':''}</td>
+      <td class="${trdClass}" onclick="editSkuOverride('${xe(r.sku)}','trd',${r.trd},event)" style="cursor:pointer" title="클릭해서 수동 수정 (BQ자동: ×${r.trdAuto})">×${r.trd.toFixed(2)}${r.trdOv!==null?'<span style="color:var(--yellow);font-size:8px">✎</span>':''}</td>
+      <td class="sep">${fc30.toLocaleString()}</td>
+      <td>${fc60.toLocaleString()}</td>
+      <td>${fc90.toLocaleString()}</td>
+      <td class="sep"><span class="${r.avail<=0?'vn':r.avail<10?'vw':''}">${r.avail.toLocaleString()}</span></td>
+      <td class="${covClass}">${r.cov>=9999?'∞':r.cov}</td>
+      <td class="${recClass}">${r.rec!==null?(r.rec>0?'+':'')+r.rec.toLocaleString():'—'}</td>
+    </tr>`;
   }).join('');
-  if(!rows.length)grid.innerHTML='<div style="grid-column:1/-1;padding:40px;text-align:center;color:var(--text3);font-family:var(--mono);font-size:11.5px">이 Supplier의 판매 데이터가 없습니다</div>';
+}
+
+// Forecast CSV 다운로드
+function dlForecastCSV(){
+  if(!S.bqReady){alert('BigQuery 연결 후 사용 가능합니다.');return;}
+  const q=(document.getElementById('fc-srch').value||'').toLowerCase();
+  let rows = S.supplier ? S.computed.filter(r=>r.adu>0) :
+    Object.entries(MASTER).filter(([sku])=>S.salesData[sku]).map(([sku,meta])=>{
+      const sd=S.salesData[sku];
+      const avail=bv(sku,'avail'),onOrder=bv(sku,'oo'),inTrans=bv(sku,'it'),extOO=Math.max(0,onOrder-inTrans);
+      const sup=meta.supplier,tg=getSetting(sup,'target');
+      const adj=Math.min(2.5,(S.skuOverrides?.[sku]?.sea??S.settings[sup]?._seaOv??sd.sea)*(S.skuOverrides?.[sku]?.trd??S.settings[sup]?._trdOv??sd.trd));
+      return {...meta,sku,adu:sd.adu,sea:sd.sea,trd:sd.trd,adj,avail,extOO,rec:Math.max(0,Math.round(sd.adu*tg*adj-avail-extOO)),tg};
+    });
+  if(q)rows=rows.filter(r=>r.sku.toLowerCase().includes(q)||r.name.toLowerCase().includes(q));
+  const hdr=['SKU','상품명','Brand','Supplier','ADU','계절보정','트렌드','30일예측','60일예측','90일예측','Available Stock','재고일수','추천발주'];
+  const toLine=r=>[r.sku,`"${r.name}"`,r.brand,r.supplier,
+    r.adu.toFixed(2),r.sea.toFixed(2),r.trd.toFixed(2),
+    Math.round(r.adu*30*r.adj),Math.round(r.adu*60*r.adj),Math.round(r.adu*90*r.adj),
+    r.avail,r.adu>0?Math.round(r.avail/r.adu):'∞',r.rec??''].join(',');
+  dl([hdr.join(','),...rows.map(toLine)].join('\n'),`Forecast_${STOCK_DATE}.csv`);
 }
 
 // ═══════════════════════════════════════════════════════
