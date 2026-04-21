@@ -654,6 +654,82 @@ async function loadSalesDataFromBQ(){
       GROUP BY SKU
     `;
 
+    // ── 주문기반 ADU 쿼리 (4개 기간 평균)
+    // 전달 마지막날 기준 3개월/6개월/1년 + 오늘 기준 3개월
+    const orderAduSQL = `
+      WITH
+      last_month_end AS (
+        SELECT DATE_SUB(DATE_TRUNC(CURRENT_DATE(), MONTH), INTERVAL 1 DAY) AS eom
+      ),
+      p1 AS (  -- 전달 말 ~ -3개월
+        SELECT SKU, SUM(Quantity) AS qty, 90.0 AS days
+        FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_ORDERS}\`
+        WHERE Invoice_Date >= DATE_SUB((SELECT eom FROM last_month_end), INTERVAL 90 DAY)
+          AND Invoice_Date <= (SELECT eom FROM last_month_end)
+          AND Order_Progress = 'Invoiced'
+          AND Quantity > 0
+        GROUP BY SKU
+      ),
+      p2 AS (  -- 전달 말 ~ -6개월
+        SELECT SKU, SUM(Quantity) AS qty, 180.0 AS days
+        FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_ORDERS}\`
+        WHERE Invoice_Date >= DATE_SUB((SELECT eom FROM last_month_end), INTERVAL 180 DAY)
+          AND Invoice_Date <= (SELECT eom FROM last_month_end)
+          AND Order_Progress = 'Invoiced'
+          AND Quantity > 0
+        GROUP BY SKU
+      ),
+      p3 AS (  -- 전달 말 ~ -1년
+        SELECT SKU, SUM(Quantity) AS qty, 365.0 AS days
+        FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_ORDERS}\`
+        WHERE Invoice_Date >= DATE_SUB((SELECT eom FROM last_month_end), INTERVAL 365 DAY)
+          AND Invoice_Date <= (SELECT eom FROM last_month_end)
+          AND Order_Progress = 'Invoiced'
+          AND Quantity > 0
+        GROUP BY SKU
+      ),
+      p4 AS (  -- 오늘 기준 최근 3개월
+        SELECT SKU, SUM(Quantity) AS qty, 90.0 AS days
+        FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_ORDERS}\`
+        WHERE Invoice_Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
+          AND Invoice_Date < CURRENT_DATE()
+          AND Order_Progress = 'Invoiced'
+          AND Quantity > 0
+        GROUP BY SKU
+      ),
+      all_skus AS (
+        SELECT DISTINCT SKU FROM (
+          SELECT SKU FROM p1 UNION ALL SELECT SKU FROM p2
+          UNION ALL SELECT SKU FROM p3 UNION ALL SELECT SKU FROM p4
+        )
+      )
+      SELECT
+        s.SKU,
+        -- 각 기간 ADU (없으면 NULL)
+        SAFE_DIVIDE(p1.qty, p1.days) AS adu_p1,
+        SAFE_DIVIDE(p2.qty, p2.days) AS adu_p2,
+        SAFE_DIVIDE(p3.qty, p3.days) AS adu_p3,
+        SAFE_DIVIDE(p4.qty, p4.days) AS adu_p4,
+        -- 유효 기간 수 (NULL 제외 평균)
+        (
+          COALESCE(SAFE_DIVIDE(p1.qty,p1.days),0) +
+          COALESCE(SAFE_DIVIDE(p2.qty,p2.days),0) +
+          COALESCE(SAFE_DIVIDE(p3.qty,p3.days),0) +
+          COALESCE(SAFE_DIVIDE(p4.qty,p4.days),0)
+        ) /
+        NULLIF(
+          (CASE WHEN p1.qty IS NOT NULL THEN 1 ELSE 0 END) +
+          (CASE WHEN p2.qty IS NOT NULL THEN 1 ELSE 0 END) +
+          (CASE WHEN p3.qty IS NOT NULL THEN 1 ELSE 0 END) +
+          (CASE WHEN p4.qty IS NOT NULL THEN 1 ELSE 0 END)
+        , 0) AS order_adu
+      FROM all_skus s
+      LEFT JOIN p1 ON s.SKU = p1.SKU
+      LEFT JOIN p2 ON s.SKU = p2.SKU
+      LEFT JOIN p3 ON s.SKU = p3.SKU
+      LEFT JOIN p4 ON s.SKU = p4.SKU
+    `;
+
     // ── 백오더 쿼리 (동일 고객+SKU 중복 주문 제거: 최신 1건만)
     const boSQL = `
       WITH latest_orders AS (
@@ -677,11 +753,12 @@ async function loadSalesDataFromBQ(){
     // 재고 최신 날짜 조회
     const dateSQL = `SELECT FORMAT_DATE('%Y-%m-%d', MAX(snapshot_date)) as latest_date FROM \`${BQ_PROJECT}.${BQ_DATASET}.asung_stock_daily\``;
     updateBQStatus('load','ADU 계산 중...');
-    const [aduRows, seaRows, boRows, dateRows] = await Promise.all([
+    const [aduRows, seaRows, boRows, dateRows, orderAduRows] = await Promise.all([
       runBQQuery(aduSQL),
       runBQQuery(seaSQL),
       runBQQuery(boSQL),
       runBQQuery(dateSQL),
+      runBQQuery(orderAduSQL),
     ]);
     // 재고 날짜 업데이트 + 지연 경고
     if(dateRows[0]?.latest_date){
@@ -708,8 +785,27 @@ async function loadSalesDataFromBQ(){
     const boMap = {};
     boRows.forEach(r => { boMap[r.SKU] = parseFloat(r.bo_qty)||0; });
 
+    // ── 주문기반 ADU 맵
+    const orderAduMap = {};
+    orderAduRows.forEach(r => {
+      if(r.order_adu !== null && r.order_adu !== undefined) {
+        orderAduMap[r.SKU] = {
+          adu:   parseFloat(r.order_adu)||0,
+          adu_p1: r.adu_p1 !== null ? parseFloat(r.adu_p1) : null,
+          adu_p2: r.adu_p2 !== null ? parseFloat(r.adu_p2) : null,
+          adu_p3: r.adu_p3 !== null ? parseFloat(r.adu_p3) : null,
+          adu_p4: r.adu_p4 !== null ? parseFloat(r.adu_p4) : null,
+        };
+      }
+    });
+
     // ── ADU + 계절성 + 트렌드 계산
     S.salesData = {};
+    // orderAduMap 먼저 병합 (SKU 범위 확장)
+    Object.keys(orderAduMap).forEach(sku => {
+      if(!S.salesData[sku]) S.salesData[sku] = { adu:0, sea:1, trd:1, adj:1, days:[] };
+      S.salesData[sku].orderAdu = orderAduMap[sku];
+    });
     Object.keys(dailyMap).forEach(sku => {
       const days = dailyMap[sku];
       if(!days.length) return;
@@ -1098,7 +1194,12 @@ function recompute(){
 
       const cov = adu>0 ? Math.round(avail/adu) : 9999;
 
+      // 주문기반 ADU
+      const orderAduData = sd?.orderAdu || null;
+      const orderAdu = orderAduData ? Math.round(orderAduData.adu*100)/100 : null;
+
       return {...meta,sku,adu:Math.round(adu*100)/100,
+        orderAdu, orderAduData,
         sea:Math.round(finalSea*100)/100,trd:Math.round(finalTrd*100)/100,adj:Math.round(adj*100)/100,
         seaAuto:Math.round(sea*100)/100,trdAuto:Math.round(trd*100)/100,
         seaOv:skuSeaOv??supSeaOv??null, trdOv:skuTrdOv??supTrdOv??null,
@@ -1226,6 +1327,7 @@ function renderTable(){
         <thead><tr>
           <th class="sh" onclick="sortBy('abc')" style="cursor:pointer;user-select:none">SKU<span class="sort-arrow" data-col="abc"></span></th><th style="cursor:col-resize;user-select:none;min-width:120px" onmousedown="startResize(event,'--name-col-width')">상품명 ↔</th>
           <th class="sep sh" onclick="sortBy('adu')" title="일 평균 판매량 (가중 이동평균, Stockout 보정)">일판매량(ADU)<span class="sort-arrow" data-col="adu"></span></th>
+          <th class="sh" onclick="sortBy('orderAdu')" title="주문기반 ADU = 전달말 기준 3개월/6개월/1년 + 오늘기준 3개월 인보이스 주문량 평균 ÷ 일수 | 호버시 기간별 상세">주문ADU<span class="sort-arrow" data-col="orderAdu"></span></th>
           <th class="sh" onclick="sortBy('sea')" title="계절보정 = 올해 90일 판매합 ÷ 작년 동기 90일 판매합 | 1.0=작년과 동일, 1.5=50% 증가, 0.7=30% 감소 | 범위: 0.3~3.0 | 셀 클릭시 수동 수정 가능">계절보정<span class="sort-arrow" data-col="sea"></span></th>
           <th class="sh" onclick="sortBy('trd')" title="트렌드 = 최근 90일 판매 추세(선형회귀) | 1.0=보합, 2.0=강한상승, 0.5=하락 | 범위: 0.5~2.0 | 셀 클릭시 수동 수정 가능">트렌드<span class="sort-arrow" data-col="trd"></span></th>
           <th class="sh" onclick="sortBy('cov')" title="현재 가용재고로 버틸 수 있는 일수">재고일수<span class="sort-arrow" data-col="cov"></span></th>
@@ -1265,6 +1367,7 @@ function renderTable(){
         <td onmouseenter="showSparkline('${xe(r.sku)}','${xe(r.name)}',event)" onmouseleave="hideSparkline()" style="cursor:default">${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}" title="ABC 등급: A=상위20%(핵심제품) B=상위21~50%(중간) C=하위50%(저판매) | ADU 기준 자동분류">${r.abc}</span>`:''}</td>
         <td style="max-width:var(--name-col-width,180px);overflow:hidden;text-overflow:ellipsis;cursor:default" title="${xe(r.name)}">${xe(r.name)}</td>
         <td class="${r.adu>0?'':'vz'}" title="${r.adu>0?'가중이동평균 ADU':'판매 데이터 없음'}">${r.adu>0?r.adu.toFixed(2):'—'}</td>
+        <td class="${r.orderAdu!==null&&r.orderAdu>0?'':'vz'}" title="${r.orderAduData?'주문ADU 기간별:\n전달말-3M: '+(r.orderAduData.adu_p1!==null?r.orderAduData.adu_p1.toFixed(2):'—')+'\n전달말-6M: '+(r.orderAduData.adu_p2!==null?r.orderAduData.adu_p2.toFixed(2):'—')+'\n전달말-1Y: '+(r.orderAduData.adu_p3!==null?r.orderAduData.adu_p3.toFixed(2):'—')+'\n오늘-3M: '+(r.orderAduData.adu_p4!==null?r.orderAduData.adu_p4.toFixed(2):'—'):'주문 데이터 없음'}">${r.orderAdu!==null?r.orderAdu.toFixed(2):'—'}</td>
         <td class="${r.sea>1.1?'vp':r.sea<0.9?'vw':''}" onclick="editSkuOverride('${xe(r.sku)}','sea',${r.sea},event)" title="클릭해서 수동 수정 (BQ자동: ×${r.seaAuto})">${r.adu>0?`×${r.sea.toFixed(2)}${r.seaOv!==null?'<span style=\'color:var(--yellow);font-size:8px\'>✎</span>':''}`:'—'}</td>
         <td class="${r.trd>1.05?'vp':r.trd<0.95?'vw':''}" onclick="editSkuOverride('${xe(r.sku)}','trd',${r.trd},event)" title="클릭해서 수동 수정 (BQ자동: ×${r.trdAuto})">${r.adu>0?`×${r.trd.toFixed(2)}${r.trdOv!==null?'<span style=\'color:var(--yellow);font-size:8px\'>✎</span>':''}`:'—'}</td>
         <td class="sep ${cc}">${ct}</td>
