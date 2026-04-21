@@ -262,8 +262,14 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
             <span style="color:var(--text3);font-size:13px">⌕</span>
             <input type="text" id="srch" placeholder="SKU / 상품명" oninput="doSearch()">
           </div>
-          <select id="brand-sel" onchange="setBrandFilter(this.value)" style="background:var(--bg4);border:1px solid var(--border);border-radius:4px;color:var(--text2);font-family:var(--mono);font-size:10.5px;padding:3px 8px;outline:none;cursor:pointer;max-width:160px">
+          <select id="brand-sel" onchange="setBrandFilter(this.value)" style="background:var(--bg4);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:11px;padding:4px 8px;outline:none;cursor:pointer;max-width:160px">
             <option value="">브랜드 전체</option>
+          </select>
+          <select id="abc-sel" onchange="setAbcFilter(this.value)" style="background:var(--bg4);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:11px;padding:4px 8px;outline:none;cursor:pointer;width:90px" title="ABC 등급 필터 | A=상위20% B=상위50% C=나머지">
+            <option value="">등급 전체</option>
+            <option value="A">🟡 A 등급</option>
+            <option value="B">🔵 B 등급</option>
+            <option value="C">⚫ C 등급</option>
           </select>
           <div class="ftag active" onclick="setFilter(this,'all')">전체</div>
           <div class="ftag" onclick="setFilter(this,'order')">발주필요</div>
@@ -350,7 +356,7 @@ const SCOPES     = 'https://www.googleapis.com/auth/bigquery.readonly';
 // ═══════════════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════════════
-const S = { brandFilter:'', skuOverrides:{}, sortCol:null, sortDir:1,
+const S = { brandFilter:'', abcFilter:'', skuOverrides:{}, sortCol:null, sortDir:1,
   branch:'toronto', supplier:null, filter:'all', search:'',
   fcPeriod:30, settings:{},
   computed:[], salesData:{}, backorderData:{},
@@ -771,12 +777,19 @@ function setBrandFilter(brand){
   S.brandFilter=brand;
   renderTable();
 }
+function setAbcFilter(abc){
+  S.abcFilter=abc;
+  renderTable();
+}
 function updateBrandDropdown(){
   const sel=document.getElementById('brand-sel');
   if(!sel||!S.supplier)return;
   const brands=[...new Set(Object.values(MASTER).filter(m=>m.supplier===S.supplier).map(m=>m.brand))].sort();
   sel.innerHTML='<option value="">브랜드 전체</option>'+brands.map(b=>`<option value="${xe(b)}">${xe(b)}</option>`).join('');
   sel.value=S.brandFilter||'';
+  // ABC 드롭다운 초기화
+  const abcSel=document.getElementById('abc-sel');
+  if(abcSel){ S.abcFilter=''; abcSel.value=''; }
 }
 function applyAllRec(){
   const rows=getRows().filter(r=>r.rec!==null&&r.rec>0);
@@ -1010,6 +1023,7 @@ function updateSummary(){
 function getRows(){
   let rows=S.computed;
   if(S.brandFilter) rows=rows.filter(r=>r.brand===S.brandFilter);
+  if(S.abcFilter)   rows=rows.filter(r=>r.abc===S.abcFilter);
   if(S.filter==='order')      rows=rows.filter(r=>r.rec!==null&&r.rec>0);
   if(S.filter==='urgent')     rows=rows.filter(r=>r.cov<=7&&r.adu>0);
   if(S.filter==='sufficient') rows=rows.filter(r=>r.sufficient===true);
@@ -1076,7 +1090,12 @@ function renderTable(){
         <td class="${cc}">${ct}</td>
         <td class="sep"><span class="${r.avail<=0?'vn':r.avail<10?'vw':''}">${r.avail.toLocaleString()}</span></td>
         <td>${recTxt}</td>
-        <td><input type="number" class="qov" value="${r._ov??''}" placeholder="${r.rec??'—'}" onchange="setOv('${xe(r.sku)}',this.value)"></td>
+        <td><input type="number" class="qov" value="${r._ov??''}" placeholder="${r.rec??'—'}"
+          oninput="setOv('${xe(r.sku)}',this.value)"
+          onchange="setOv('${xe(r.sku)}',this.value)"
+          onfocus="this.select()"
+          onclick="this.select()"
+          style="cursor:text"></td>
       </tr>`;
     });
     h+=`</tbody></table></div></div>`;
@@ -1125,6 +1144,8 @@ function renderTable(){
       const trStyle = r.sufficient ? ' style="opacity:0.55"' : '';
       const cc=r.adu===0?'vz':r.cov<=7?'vn':r.cov<=14?'vw':'vp';
       const rc=r.rec===null?'vz':r.rec<0?'vn':r.rec===0?'vz':r.cov<=7?'vn':'vp';
+      const seaClass=r.sea>1.1?'vp':r.sea<0.9?'vw':'';
+      const trdClass=r.trd>1.05?'vp':r.trd<0.95?'vw':'';
       const ct=r.adu===0||r.cov>=9999?'∞':r.cov;
       const canClick = r.rec!==null && r.rec>0;
       const recStyle = canClick ? 'cursor:pointer;text-decoration:underline dotted;' : '';
@@ -1155,7 +1176,12 @@ function renderTable(){
         })()}</td>
         <td>${r.bo>0?`<span class="vn">${r.bo}</span>`:'<span class="vz">—</span>'}</td>
         <td class="sep ${rc}">${recTxt}</td>
-        <td><input type="number" class="qov" value="${r._ov??''}" placeholder="${r.rec??'—'}" onchange="setOv('${xe(r.sku)}',this.value)"></td>
+        <td><input type="number" class="qov" value="${r._ov??''}" placeholder="${r.rec??'—'}"
+          oninput="setOv('${xe(r.sku)}',this.value)"
+          onchange="setOv('${xe(r.sku)}',this.value)"
+          onfocus="this.select()"
+          onclick="this.select()"
+          style="cursor:text"></td>
       </tr>`;
     });
     h+=`</tbody></table></div></div></div>`;
@@ -1279,9 +1305,13 @@ function renderForecast(){
     // 실제 판매량: salesData days 배열에서 계산
     const sd=S.salesData[r.sku];
     const days=sd?.days||[];
-    const act30=Math.round(days.slice(-30).reduce((a,b)=>a+b,0));
-    const act60=Math.round(days.slice(-60).reduce((a,b)=>a+b,0));
+    // days = 판매있는 날만 포함 (최대 90일치)
+    // 단순 합산으로 실제 판매량 계산
     const act90=Math.round(days.reduce((a,b)=>a+b,0));
+    // 30일/60일은 days의 비율로 추정 (판매있는 날 기준)
+    const n=days.length;
+    const act30=n>0?Math.round(days.slice(-Math.min(n,Math.round(n*30/90))).reduce((a,b)=>a+b,0)):0;
+    const act60=n>0?Math.round(days.slice(-Math.min(n,Math.round(n*60/90))).reduce((a,b)=>a+b,0)):0;
     const covClass=r.cov<=7?'vn':r.cov<=14?'vw':'vp';
     const recClass=r.rec>0?'vp':r.rec===0?'vz':'';
     const seaClass=r.sea>1.1?'vp':r.sea<0.9?'vw':'';
@@ -1294,11 +1324,11 @@ function renderForecast(){
       <td class="${seaClass}" onclick="editSkuOverride('${xe(r.sku)}','sea',${r.sea},event)" style="cursor:pointer" title="클릭해서 수동수정 | 1.0=작년동일 1.5=50%증가 0.7=30%감소">×${r.sea.toFixed(2)}${r.seaOv!==null?'<span style="color:var(--yellow);font-size:8px">✎</span>':''}</td>
       <td class="${trdClass}" onclick="editSkuOverride('${xe(r.sku)}','trd',${r.trd},event)" style="cursor:pointer" title="클릭해서 수동수정 | 1.0=보합 2.0=강한상승 0.5=하락">×${r.trd.toFixed(2)}${r.trdOv!==null?'<span style="color:var(--yellow);font-size:8px">✎</span>':''}</td>
       <td class="sep">${fc30.toLocaleString()}</td>
-      <td style="color:#94a3b8" title="실제 최근 30일">${days.length>=30?act30:'—'}</td>
+      <td style="color:#94a3b8" title="실제 최근 ~30일 판매량">${n>0?act30:'—'}</td>
       <td>${fc60.toLocaleString()}</td>
-      <td style="color:#94a3b8" title="실제 최근 60일">${days.length>=60?act60:'—'}</td>
+      <td style="color:#94a3b8" title="실제 최근 ~60일 판매량">${n>0?act60:'—'}</td>
       <td>${fc90.toLocaleString()}</td>
-      <td style="color:#94a3b8" title="실제 최근 90일">${days.length>=90?act90:'—'}</td>
+      <td style="color:#94a3b8" title="실제 최근 90일 판매량 (판매있는 날 기준)">${n>0?act90:'—'}</td>
       <td class="sep"><span class="${r.avail<=0?'vn':r.avail<10?'vw':''}">${r.avail.toLocaleString()}</span></td>
       <td class="${covClass}">${r.cov>=9999?'∞':r.cov}</td>
       <td class="${recClass}">${r.rec!==null?(r.rec>0?'+':'')+r.rec.toLocaleString():'—'}</td>
