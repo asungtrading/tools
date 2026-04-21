@@ -126,6 +126,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .tscroll{overflow-x:auto}
 .tscroll::-webkit-scrollbar{height:3px}
 .tscroll::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.abc-a{background:rgba(247,196,79,.2);color:var(--yellow);border-radius:3px;padding:1px 5px;font-size:9px;font-weight:700}
+.abc-b{background:rgba(79,142,247,.15);color:var(--accent);border-radius:3px;padding:1px 5px;font-size:9px;font-weight:700}
+.abc-c{background:rgba(139,146,168,.1);color:var(--text3);border-radius:3px;padding:1px 5px;font-size:9px;font-weight:700}
 /* loading overlay */
 #loading{display:none;position:fixed;inset:0;background:rgba(13,15,20,.75);z-index:300;align-items:center;justify-content:center;flex-direction:column;gap:12px}
 #loading.show{display:flex}
@@ -326,7 +329,7 @@ function updateSettingsDisplay(){
   const lt=getSetting(sup,'leadtime'), tg=getSetting(sup,'target');
   document.getElementById('inp-lt').value=lt;
   document.getElementById('inp-tg').value=tg;
-  document.getElementById('sv-tg').textContent=`목표: ${tg}일 / Lead: ${lt}일`;
+  document.getElementById('sv-tg').textContent=`목표: ${tg}일 / Lead: ${lt}일 / SL: 95%`;
   document.getElementById('settings-sup-name').textContent=sup||'← Supplier 선택';
 }
 
@@ -450,16 +453,23 @@ async function loadSalesDataFromBQ(){
       GROUP BY SKU
     `;
 
-    // ── 백오더 쿼리
+    // ── 백오더 쿼리 (동일 고객+SKU 중복 주문 제거: 최신 1건만)
     const boSQL = `
-      SELECT
-        SKU,
-        SUM(Quantity) AS bo_qty
-      FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_ORDERS}\`
-      WHERE Order_Progress NOT IN ('Invoiced','Voided','Void','Cancelled')
-        AND Invoice_Date IS NULL
-        AND Order_Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
-        AND Quantity > 0
+      WITH latest_orders AS (
+        SELECT
+          SKU,
+          Customer,
+          MAX(Quantity) AS qty,
+          MAX(Order_Date) AS last_order_date
+        FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_ORDERS}\`
+        WHERE Order_Progress NOT IN ('Invoiced','Voided','Void','Cancelled')
+          AND Invoice_Date IS NULL
+          AND Order_Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+          AND Quantity > 0
+        GROUP BY SKU, Customer
+      )
+      SELECT SKU, SUM(qty) AS bo_qty
+      FROM latest_orders
       GROUP BY SKU
     `;
 
@@ -619,9 +629,69 @@ function bv(sku,field){
 // ═══════════════════════════════════════════════════════
 //  COMPUTE
 // ═══════════════════════════════════════════════════════
+// ── 가중 이동평균 ADU (최근 30일 × 3, 31-60일 × 2, 61-90일 × 1)
+function calcWMA(days) {
+  if(!days||!days.length) return 0;
+  const n = days.length;
+  // 3구간으로 나눔
+  const seg = Math.floor(n/3)||1;
+  let wSum=0, wTot=0;
+  days.forEach((v,i)=>{
+    const w = i >= n-seg ? 3 : i >= n-seg*2 ? 2 : 1;
+    wSum += v*w; wTot += w;
+  });
+  return wTot>0 ? wSum/wTot : 0;
+}
+
+// ── Stockout 보정 ADU (재고=0인 날 제외)
+function calcStockoutADU(sku, rawDays) {
+  if(!rawDays||!rawDays.length) return 0;
+  // 재고가 있었던 날만 카운트 (판매>0이면 재고 있었다고 가정)
+  const activeDays = rawDays.filter(v=>v>0);
+  if(!activeDays.length) return 0;
+  // 전체 기간 대비 실제 판매일 비율로 보정
+  const ratio = activeDays.length / rawDays.length;
+  const rawAvg = rawDays.reduce((a,b)=>a+b,0)/rawDays.length;
+  // Stockout 기간이 길면 실제 수요는 더 높음
+  return ratio < 0.8 ? rawAvg / Math.max(ratio, 0.1) : rawAvg;
+}
+
+// ── Safety Stock: Z × σ_demand × √LT
+// Z=1.65 (서비스 레벨 95%)
+function calcSafetyStock(days, lt) {
+  if(!days||days.length<7) return 0;
+  const mean = days.reduce((a,b)=>a+b,0)/days.length;
+  const variance = days.reduce((a,b)=>a+(b-mean)**2,0)/days.length;
+  const sigma = Math.sqrt(variance);
+  const Z = 1.65; // 95% service level
+  return Z * sigma * Math.sqrt(lt);
+}
+
+// ── ABC 분류 (판매량 기준)
+function calcABC(sku) {
+  const sd = S.salesData[sku];
+  if(!sd||!sd.adu) return 'C';
+  // 전체 SKU 중 상위 20% → A, 50% → B, 나머지 → C
+  if(!S._abcThresholds) return 'C';
+  if(sd.adu >= S._abcThresholds.a) return 'A';
+  if(sd.adu >= S._abcThresholds.b) return 'B';
+  return 'C';
+}
+
+function buildABCThresholds() {
+  const adus = Object.values(S.salesData).map(s=>s.adu).filter(v=>v>0).sort((a,b)=>b-a);
+  if(!adus.length) return;
+  S._abcThresholds = {
+    a: adus[Math.floor(adus.length*0.2)] || 0,
+    b: adus[Math.floor(adus.length*0.5)] || 0,
+  };
+}
+
 function recompute(){
   if(!S.supplier){ S.computed=[]; updateSummary(); return; }
   const lt=getSetting(S.supplier,'leadtime'), tg=getSetting(S.supplier,'target');
+  if(S.bqReady) buildABCThresholds();
+
   S.computed=Object.entries(MASTER)
     .filter(([,m])=>m.supplier===S.supplier)
     .map(([sku,meta])=>{
@@ -629,16 +699,41 @@ function recompute(){
       const onOrder=bv(sku,'oo'), inTrans=bv(sku,'it');
       const extOO=Math.max(0,onOrder-inTrans);
       const sd=S.salesData[sku];
-      const adu=sd?.adu??0, sea=sd?.sea??1, trd=sd?.trd??1, adj=sd?.adj??1;
-      // 백오더: Toronto 재고=0인 경우만
+
+      // ── ADU: 가중 이동평균 + Stockout 보정
+      const rawDays = sd?.days || [];
+      const wmaADU = calcWMA(rawDays);
+      const soADU  = calcStockoutADU(sku, rawDays);
+      // 두 방식의 평균 (보수적)
+      const adu = rawDays.length>0 ? (wmaADU*0.6 + soADU*0.4) : 0;
+
+      const sea = sd?.sea??1, trd = sd?.trd??1;
+      const adj = sea*trd;
+
+      // ── Safety Stock
+      const ss = S.bqReady ? calcSafetyStock(rawDays, lt) : 0;
+
+      // ── 백오더: Toronto 재고=0인 경우만, 중복 제거됨
       const torAvail=STOCK[sku]?.toronto?.avail??0;
       const bo=(S.bqReady&&torAvail<=0)?(S.backorderData[sku]||0):0;
-      // 추천발주 = ADU×목표일수×계절보정 - 가용재고 - 순발주잔 + 백오더
+
+      // ── ABC 분류
+      const abc = calcABC(sku);
+
+      // ── 추천발주 공식 (ForesightAI 방식)
+      // = ADU × (목표일수 + LT) × 계절 × 트렌드 + Safety Stock - 가용재고 - 기발주 + 백오더
       const rec = S.bqReady&&adu>0
-        ? Math.round(adu*tg*adj - avail - extOO + bo)
+        ? Math.round(adu*(tg+lt)*adj + ss - avail - extOO + bo)
         : null;
+
+      // ── Reorder Point
+      const rop = adu>0 ? Math.round(adu*lt + ss) : null;
+
       const cov = adu>0 ? Math.round(avail/adu) : 9999;
-      return {...meta,sku,adu,sea,trd,adj,avail,qoh,alloc,onOrder,inTrans,extOO,bo,rec,cov,lt,tg,_ov:null};
+
+      return {...meta,sku,adu:Math.round(adu*100)/100,
+        sea:Math.round(sea*100)/100,trd:Math.round(trd*100)/100,adj:Math.round(adj*100)/100,
+        ss,avail,qoh,alloc,onOrder,inTrans,extOO,bo,rec,rop,cov,lt,tg,abc,_ov:null};
     });
   updateSummary();
 }
@@ -703,16 +798,17 @@ function renderTable(){
       <div class="bg-rows"><div class="tscroll"><table class="sku-tbl">
         <thead><tr>
           <th>SKU</th><th>상품명</th>
-          <th class="sep" title="ADU: 일 평균 판매량">ADU</th>
-          <th title="계절성 보정">계절</th>
-          <th title="트렌드 보정">트렌드</th>
-          <th title="커버 가능 일수">커버</th>
-          <th class="sep" title="가용재고">가용</th>
-          <th title="공급업체 순발주잔">발주잔</th>
-          <th title="Transfer 진행중" style="color:var(--purple)">Transfer</th>
-          <th title="백오더 (Toronto=0인 경우만)">BO</th>
-          <th class="sep" title="추천발주 = ADU×목표일×계절보정 - 가용 - 발주잔 + BO">추천발주</th>
-          <th title="수동 조정">조정</th>
+          <th class="sep" title="일 평균 판매량 (가중 이동평균, Stockout 보정)">일판매량(ADU)</th>
+          <th title="계절성 보정: 올해/작년 동기 비율">계절보정</th>
+          <th title="트렌드 보정: 90일 선형 회귀">트렌드</th>
+          <th title="현재 가용재고로 버틸 수 있는 일수">재고일수</th>
+          <th class="sep" title="실제 판매 가능한 재고 (QOH - Allocated)">가용재고</th>
+          <th title="Safety Stock: 수요 변동성 기반 안전재고">안전재고</th>
+          <th title="공급업체에 이미 발주한 순수 잔량 (Transfer 제외)">기발주</th>
+          <th title="Toronto→Edmonton 이동 진행중" style="color:var(--purple)">이동중</th>
+          <th title="백오더: Toronto 재고=0 + 중복주문 제거">백오더</th>
+          <th class="sep" title="추천발주 = ADU×(목표일+LT)×계절×트렌드 + 안전재고 - 가용재고 - 기발주 + 백오더">추천발주</th>
+          <th title="실제 발주할 수량 (추천발주 클릭시 자동 입력)">실발주량</th>
         </tr></thead><tbody>`;
     brows.sort((a,b)=>{
       if(a.cov!==9999&&b.cov===9999)return -1;
@@ -731,13 +827,14 @@ function renderTable(){
         :r.rec===0?`<span class="vz">0</span>`
         :`<span class="vp" style="${recStyle}" ${recTitle} ${recClick}>+${r.rec.toLocaleString()}</span>`;
       h+=`<tr>
-        <td>${xe(r.sku)}</td>
+        <td>${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}">${r.abc}</span>`:''}</td>
         <td title="${xe(r.name)}">${xe(r.name.length>28?r.name.slice(0,28)+'…':r.name)}</td>
-        <td class="${r.adu>0?'':'vz'}">${r.adu>0?r.adu.toFixed(2):'—'}</td>
+        <td class="${r.adu>0?'':'vz'}" title="${r.adu>0?'가중이동평균 ADU':'판매 데이터 없음'}">${r.adu>0?r.adu.toFixed(2):'—'}</td>
         <td class="${r.sea>1.1?'vp':r.sea<0.9?'vw':''}">${r.adu>0?'×'+r.sea.toFixed(2):'—'}</td>
         <td class="${r.trd>1.05?'vp':r.trd<0.95?'vw':''}">${r.adu>0?'×'+r.trd.toFixed(2):'—'}</td>
         <td class="sep ${cc}">${ct}</td>
         <td><span class="${r.avail<=0?'vn':r.avail<10?'vw':''}">${r.avail.toLocaleString()}</span></td>
+        <td>${r.ss>0?`<span class="vw">${Math.round(r.ss)}</span>`:'<span class="vz">—</span>'}</td>
         <td>${r.extOO>0?`<span class="vp">${r.extOO}</span>`:'<span class="vz">0</span>'}</td>
         <td>${r.inTrans>0?`<span style="color:var(--purple)">${r.inTrans} <span class="badge badge-tr">T</span></span>`:'<span class="vz">—</span>'}</td>
         <td>${r.bo>0?`<span class="vn">${r.bo}</span>`:'<span class="vz">—</span>'}</td>
