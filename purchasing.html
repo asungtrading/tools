@@ -711,19 +711,13 @@ async function loadSalesDataFromBQ(){
         SAFE_DIVIDE(p2.qty, p2.days) AS adu_p2,
         SAFE_DIVIDE(p3.qty, p3.days) AS adu_p3,
         SAFE_DIVIDE(p4.qty, p4.days) AS adu_p4,
-        -- 유효 기간 수 (NULL 제외 평균)
+        -- 주문ADU = (P1+P2+P3+P4) ÷ 4 (데이터 없는 기간은 0으로 포함)
         (
           COALESCE(SAFE_DIVIDE(p1.qty,p1.days),0) +
           COALESCE(SAFE_DIVIDE(p2.qty,p2.days),0) +
           COALESCE(SAFE_DIVIDE(p3.qty,p3.days),0) +
           COALESCE(SAFE_DIVIDE(p4.qty,p4.days),0)
-        ) /
-        NULLIF(
-          (CASE WHEN p1.qty IS NOT NULL THEN 1 ELSE 0 END) +
-          (CASE WHEN p2.qty IS NOT NULL THEN 1 ELSE 0 END) +
-          (CASE WHEN p3.qty IS NOT NULL THEN 1 ELSE 0 END) +
-          (CASE WHEN p4.qty IS NOT NULL THEN 1 ELSE 0 END)
-        , 0) AS order_adu
+        ) / 4.0 AS order_adu
       FROM all_skus s
       LEFT JOIN p1 ON s.SKU = p1.SKU
       LEFT JOIN p2 ON s.SKU = p2.SKU
@@ -778,10 +772,8 @@ async function loadSalesDataFromBQ(){
     }
 
     // ── 재고 스냅샷 실시간 덮어쓰기 (Ordered/OnOrder 최신화)
-    // const STOCK 은 재할당은 불가하지만 프로퍼티 mutation 은 가능
+    // BQ 가 반환하는 location 만 갱신 — 없는 location(예: Toronto)은 임베드 값 유지
     if(stockRows.length){
-      // 새 데이터로 완전 교체: 기존 키 제거 후 재입력
-      Object.keys(STOCK).forEach(k => delete STOCK[k]);
       const num = v => (v===null||v===undefined||v==='') ? null : (parseFloat(v) || 0);
       stockRows.forEach(r => {
         const sku = r.sku || r.SKU;
@@ -848,14 +840,14 @@ async function loadSalesDataFromBQ(){
       const cleaned = winsorize(imputedDays, 0.95);
       const adu = calcHuberADU(cleaned);
 
-      // 계절성: 올해 90일 합 / 작년 90일 합
+      // 계절성: 올해 90일 합 / 작년 90일 합 (도매 특성상 단건 대량주문 영향 → 범위 축소)
       const currTotal = days.reduce((a,b)=>a+b,0);
       const lyTotal = seaMap[sku] || 0;
-      const sea = lyTotal>0 ? Math.min(3, Math.max(0.3, currTotal/lyTotal)) : 1;
+      const sea = lyTotal>0 ? Math.min(2.0, Math.max(0.5, currTotal/lyTotal)) : 1;
 
-      // 트렌드: Huber 회귀 (L2 릿지 규제) 기반 일당 기울기 → 30일 상대변화율로 환산
+      // 트렌드: Huber 회귀 기반 (도매 특성상 변동성 크므로 범위 축소)
       const {slope} = calcHuberRegression(cleaned, 1.345, 0.1);
-      const trd = Math.min(2, Math.max(0.5, 1 + slope * 30 / Math.max(0.01, adu)));
+      const trd = Math.min(1.5, Math.max(0.7, 1 + slope * 30 / Math.max(0.01, adu)));
 
       // ⚠ orderAdu 가 선행 삽입된 경우 보존 (clobber 방지)
       S.salesData[sku] = { ...(S.salesData[sku]||{}), adu, sea, trd, adj:sea*trd, days };
@@ -976,7 +968,7 @@ function renderGlobalSearch(){
       const avail=bv(sku,'avail'),qoh=bv(sku,'qoh');
       const torOO2=STOCK[sku]?.toronto?.oo??0, edmOO2=STOCK[sku]?.edmonton?.oo??0, edmIT2=STOCK[sku]?.edmonton?.it??0;
       const onOrder=torOO2+edmOO2, inTrans=edmIT2;
-      const extOO=S.branch==='edmonton'?Math.max(0,edmOO2-edmIT2):S.branch==='toronto'?torOO2:torOO2+Math.max(0,edmOO2-edmIT2);
+      const extOO=S.branch==='edmonton'?edmIT2:S.branch==='toronto'?torOO2:torOO2+edmIT2;
       const sd=S.salesData[sku];
       const adu=sd?.adu??0;
       const cov=adu>0?Math.round(avail/adu):9999;
@@ -1229,37 +1221,28 @@ function recompute(){
       const torOO = STOCK[sku]?.toronto?.oo ?? 0;
       const edmOO = STOCK[sku]?.edmonton?.oo ?? 0;
       const edmIT = STOCK[sku]?.edmonton?.it ?? 0;
-      const edmSupOO = Math.max(0, edmOO - edmIT); // Edmonton 순발주(Transfer 제외)
-      const inTrans  = edmIT;  // Transfer = Edmonton In Transit
-      const onOrder  = torOO + edmOO; // 전체 On Order (표시용)
+      const inTrans  = edmIT;  // Edmonton On Order = In Transit (Toronto→Edmonton 이송)
+      const onOrder  = torOO + edmIT; // 전체 On Order (표시용)
       // Ordered(extOO): 공급업체 발주잔 (Branch 기준)
       let extOO = 0;
       if(S.branch === 'toronto')       extOO = torOO;
-      else if(S.branch === 'edmonton') extOO = edmSupOO;
-      else                             extOO = torOO + edmSupOO;
+      else if(S.branch === 'edmonton') extOO = edmIT;
+      else                             extOO = torOO + edmIT;
       const sd=S.salesData[sku];
 
-      // ── ADU: 강건 수요 예측 파이프라인
-      // (1) 품절 보정 → (2) 윈저라이징 → (3) 대량주문 플래그 → (4) Huber + WMA 혼합
+      // ── ADU: 도매 기준 수요 예측 (총 판매량 / 90일)
+      // 도매 특성: 이따금 대량주문, 많은 zero-day → 활성비율 플로어 제거
       const rawDays = sd?.days || [];
       let adu = 0;
       if(rawDays.length > 0){
-        // Step 1: 품절 보정 (0값 → 직전 14일 중앙값으로 대체) + is_stockout 플래그
-        const {values: imputedDays, flags: stockoutFlags} = imputeStockouts(rawDays);
-        // Step 2: 윈저라이징 (상·하위 5% 극단값 제한)
-        const winsorized = winsorize(imputedDays, 0.95);
-        // Step 3: is_bulk_order 플래그 (MAD 기반 수정 Z-score > 3.5)
-        const bulkFlags = detectBulkOrders(winsorized);
-        // Step 4: 대량주문 제외한 정상 판매일만 선별 (표본 부족시 전체 사용)
-        const normalDays = winsorized.filter((_,i)=>bulkFlags[i]===0);
-        const useDays = normalDays.length >= 7 ? normalDays : winsorized;
-        // Step 5: Huber M-estimator (IRLS 수렴) + WMA 혼합
-        const huberADU = calcHuberADU(useDays);
-        const wmaADU   = calcWMA(useDays);
-        // 70% Huber + 30% WMA (강건성 우선, 최근성은 WMA로 반영)
+        // 윈저라이징: 상위 5% 극단값 제한 (대량주문은 유지 — 도매에서 실수요)
+        const winsorized = winsorize(rawDays, 0.95);
+        // Huber + WMA 혼합 (판매일 기준 평균)
+        const huberADU = calcHuberADU(winsorized);
+        const wmaADU   = calcWMA(winsorized);
         const baseADU = huberADU * 0.7 + wmaADU * 0.3;
-        // Step 6: 90일 전체 기준 활성 비율 보정 (판매일수가 적은 SKU는 비례 감소)
-        const activeFraction = Math.min(1, Math.max(0.2, rawDays.length / 90));
+        // 활성비율 = 판매일수/90 (플로어 없음) → ADU ≈ 총판매량/90
+        const activeFraction = Math.min(1, rawDays.length / 90);
         adu = baseADU * activeFraction;
       }
 
@@ -1272,8 +1255,8 @@ function recompute(){
       // SKU별 > Supplier 전체 > BQ 자동계산 순으로 우선순위
       const finalSea = skuSeaOv ?? supSeaOv ?? sea;
       const finalTrd = skuTrdOv ?? supTrdOv ?? trd;
-      // 계절×트렌드 합산 상한 2.5배
-      const adj = Math.min(2.5, finalSea * finalTrd);
+      // 계절×트렌드 합산 상한 1.5배 (도매 특성: 단건 주문으로 과도한 보정 방지)
+      const adj = Math.min(1.5, finalSea * finalTrd);
 
       // ── Safety Stock
       const ss = S.bqReady ? calcSafetyStock(rawDays, lt) : 0;
@@ -1286,7 +1269,7 @@ function recompute(){
       const abc = calcABC(sku);
 
       // ── 추천발주 공식
-      // = ADU × 목표재고일수 × (계절×트렌드, max 2.5) + 안전재고 - 가용재고 - 기발주 + 백오더
+      // = ADU × 목표재고일수 × (계절×트렌드, max 1.5) + 안전재고 - 가용재고 - 기발주 + 백오더
       // 가용재고 충분하면 0 (음수 방지)
       const recRaw = S.bqReady&&adu>0
         ? Math.round(adu*tg*adj + ss - avail - extOO + bo)
@@ -1442,7 +1425,7 @@ function renderTable(){
           <th class="sh" onclick="sortBy('extOO')" title="공급업체에 발주된 수량 (Transfer 제외)">Ordered<span class="sort-arrow" data-col="extOO"></span></th>
           <th class="sh" title="입고 예정 수량 | T=Edmonton Transfer">In Transit</th>
           <th class="sh" onclick="sortBy('bo')" title="백오더: Toronto 재고=0 + 중복주문 제거">백오더<span class="sort-arrow" data-col="bo"></span></th>
-          <th class="sep sh" onclick="sortBy('rec')" title="추천발주 = ADU×목표×계절(max2.5) + SS - 가용 - Ordered + BO">추천발주<span class="sort-arrow" data-col="rec"></span></th>
+          <th class="sep sh" onclick="sortBy('rec')" title="추천발주 = ADU×목표×계절(max1.5) + SS - 가용 - Ordered + BO">추천발주<span class="sort-arrow" data-col="rec"></span></th>
           <th title="실제 발주할 수량 (추천발주 클릭시 자동 입력)">실발주량</th>
         </tr></thead><tbody>`;
     // 정렬 중이거나 검색 중이면 brand 내부 재정렬 생략
@@ -1665,7 +1648,7 @@ function renderForecast(){
           const skuSeaOv=S.skuOverrides?.[sku]?.sea, skuTrdOv=S.skuOverrides?.[sku]?.trd;
           const finalSea=skuSeaOv??supSeaOv??sd.sea;
           const finalTrd=skuTrdOv??supTrdOv??sd.trd;
-          const adj=Math.min(2.5,finalSea*finalTrd);
+          const adj=Math.min(1.5,finalSea*finalTrd);
           const recRaw=Math.round(sd.adu*tg*adj-avail-extOO);
           const rec=Math.max(0,recRaw);
           const cov=sd.adu>0?Math.round(avail/sd.adu):9999;
@@ -1745,7 +1728,7 @@ function dlForecastCSV(){
       const sd=S.salesData[sku];
       const avail=bv(sku,'avail'),onOrder=bv(sku,'oo'),inTrans=bv(sku,'it'),extOO=Math.max(0,onOrder-inTrans);
       const sup=meta.supplier,tg=getSetting(sup,'target');
-      const adj=Math.min(2.5,(S.skuOverrides?.[sku]?.sea??S.settings[sup]?._seaOv??sd.sea)*(S.skuOverrides?.[sku]?.trd??S.settings[sup]?._trdOv??sd.trd));
+      const adj=Math.min(1.5,(S.skuOverrides?.[sku]?.sea??S.settings[sup]?._seaOv??sd.sea)*(S.skuOverrides?.[sku]?.trd??S.settings[sup]?._trdOv??sd.trd));
       return {...meta,sku,adu:sd.adu,sea:sd.sea,trd:sd.trd,adj,avail,extOO,rec:Math.max(0,Math.round(sd.adu*tg*adj-avail-extOO)),tg};
     });
   if(q)rows=rows.filter(r=>r.sku.toLowerCase().includes(q)||r.name.toLowerCase().includes(q));
@@ -1783,9 +1766,9 @@ function dlCSV(mode){
       const avail=bv(sku,'avail'),qoh=bv(sku,'qoh'),alloc=bv(sku,'alloc');
       const torOO2=STOCK[sku]?.toronto?.oo??0, edmOO2=STOCK[sku]?.edmonton?.oo??0, edmIT2=STOCK[sku]?.edmonton?.it??0;
       const onOrder=torOO2+edmOO2, inTrans=edmIT2;
-      const extOO=S.branch==='edmonton'?Math.max(0,edmOO2-edmIT2):S.branch==='toronto'?torOO2:torOO2+Math.max(0,edmOO2-edmIT2);
+      const extOO=S.branch==='edmonton'?edmIT2:S.branch==='toronto'?torOO2:torOO2+edmIT2;
       const sd=S.salesData[sku];
-      const adu=sd?.adu??0,sea=sd?.sea??1,trd=sd?.trd??1,adj=Math.min(2.5,sea*trd);
+      const adu=sd?.adu??0,sea=sd?.sea??1,trd=sd?.trd??1,adj=Math.min(1.5,sea*trd);
       const bo=(S.bqReady&&(STOCK[sku]?.toronto?.avail??0)<=0)?(S.backorderData[sku]||0):0;
       const sup=meta.supplier,lt=getSetting(sup,'leadtime'),tg=getSetting(sup,'target');
       const rawDays=sd?.days||[];
@@ -1819,7 +1802,7 @@ function dlCSV(mode){
       const avail=bv(sku,'avail'),qoh=bv(sku,'qoh'),alloc=bv(sku,'alloc');
       const torOO2=STOCK[sku]?.toronto?.oo??0, edmOO2=STOCK[sku]?.edmonton?.oo??0, edmIT2=STOCK[sku]?.edmonton?.it??0;
       const onOrder=torOO2+edmOO2, inTrans=edmIT2;
-      const extOO=S.branch==='edmonton'?Math.max(0,edmOO2-edmIT2):S.branch==='toronto'?torOO2:torOO2+Math.max(0,edmOO2-edmIT2);
+      const extOO=S.branch==='edmonton'?edmIT2:S.branch==='toronto'?torOO2:torOO2+edmIT2;
       const sd=S.salesData[sku];
       const adu=sd?.adu??0,sea=sd?.sea??1,trd=sd?.trd??1,adj=sd?.adj??1;
       const bo=(S.bqReady&&(STOCK[sku]?.toronto?.avail??0)<=0)?(S.backorderData[sku]||0):0;
