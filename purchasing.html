@@ -108,7 +108,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .bg-stats{display:flex;gap:10px;margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--text3)}
 .bg-stats span{color:var(--text)}.bg-stats .urg{color:var(--red)}
 .sku-tbl{width:100%;border-collapse:collapse}
-.sku-tbl thead th{background:var(--bg2);font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text3);padding:5px 10px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:31px;z-index:1}
+.sku-tbl thead th{background:var(--bg2);font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#94a3b8;padding:5px 10px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:3}
 .sku-tbl thead th:first-child,.sku-tbl thead th:nth-child(2){text-align:left}
 .sku-tbl thead th.sep{border-left:1px solid var(--border2)}
 .sku-tbl tbody tr{border-bottom:1px solid var(--border);transition:background .1s}
@@ -966,16 +966,21 @@ function recompute(){
     .filter(([,m])=>m.supplier===S.supplier)
     .map(([sku,meta])=>{
       const avail=bv(sku,'avail'), qoh=bv(sku,'qoh'), alloc=bv(sku,'alloc');
-      const onOrder=bv(sku,'oo'), inTrans=bv(sku,'it');
-      // Ordered 계산: Toronto On Order가 공급업체 발주
-      // Edmonton On Order는 대부분 Transfer(oo==it)이므로 제외
+      const onOrder=bv(sku,'oo');
+      // In Transit = Edmonton Transfer (branch 무관하게 edmonton it 사용)
+      const inTrans = STOCK[sku]?.edmonton?.it ?? 0;
+      // Ordered 계산: Branch에 따라 On Order 합산
+      // Toronto On Order = 공급업체 발주
+      // Edmonton On Order ≈ Transfer (oo==it인 경우가 대부분)
+      // Edmonton 순발주 = max(0, edmOO - edmIT)
       const torOO = STOCK[sku]?.toronto?.oo ?? 0;
       const edmOO = STOCK[sku]?.edmonton?.oo ?? 0;
       const edmIT = STOCK[sku]?.edmonton?.it ?? 0;
-      // Edmonton에서 oo > it 이면 초과분이 공급업체 발주
       const edmSupOO = Math.max(0, edmOO - edmIT);
-      // 실제 공급업체 발주 = Toronto OO + Edmonton 순발주
-      const extOO = torOO + edmSupOO;
+      let extOO = 0;
+      if(S.branch === 'toronto')       extOO = torOO;
+      else if(S.branch === 'edmonton') extOO = edmSupOO;
+      else                             extOO = torOO + edmSupOO; // 합산
       const sd=S.salesData[sku];
 
       // ── ADU: 순수 가중 이동평균 (Stockout 보정 제거)
