@@ -1307,11 +1307,6 @@ function recompute(){
       // ── Safety Stock
       const ss = S.bqReady ? calcSafetyStock(rawDays, lt) : 0;
 
-      // ── 달력일 ↔ 영업일 환산 (ADU가 영업일 기준이므로 tg/lt도 영업일로 변환)
-      const wdFrac = (S._workingDays90 || 64) / 90; // 영업일 비율 (~0.71)
-      const tg_wd = Math.round(tg * wdFrac); // 목표재고일수: 달력일 → 영업일
-      const lt_wd = Math.round(lt * wdFrac); // 리드타임: 달력일 → 영업일
-
       // ── 백오더: Toronto 재고=0인 경우만, 중복 제거됨
       const torAvail=STOCK[sku]?.toronto?.avail??0;
       const bo=(S.bqReady&&torAvail<=0)?(S.backorderData[sku]||0):0;
@@ -1320,19 +1315,21 @@ function recompute(){
       const abc = calcABC(sku);
 
       // ── 추천발주 공식
-      // = ADU(영업일) × 목표영업일수 × (계절×트렌드, max 1.5) + 안전재고 - 가용재고 - 기발주 + 백오더
+      // ADU는 영업일 기준, tg/lt는 달력일 기준 — 도매 특성상 활성 제품에 자연스러운 보정 효과
+      // = ADU × 목표재고일수 × (계절×트렌드, max 1.5) + 안전재고 - 가용재고 - 기발주 + 백오더
       // 가용재고 충분하면 0 (음수 방지)
       const recRaw = S.bqReady&&adu>0
-        ? Math.round(adu*tg_wd*adj + ss - avail - extOO + bo)
+        ? Math.round(adu*tg*adj + ss - avail - extOO + bo)
         : null;
       const rec = recRaw !== null ? Math.max(0, recRaw) : null;
       // 발주 불필요 여부 (재고 충분)
       const sufficient = recRaw !== null && recRaw <= 0;
 
       // ── Reorder Point (발주 시점: 가용재고가 이 이하면 발주 필요)
-      const rop = adu>0 ? Math.round(adu*lt_wd + ss) : null;
+      const rop = adu>0 ? Math.round(adu*lt + ss) : null;
 
       // cov: 영업일 기준 avail/adu를 달력일로 환산하여 표시
+      const wdFrac = (S._workingDays90 || 64) / 90;
       const cov = adu>0 ? Math.round((avail/adu)/wdFrac) : 9999;
 
       // 주문기반 ADU (참고용)
