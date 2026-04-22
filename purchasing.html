@@ -967,8 +967,9 @@ function renderGlobalSearch(){
     .map(([sku,meta])=>{
       const avail=bv(sku,'avail'),qoh=bv(sku,'qoh');
       const torOO2=STOCK[sku]?.toronto?.oo??0, edmOO2=STOCK[sku]?.edmonton?.oo??0, edmIT2=STOCK[sku]?.edmonton?.it??0;
-      const onOrder=torOO2+edmOO2, inTrans=edmIT2;
-      const extOO=S.branch==='edmonton'?edmIT2:S.branch==='toronto'?torOO2:torOO2+edmIT2;
+      const edmSupOO2=Math.max(0,edmOO2-edmIT2);
+      const onOrder=torOO2+edmSupOO2, inTrans=edmIT2;
+      const extOO=S.branch==='edmonton'?edmSupOO2:S.branch==='toronto'?torOO2:torOO2+edmSupOO2;
       const sd=S.salesData[sku];
       const adu=sd?.adu??0;
       const cov=adu>0?Math.round(avail/adu):9999;
@@ -1267,13 +1268,17 @@ function recompute(){
       const torOO = STOCK[sku]?.toronto?.oo ?? 0;
       const edmOO = STOCK[sku]?.edmonton?.oo ?? 0;
       const edmIT = STOCK[sku]?.edmonton?.it ?? 0;
-      const inTrans  = edmIT;  // Edmonton On Order = In Transit (Toronto→Edmonton 이송)
-      const onOrder  = torOO + edmIT; // 전체 On Order (표시용)
+      // Edmonton on_order와 in_transit 분리:
+      // - edmIT > 0 이면 Toronto→Edmonton 이송 중 (in_transit)
+      // - edmOO - edmIT = supplier에게 발주한 순수 발주잔
+      const edmSupOO = Math.max(0, edmOO - edmIT); // Edmonton supplier 발주잔
+      const inTrans  = edmIT;  // In Transit = Toronto→Edmonton 이송 중
+      const onOrder  = torOO + edmSupOO; // 전체 supplier 발주잔 (표시용)
       // Ordered(extOO): 공급업체 발주잔 (Branch 기준)
       let extOO = 0;
       if(S.branch === 'toronto')       extOO = torOO;
-      else if(S.branch === 'edmonton') extOO = edmIT;
-      else                             extOO = torOO + edmIT;
+      else if(S.branch === 'edmonton') extOO = edmSupOO;
+      else                             extOO = torOO + edmSupOO;
       const sd=S.salesData[sku];
 
       // ── ADU: 도매 기준 수요 예측 (총 판매량 / 90일)
@@ -1817,8 +1822,9 @@ function dlCSV(mode){
     const allRows = Object.entries(MASTER).map(([sku,meta])=>{
       const avail=bv(sku,'avail'),qoh=bv(sku,'qoh'),alloc=bv(sku,'alloc');
       const torOO2=STOCK[sku]?.toronto?.oo??0, edmOO2=STOCK[sku]?.edmonton?.oo??0, edmIT2=STOCK[sku]?.edmonton?.it??0;
-      const onOrder=torOO2+edmOO2, inTrans=edmIT2;
-      const extOO=S.branch==='edmonton'?edmIT2:S.branch==='toronto'?torOO2:torOO2+edmIT2;
+      const edmSupOO2=Math.max(0,edmOO2-edmIT2);
+      const onOrder=torOO2+edmSupOO2, inTrans=edmIT2;
+      const extOO=S.branch==='edmonton'?edmSupOO2:S.branch==='toronto'?torOO2:torOO2+edmSupOO2;
       const sd=S.salesData[sku];
       const adu=sd?.adu??0,sea=sd?.sea??1,trd=sd?.trd??1,adj=Math.min(1.5,sea*trd);
       const bo=(S.bqReady&&(STOCK[sku]?.toronto?.avail??0)<=0)?(S.backorderData[sku]||0):0;
@@ -1853,8 +1859,9 @@ function dlCSV(mode){
     rows=Object.entries(MASTER).map(([sku,meta])=>{
       const avail=bv(sku,'avail'),qoh=bv(sku,'qoh'),alloc=bv(sku,'alloc');
       const torOO2=STOCK[sku]?.toronto?.oo??0, edmOO2=STOCK[sku]?.edmonton?.oo??0, edmIT2=STOCK[sku]?.edmonton?.it??0;
-      const onOrder=torOO2+edmOO2, inTrans=edmIT2;
-      const extOO=S.branch==='edmonton'?edmIT2:S.branch==='toronto'?torOO2:torOO2+edmIT2;
+      const edmSupOO2=Math.max(0,edmOO2-edmIT2);
+      const onOrder=torOO2+edmSupOO2, inTrans=edmIT2;
+      const extOO=S.branch==='edmonton'?edmSupOO2:S.branch==='toronto'?torOO2:torOO2+edmSupOO2;
       const sd=S.salesData[sku];
       const adu=sd?.adu??0,sea=sd?.sea??1,trd=sd?.trd??1,adj=sd?.adj??1;
       const bo=(S.bqReady&&(STOCK[sku]?.toronto?.avail??0)<=0)?(S.backorderData[sku]||0):0;
