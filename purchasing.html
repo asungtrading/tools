@@ -1733,7 +1733,7 @@ function dlForecastCSV(){
     });
   if(q)rows=rows.filter(r=>r.sku.toLowerCase().includes(q)||r.name.toLowerCase().includes(q));
   const hdr=['SKU','상품명','Brand','Supplier','ADU','계절보정','트렌드','30일예측','60일예측','90일예측','Available Stock','재고일수','추천발주'];
-  const toLine=r=>[r.sku,`"${r.name}"`,r.brand,r.supplier,
+  const toLine=r=>[csvQ(r.sku),csvQ(r.name),csvQ(r.brand),csvQ(r.supplier),
     r.adu.toFixed(2),r.sea.toFixed(2),r.trd.toFixed(2),
     Math.round(r.adu*30*r.adj),Math.round(r.adu*60*r.adj),Math.round(r.adu*90*r.adj),
     r.avail,r.adu>0?Math.round(r.avail/r.adu):'∞',r.rec??''].join(',');
@@ -1743,6 +1743,8 @@ function dlForecastCSV(){
 // ═══════════════════════════════════════════════════════
 //  CSV DOWNLOAD
 // ═══════════════════════════════════════════════════════
+// CSV 문자열 안전 처리: 쉼표/따옴표 포함 시 따옴표로 감싸고 내부 따옴표는 "" 이스케이프
+function csvQ(v){ const s=String(v??''); return (s.includes(',')||s.includes('"')||s.includes('\n'))?`"${s.replace(/"/g,'""')}"`:s; }
 function dlCSV(mode){
   let rows;
   if(mode==='order_current'){
@@ -1754,7 +1756,7 @@ function dlCSV(mode){
     });
     if(!rows.length){alert('발주할 항목이 없습니다.');return;}
     const hdr=['Supplier','Brand','SKU','Name','일판매량(ADU)','계절보정','트렌드','Available Stock','Safety Stock','Ordered','백오더','추천발주','실발주량','Lead Time','목표재고일수'];
-    const toLine=r=>[r.supplier,r.brand,r.sku,`"${r.name}"`,
+    const toLine=r=>[csvQ(r.supplier),csvQ(r.brand),csvQ(r.sku),csvQ(r.name),
       r.adu?.toFixed(2)??'',r.sea?.toFixed(2)??'',r.trd?.toFixed(2)??'',
       r.avail,Math.round(r.ss||0),r.extOO,r.bo,r.rec??'',r._ov??r.rec??'',r.lt,r.tg].join(',');
     dl([hdr.join(','),...rows.map(toLine)].join('\n'),`PO_${S.supplier.replace(/[^a-zA-Z0-9]/g,'_')}_${STOCK_DATE}.csv`);
@@ -1782,7 +1784,7 @@ function dlCSV(mode){
     rows = allRows;
     if(!rows.length){alert('발주할 항목이 없습니다.');return;}
     const hdr=['Supplier','Brand','SKU','Name','일판매량(ADU)','계절보정','트렌드','가용재고','안전재고','기발주','백오더','추천발주','실발주량','Lead Time','목표재고일수'];
-    const toLine=r=>[r.supplier,r.brand,r.sku,`"${r.name}"`,
+    const toLine=r=>[csvQ(r.supplier),csvQ(r.brand),csvQ(r.sku),csvQ(r.name),
       r.adu?.toFixed(2)??'',r.sea?.toFixed(2)??'',r.trd?.toFixed(2)??'',
       r.avail,r.ss,r.extOO,r.bo,r.rec??'',r.finalQty,r.lt,r.tg].join(',');
     // Supplier별로 시트 구분해서 하나의 CSV로 (구분선 추가)
@@ -1814,7 +1816,7 @@ function dlCSV(mode){
   }
   if(!rows.length){alert('데이터 없음');return;}
   const hdr=['SKU','Name','Brand','Supplier','ADU','Seasonality','Trend','Available','QOH','Allocated','OnOrder_Total','InTransit','OnOrder_Supplier','Backorder','Recommended','Override','LeadTime','TargetDays'];
-  const toLine=r=>[r.sku,`"${r.name}"`,r.brand,r.supplier,
+  const toLine=r=>[csvQ(r.sku),csvQ(r.name),csvQ(r.brand),csvQ(r.supplier),
     r.adu?.toFixed(2)??'',r.sea?.toFixed(2)??'',r.trd?.toFixed(2)??'',
     r.avail,r.qoh,r.alloc,r.onOrder,r.inTrans,r.extOO,r.bo,
     r.rec??'',r._ov??'',r.lt,r.tg].join(',');
