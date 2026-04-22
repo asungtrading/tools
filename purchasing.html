@@ -1307,6 +1307,18 @@ function recompute(){
       // ── Safety Stock
       const ss = S.bqReady ? calcSafetyStock(rawDays, lt) : 0;
 
+      // ── 주문기반 ADU + 기하평균 블렌딩
+      // 주문ADU 있을 때: effectiveAdu = √(salesADU × orderADU) — 소매/도매 데이터 혼재 시 과대추정 완화
+      // 주문ADU 없을 때: salesADU 그대로 사용 (기존 동작 유지)
+      const orderAduData = sd?.orderAdu || null;
+      const orderAduRaw = orderAduData ? orderAduData.adu : null;
+      let effectiveAdu = adu;
+      let effectiveSS = ss;
+      if (orderAduRaw !== null && orderAduRaw > 0 && adu > 0) {
+        effectiveAdu = Math.sqrt(adu * orderAduRaw);
+        effectiveSS = ss * (effectiveAdu / adu);
+      }
+
       // ── 백오더: Toronto 재고=0인 경우만, 중복 제거됨
       const torAvail=STOCK[sku]?.toronto?.avail??0;
       const bo=(S.bqReady&&torAvail<=0)?(S.backorderData[sku]||0):0;
@@ -1315,30 +1327,26 @@ function recompute(){
       const abc = calcABC(sku);
 
       // ── 추천발주 공식
-      // = ADU × 목표재고일수 × (계절×트렌드, max 1.5) + 안전재고 - 가용재고 - 기발주 + 백오더
+      // = effectiveADU × 목표재고일수 × (계절×트렌드, max 1.5) + 안전재고 - 가용재고 - 기발주 + 백오더
       // 가용재고 충분하면 0 (음수 방지)
-      const recRaw = S.bqReady&&adu>0
-        ? Math.round(adu*tg*adj + ss - avail - extOO + bo)
+      const recRaw = S.bqReady&&effectiveAdu>0
+        ? Math.round(effectiveAdu*tg*adj + effectiveSS - avail - extOO + bo)
         : null;
       const rec = recRaw !== null ? Math.max(0, recRaw) : null;
       // 발주 불필요 여부 (재고 충분)
       const sufficient = recRaw !== null && recRaw <= 0;
 
       // ── Reorder Point (발주 시점: 가용재고가 이 이하면 발주 필요)
-      const rop = adu>0 ? Math.round(adu*lt + ss) : null;
+      const rop = effectiveAdu>0 ? Math.round(effectiveAdu*lt + effectiveSS) : null;
 
-      const cov = adu>0 ? Math.round(avail/adu) : 9999;
-
-      // 주문기반 ADU
-      const orderAduData = sd?.orderAdu || null;
-      const orderAdu = orderAduData ? Math.round(orderAduData.adu*100)/100 : null;
+      const cov = effectiveAdu>0 ? Math.round(avail/effectiveAdu) : 9999;
 
       return {...meta,sku,adu:Math.round(adu*100)/100,
-        orderAdu, orderAduData,
+        orderAdu:orderAduRaw!==null?Math.round(orderAduRaw*100)/100:null, orderAduData,
         sea:Math.round(finalSea*100)/100,trd:Math.round(finalTrd*100)/100,adj:Math.round(adj*100)/100,
         seaAuto:Math.round(sea*100)/100,trdAuto:Math.round(trd*100)/100,
         seaOv:skuSeaOv??supSeaOv??null, trdOv:skuTrdOv??supTrdOv??null,
-        ss,avail,qoh,alloc,onOrder,inTrans,extOO,bo,rec,rop,cov,lt,tg,abc,sufficient,_ov:null};
+        ss:Math.round(effectiveSS),avail,qoh,alloc,onOrder,inTrans,extOO,bo,rec,rop,cov,lt,tg,abc,sufficient,_ov:null};
     });
   updateSummary();
 }
