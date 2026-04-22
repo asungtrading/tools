@@ -1176,6 +1176,50 @@ function calcSafetyStock(days, lt) {
   return Z * sigma * Math.sqrt(lt);
 }
 
+// ── 캐나다 영업일 계산 (주말 + 연방공휴일 AB/ON 제외)
+function calcEaster(y) {
+  const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4;
+  const f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3);
+  const h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4;
+  const l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451);
+  return new Date(y,Math.floor((h+l-7*m+114)/31)-1,((h+l-7*m+114)%31)+1);
+}
+function nthWeekday(y,mo,wd,nth){ // wd: 0=Sun…6=Sat
+  const d=new Date(y,mo-1,1); let n=0;
+  while(n<nth){ if(d.getDay()===wd)n++; if(n<nth)d.setDate(d.getDate()+1); }
+  return d.getDate();
+}
+function isCanadianHoliday(date) {
+  const y=date.getFullYear(),m=date.getMonth()+1,d=date.getDate();
+  if(m===1&&d===1) return true;                                    // New Year's Day
+  if(m===2&&d===nthWeekday(y,2,1,3)) return true;                  // Family Day (3rd Mon Feb)
+  const easter=calcEaster(y);
+  const gf=new Date(easter); gf.setDate(gf.getDate()-2);
+  if(m===gf.getMonth()+1&&d===gf.getDate()) return true;           // Good Friday
+  if(m===5){                                                        // Victoria Day (last Mon before May 25)
+    const vm=new Date(y,4,24); while(vm.getDay()!==1)vm.setDate(vm.getDate()-1);
+    if(d===vm.getDate()) return true;
+  }
+  if(m===7&&d===1) return true;                                    // Canada Day
+  if(m===7&&d===2&&new Date(y,6,1).getDay()===0) return true;      // Canada Day observed
+  if(m===9&&d===nthWeekday(y,9,1,1)) return true;                  // Labour Day (1st Mon Sep)
+  if(m===10&&d===nthWeekday(y,10,1,2)) return true;                // Thanksgiving (2nd Mon Oct)
+  if(m===11&&d===11) return true;                                  // Remembrance Day
+  if(m===12&&d===25) return true;                                  // Christmas
+  if(m===12&&d===26) return true;                                  // Boxing Day
+  return false;
+}
+function countWorkingDays(nCalendarDays) {
+  const today=new Date(); today.setHours(0,0,0,0);
+  let count=0;
+  for(let i=1;i<=nCalendarDays;i++){
+    const d=new Date(today); d.setDate(today.getDate()-i);
+    const dow=d.getDay();
+    if(dow!==0&&dow!==6&&!isCanadianHoliday(d)) count++;
+  }
+  return count;
+}
+
 // ── ABC 분류 (판매량 기준)
 function calcABC(sku) {
   const sd = S.salesData[sku];
@@ -1212,6 +1256,8 @@ function recompute(){
   if(!S.supplier){ S.computed=[]; updateSummary(); return; }
   const lt=getSetting(S.supplier,'leadtime'), tg=getSetting(S.supplier,'target');
   if(S.bqReady) buildABCThresholds();
+  // 영업일수 캐시 (주말·캐나다 공휴일 제외한 90일 내 실 영업일수)
+  if(!S._workingDays90) S._workingDays90 = countWorkingDays(90);
 
   S.computed=Object.entries(MASTER)
     .filter(([,m])=>m.supplier===S.supplier)
@@ -1241,8 +1287,8 @@ function recompute(){
         const huberADU = calcHuberADU(winsorized);
         const wmaADU   = calcWMA(winsorized);
         const baseADU = huberADU * 0.7 + wmaADU * 0.3;
-        // 활성비율 = 판매일수/90 (플로어 없음) → ADU ≈ 총판매량/90
-        const activeFraction = Math.min(1, rawDays.length / 90);
+        // 활성비율 = 판매일수/영업일수 (주말·공휴일 제외) → ADU ≈ 총판매량/영업일수
+        const activeFraction = Math.min(1, rawDays.length / (S._workingDays90 || 64));
         adu = baseADU * activeFraction;
       }
 
@@ -1544,7 +1590,8 @@ function showSparkline(sku, name, evt){
   const trendColor = avg30>avg90*1.1?'#3ecf8e':avg30<avg90*0.9?'#f76f6f':'#94a3b8';
 
   title.textContent = sku;
-  stats.innerHTML = `ADU(90일): <b style="color:#e2e6f0">${sd.adu.toFixed(2)}</b> &nbsp;|&nbsp; 최근30일평균: <b style="color:#e2e6f0">${avg30.toFixed(1)}</b><br>트렌드: <b style="color:${trendColor}">${trend}</b> &nbsp;|&nbsp; 판매일: <b style="color:#e2e6f0">${n}일/90일</b><br><span style="color:#4f8ef7">━</span> 일별판매 &nbsp;<span style="color:#f7c44f;border-bottom:1px dashed">━</span> 7일이동평균`;
+  const wd90=S._workingDays90||64;
+  stats.innerHTML = `ADU(영업일): <b style="color:#e2e6f0">${sd.adu.toFixed(2)}</b> &nbsp;|&nbsp; 최근30일평균: <b style="color:#e2e6f0">${avg30.toFixed(1)}</b><br>트렌드: <b style="color:${trendColor}">${trend}</b> &nbsp;|&nbsp; 판매일: <b style="color:#e2e6f0">${n}일/${wd90}영업일</b><br><span style="color:#4f8ef7">━</span> 일별판매 &nbsp;<span style="color:#f7c44f;border-bottom:1px dashed">━</span> 7일이동평균`;
 
   // 위치
   const vw = window.innerWidth, vh = window.innerHeight;
