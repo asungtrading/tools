@@ -142,6 +142,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 }
 #sparkline-tooltip .sp-title{color:var(--accent);font-size:11px;font-weight:600;margin-bottom:6px}
 #sparkline-tooltip .sp-stats{color:#94a3b8;font-size:10px;margin-top:5px;line-height:1.6}
+/* Override 이력 툴팁 */
 #ov-history-tooltip{
   position:fixed;display:none;z-index:9999;
   background:var(--bg2);border:1px solid var(--border2);
@@ -155,6 +156,28 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 #ov-history-tooltip .ovh-row:last-child{border-bottom:none}
 #ov-history-tooltip .ovh-cur{color:var(--accent);font-weight:600}
 #ov-history-tooltip .ovh-empty{color:var(--text3);font-size:10px}
+/* SKU 연결 모달 */
+#sku-link-modal{display:none;position:fixed;inset:0;background:rgba(13,15,20,.8);z-index:400;align-items:center;justify-content:center}
+#sku-link-modal.show{display:flex}
+.slm-box{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:20px;width:480px;max-height:80vh;display:flex;flex-direction:column;gap:12px}
+.slm-title{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;justify-content:space-between}
+.slm-title span{color:var(--accent)}
+.slm-row{display:grid;grid-template-columns:1fr 1fr 36px;gap:6px;align-items:center}
+.slm-row input{background:var(--bg4);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:11.5px;padding:5px 8px;outline:none}
+.slm-row input:focus{border-color:var(--accent)}
+.slm-row input::placeholder{color:var(--text3)}
+.slm-add-btn{background:var(--accent);border:none;border-radius:4px;color:#fff;font-size:14px;cursor:pointer;height:28px;width:36px;transition:background .15s}
+.slm-add-btn:hover{background:var(--accent2)}
+.slm-list{flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg3)}
+.slm-list::-webkit-scrollbar{width:3px}
+.slm-list::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.slm-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:11.5px}
+.slm-item:last-child{border-bottom:none}
+.slm-item .old{color:var(--text3)}.slm-item .arr{color:var(--border2)}.slm-item .new{color:var(--accent)}
+.slm-item .del{margin-left:auto;background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px;padding:0 4px}
+.slm-item .del:hover{color:var(--red)}
+.slm-empty{padding:20px;text-align:center;color:var(--text3);font-family:var(--mono);font-size:11px}
+.slm-footer{display:flex;justify-content:flex-end;gap:8px}
 /* loading overlay */
 #loading{display:none;position:fixed;inset:0;background:rgba(13,15,20,.75);z-index:300;align-items:center;justify-content:center;flex-direction:column;gap:12px}
 #loading.show{display:flex}
@@ -199,6 +222,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
     <button class="btn primary" onclick="dlCSV('order_current')">↓ 발주 CSV</button>
     <button class="btn" onclick="dlCSV('order')">↓ 전체 발주</button>
     <button class="btn" onclick="dlCSV('all')">↓ 전체 CSV</button>
+    <div class="hsep"></div>
+    <button class="btn" onclick="openSkuLinkModal()" title="구 SKU → 신 SKU 연결 관리">🔗 SKU 연결</button>
   </div>
 </header>
 
@@ -365,6 +390,21 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
   <div class="ovh-title" id="ovh-title"></div>
   <div id="ovh-body"></div>
 </div>
+<div id="sku-link-modal">
+  <div class="slm-box">
+    <div class="slm-title"><span>🔗 SKU 연결 관리</span><button class="btn" onclick="closeSkuLinkModal()">✕ 닫기</button></div>
+    <div style="font-size:11px;color:var(--text3);font-family:var(--mono)">구 SKU 판매 데이터를 신 SKU에 합산합니다 (ADU·계절성 계산에 반영)</div>
+    <div class="slm-row">
+      <input type="text" id="slm-old" placeholder="구 SKU (예: APR15412)" style="text-transform:uppercase">
+      <input type="text" id="slm-new" placeholder="신 SKU (예: APR15412-NEW)" style="text-transform:uppercase">
+      <button class="slm-add-btn" onclick="addSkuLink()" title="추가">+</button>
+    </div>
+    <div class="slm-list" id="slm-list"></div>
+    <div class="slm-footer">
+      <button class="btn" onclick="closeSkuLinkModal()">닫기</button>
+    </div>
+  </div>
+</div>
 <div id="loading"><div class="spinner"></div><div class="ltxt" id="ltxt">처리 중...</div></div>
 
 <script>
@@ -447,6 +487,7 @@ function getOvHistory(sup, key){
 }
 function showOvHistory(sup, key, evt){
   const tip=document.getElementById('ov-history-tooltip');
+  if(!tip) return;
   document.getElementById('ovh-title').textContent=(key==='sea'?'계절보정':'트렌드')+' 변경 이력';
   const hist=getOvHistory(sup,key);
   document.getElementById('ovh-body').innerHTML=hist.length
@@ -458,7 +499,7 @@ function showOvHistory(sup, key, evt){
   if(y+200>vh) y=evt.clientY-200;
   tip.style.left=x+'px'; tip.style.top=y+'px'; tip.style.display='block';
 }
-function hideOvHistory(){ document.getElementById('ov-history-tooltip').style.display='none'; }
+function hideOvHistory(){ const t=document.getElementById('ov-history-tooltip'); if(t) t.style.display='none'; }
 
 function saveOverride(key,val){
   if(!S.supplier){ alert('먼저 Supplier를 선택하세요.'); return; }
@@ -895,6 +936,28 @@ async function loadSalesDataFromBQ(){
       if(!S.salesData[sku]) S.salesData[sku] = { adu:0, sea:1, trd:1, adj:1, days:[] };
       S.salesData[sku].orderAdu = orderAduMap[sku];
     });
+
+    // SKU 연결 맵 로드 (구 SKU → 신 SKU 판매 합산)
+    const skuLinkMap = getSkuLinkMap(); // { newSku: [oldSku, ...] }
+
+    // 구 SKU 판매 데이터를 신 SKU dailyMap에 합산
+    Object.entries(skuLinkMap).forEach(([newSku, oldSkus]) => {
+      oldSkus.forEach(oldSku => {
+        if(dailyMap[oldSku] && dailyMap[oldSku].length) {
+          if(!dailyMap[newSku]) dailyMap[newSku] = [];
+          // 날짜 기준 합산: 두 배열의 같은 인덱스 더하기
+          const old = dailyMap[oldSku];
+          const cur = dailyMap[newSku];
+          const maxLen = Math.max(old.length, cur.length);
+          const merged = [];
+          for(let i=0; i<maxLen; i++) merged.push((cur[i]||0)+(old[i]||0));
+          dailyMap[newSku] = merged;
+        }
+        // seaMap도 합산 (계절성 계산용)
+        if(seaMap[oldSku]) seaMap[newSku] = (seaMap[newSku]||0) + seaMap[oldSku];
+      });
+    });
+
     Object.keys(dailyMap).forEach(sku => {
       const days = dailyMap[sku];
       if(!days.length) return;
@@ -904,17 +967,23 @@ async function loadSalesDataFromBQ(){
       const cleaned = winsorize(imputedDays, 0.95);
       const adu = calcHuberADU(cleaned);
 
-      // 계절성: 올해 90일 합 / 작년 90일 합 (도매 특성상 단건 대량주문 영향 → 범위 축소)
-      const currTotal = days.reduce((a,b)=>a+b,0);
+      // 계절성: 윈저라이징 적용 후 합산 (대형 오더 왜곡 방지)
+      // 올해 90일 판매를 winsorize 후 합산 → 작년 동기와 비교
+      const currWinsorized = winsorize(days, 0.95);
+      const currTotal = currWinsorized.reduce((a,b)=>a+b,0);
       const lyTotal = seaMap[sku] || 0;
+      // 작년도 동일하게 winsorize 적용 (lyTotal은 집계값이므로 단순 비율만 조정)
       const sea = lyTotal>0 ? Math.min(2.0, Math.max(0.5, currTotal/lyTotal)) : 1;
 
       // 트렌드: Huber 회귀 기반 (도매 특성상 변동성 크므로 범위 축소)
       const {slope} = calcHuberRegression(cleaned, 1.345, 0.1);
       const trd = Math.min(1.5, Math.max(0.7, 1 + slope * 30 / Math.max(0.01, adu)));
 
+      // SKU 연결 여부 저장 (툴팁 표시용)
+      const linkedFrom = skuLinkMap[sku] || [];
+
       // ⚠ orderAdu 가 선행 삽입된 경우 보존 (clobber 방지)
-      S.salesData[sku] = { ...(S.salesData[sku]||{}), adu, sea, trd, adj:sea*trd, days };
+      S.salesData[sku] = { ...(S.salesData[sku]||{}), adu, sea, trd, adj:sea*trd, days, linkedFrom };
     });
 
     S.backorderData = boMap;
@@ -1571,7 +1640,7 @@ function renderTable(){
             ? `<span class="vz">0</span>`
             : `<span class="vp" style="${recStyle}" ${recTitle} ${recClick}>+${r.rec.toLocaleString()}</span>`;
       h+=`<tr${trStyle}>
-        <td onmouseenter="showSparkline('${jse(r.sku)}','${jse(r.name)}',event)" onmouseleave="hideSparkline()" style="cursor:default">${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}" title="ABC 등급: A=상위20%(핵심제품) B=상위21~50%(중간) C=하위50%(저판매) | ADU 기준 자동분류">${r.abc}</span>`:''}</td>
+        <td onmouseenter="showSparkline('${jse(r.sku)}','${jse(r.name)}',event)" onmouseleave="hideSparkline()" style="cursor:default">${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}" title="ABC 등급: A=상위20%(핵심제품) B=상위21~50%(중간) C=하위50%(저판매) | ADU 기준 자동분류">${r.abc}</span>`:''} ${(S.salesData[r.sku]?.linkedFrom||[]).length?`<span style="color:var(--yellow);font-size:9px" title="구 SKU 데이터 합산: ${(S.salesData[r.sku]?.linkedFrom||[]).join(', ')}">🔗</span>`:''}</td>
         <td style="max-width:var(--name-col-width,180px);overflow:hidden;text-overflow:ellipsis;cursor:default" title="${xe(r.name)}">${xe(r.name)}</td>
         <td class="${r.adu>0?'':'vz'}" title="${r.adu>0?'가중이동평균 ADU':'판매 데이터 없음'}">${r.adu>0?r.adu.toFixed(2):'—'}</td>
         <td class="${r.orderAdu!==null&&r.orderAdu>0?'':'vz'}" title="${r.orderAduData?'주문ADU 기간별:\n전달말-3M: '+(r.orderAduData.adu_p1!==null?r.orderAduData.adu_p1.toFixed(2):'—')+'\n전달말-6M: '+(r.orderAduData.adu_p2!==null?r.orderAduData.adu_p2.toFixed(2):'—')+'\n전달말-1Y: '+(r.orderAduData.adu_p3!==null?r.orderAduData.adu_p3.toFixed(2):'—')+'\n오늘-3M: '+(r.orderAduData.adu_p4!==null?r.orderAduData.adu_p4.toFixed(2):'—'):'주문 데이터 없음'}">${r.orderAdu!==null?r.orderAdu.toFixed(2):'—'}</td>
@@ -1663,7 +1732,9 @@ function showSparkline(sku, name, evt){
 
   title.textContent = sku;
   const wd90=S._workingDays90||64;
-  stats.innerHTML = `ADU(영업일): <b style="color:#e2e6f0">${sd.adu.toFixed(2)}</b> &nbsp;|&nbsp; 최근30일평균: <b style="color:#e2e6f0">${avg30.toFixed(1)}</b><br>트렌드: <b style="color:${trendColor}">${trend}</b> &nbsp;|&nbsp; 판매일: <b style="color:#e2e6f0">${n}일/${wd90}영업일</b><br><span style="color:#4f8ef7">━</span> 일별판매 &nbsp;<span style="color:#f7c44f;border-bottom:1px dashed">━</span> 7일이동평균`;
+  const linkedFrom = sd.linkedFrom||[];
+  const linkTxt = linkedFrom.length ? `<br><span style="color:var(--yellow)">🔗 ${linkedFrom.join(', ')} 데이터 합산</span>` : '';
+  stats.innerHTML = `ADU(영업일): <b style="color:#e2e6f0">${sd.adu.toFixed(2)}</b> &nbsp;|&nbsp; 최근30일평균: <b style="color:#e2e6f0">${avg30.toFixed(1)}</b><br>트렌드: <b style="color:${trendColor}">${trend}</b> &nbsp;|&nbsp; 판매일: <b style="color:#e2e6f0">${n}일/${wd90}영업일</b><br><span style="color:#4f8ef7">━</span> 일별판매 &nbsp;<span style="color:#f7c44f;border-bottom:1px dashed">━</span> 7일이동평균${linkTxt}`;
 
   // 위치
   const vw = window.innerWidth, vh = window.innerHeight;
@@ -1673,6 +1744,59 @@ function showSparkline(sku, name, evt){
   tip.style.left = x+'px';
   tip.style.top = y+'px';
   tip.style.display = 'block';
+}
+// ══════════════════════════════════════════════════════
+//  SKU 연결 (구 SKU → 신 SKU 판매 데이터 합산)
+// ══════════════════════════════════════════════════════
+function loadSkuLinks(){ try{ const s=localStorage.getItem('asung_sku_links'); return s?JSON.parse(s):[]; } catch(e){ return []; } }
+function saveSkuLinks(links){ try{ localStorage.setItem('asung_sku_links',JSON.stringify(links)); } catch(e){} }
+function getSkuLinkMap(){
+  // 신 SKU → [구 SKU 목록] 맵
+  const map={};
+  loadSkuLinks().forEach(({oldSku,newSku})=>{
+    if(!map[newSku]) map[newSku]=[];
+    map[newSku].push(oldSku);
+  });
+  return map;
+}
+function openSkuLinkModal(){
+  document.getElementById('sku-link-modal').classList.add('show');
+  renderSkuLinkList();
+}
+function closeSkuLinkModal(){ document.getElementById('sku-link-modal').classList.remove('show'); }
+function addSkuLink(){
+  const oldSku = document.getElementById('slm-old').value.trim().toUpperCase();
+  const newSku = document.getElementById('slm-new').value.trim().toUpperCase();
+  if(!oldSku||!newSku){ alert('구 SKU와 신 SKU를 모두 입력하세요.'); return; }
+  if(oldSku===newSku){ alert('같은 SKU는 연결할 수 없습니다.'); return; }
+  const links = loadSkuLinks();
+  if(links.some(l=>l.oldSku===oldSku&&l.newSku===newSku)){ alert('이미 등록된 연결입니다.'); return; }
+  links.push({oldSku, newSku});
+  saveSkuLinks(links);
+  document.getElementById('slm-old').value='';
+  document.getElementById('slm-new').value='';
+  renderSkuLinkList();
+  // BQ 연결된 상태면 데이터 재계산
+  if(S.bqReady){ recompute(); renderTable(); if(document.getElementById('fc-view').style.display!=='none') renderForecast(); }
+}
+function removeSkuLink(idx){
+  const links=loadSkuLinks();
+  links.splice(idx,1);
+  saveSkuLinks(links);
+  renderSkuLinkList();
+  if(S.bqReady){ recompute(); renderTable(); if(document.getElementById('fc-view').style.display!=='none') renderForecast(); }
+}
+function renderSkuLinkList(){
+  const links=loadSkuLinks();
+  const el=document.getElementById('slm-list');
+  if(!links.length){ el.innerHTML='<div class="slm-empty">연결된 SKU 없음</div>'; return; }
+  el.innerHTML=links.map((l,i)=>`
+    <div class="slm-item">
+      <span class="old">${xe(l.oldSku)}</span>
+      <span class="arr">→</span>
+      <span class="new">${xe(l.newSku)}</span>
+      <button class="del" onclick="removeSkuLink(${i})" title="삭제">✕</button>
+    </div>`).join('');
 }
 function hideSparkline(){
   document.getElementById('sparkline-tooltip').style.display='none';
@@ -1819,7 +1943,7 @@ function renderForecast(){
     const seaClass=r.sea>1.1?'vp':r.sea<0.9?'vw':'';
     const trdClass=r.trd>1.05?'vp':r.trd<0.95?'vw':'';
     return `<tr>
-      <td onmouseenter="showSparkline('${jse(r.sku)}','${jse(r.name)}',event)" onmouseleave="hideSparkline()" style="cursor:default">${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}" title="A=상위20% B=상위50% C=나머지">${r.abc}</span>`:''}</td>
+      <td onmouseenter="showSparkline('${jse(r.sku)}','${jse(r.name)}',event)" onmouseleave="hideSparkline()" style="cursor:default">${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}" title="A=상위20% B=상위50% C=나머지">${r.abc}</span>`:''} ${(S.salesData[r.sku]?.linkedFrom||[]).length?`<span style="color:var(--yellow);font-size:9px" title="구 SKU 데이터 합산: ${(S.salesData[r.sku]?.linkedFrom||[]).join(', ')}">🔗</span>`:''}</td>
       <td style="text-align:left;max-width:var(--name-col-width,180px);overflow:hidden;text-overflow:ellipsis" title="${xe(r.name)}">${xe(r.name)}
 </td>
       <td>${r.adu.toFixed(2)}</td>
