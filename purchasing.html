@@ -142,6 +142,19 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 }
 #sparkline-tooltip .sp-title{color:var(--accent);font-size:11px;font-weight:600;margin-bottom:6px}
 #sparkline-tooltip .sp-stats{color:#94a3b8;font-size:10px;margin-top:5px;line-height:1.6}
+#ov-history-tooltip{
+  position:fixed;display:none;z-index:9999;
+  background:var(--bg2);border:1px solid var(--border2);
+  border-radius:8px;padding:10px 12px;
+  font-family:var(--mono);font-size:10.5px;color:var(--text);
+  box-shadow:0 4px 20px rgba(0,0,0,.5);
+  pointer-events:none;min-width:190px;
+}
+#ov-history-tooltip .ovh-title{color:var(--yellow);font-size:11px;font-weight:600;margin-bottom:6px}
+#ov-history-tooltip .ovh-row{display:flex;justify-content:space-between;gap:16px;padding:2px 0;border-bottom:1px solid var(--border);color:var(--text2)}
+#ov-history-tooltip .ovh-row:last-child{border-bottom:none}
+#ov-history-tooltip .ovh-cur{color:var(--accent);font-weight:600}
+#ov-history-tooltip .ovh-empty{color:var(--text3);font-size:10px}
 /* loading overlay */
 #loading{display:none;position:fixed;inset:0;background:rgba(13,15,20,.75);z-index:300;align-items:center;justify-content:center;flex-direction:column;gap:12px}
 #loading.show{display:flex}
@@ -348,6 +361,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
   <svg id="sp-svg" width="200" height="60" viewBox="0 0 200 60"></svg>
   <div class="sp-stats" id="sp-stats"></div>
 </div>
+<div id="ov-history-tooltip">
+  <div class="ovh-title" id="ovh-title"></div>
+  <div id="ovh-body"></div>
+</div>
 <div id="loading"><div class="spinner"></div><div class="ltxt" id="ltxt">처리 중...</div></div>
 
 <script>
@@ -411,19 +428,62 @@ function loadWMASettings(){
     }
   } catch(e){}
 }
+// ── Override 변경 이력 (localStorage: asung_ov_history)
+function loadOvHistory(){ try{ const s=localStorage.getItem('asung_ov_history'); return s?JSON.parse(s):{};} catch(e){return {};} }
+function saveOvHistory(h){ try{ localStorage.setItem('asung_ov_history',JSON.stringify(h)); } catch(e){} }
+function recordOvHistory(sup, key, val){
+  const h=loadOvHistory();
+  if(!h[sup]) h[sup]={sea:[],trd:[]};
+  const arr=h[sup][key];
+  const entry={v:val===null?'auto':val, d:new Date().toISOString().slice(0,10)};
+  if(arr.length && arr[arr.length-1].v===entry.v && arr[arr.length-1].d===entry.d) return;
+  arr.push(entry);
+  if(arr.length>10) arr.splice(0,arr.length-10);
+  saveOvHistory(h);
+}
+function getOvHistory(sup, key){
+  const h=loadOvHistory();
+  return (h[sup]?.[key]||[]).slice().reverse();
+}
+function showOvHistory(sup, key, evt){
+  const tip=document.getElementById('ov-history-tooltip');
+  document.getElementById('ovh-title').textContent=(key==='sea'?'계절보정':'트렌드')+' 변경 이력';
+  const hist=getOvHistory(sup,key);
+  document.getElementById('ovh-body').innerHTML=hist.length
+    ? hist.map((e,i)=>`<div class="ovh-row"><span>${e.d}</span><span class="${i===0?'ovh-cur':''}">${e.v==='auto'?'auto (초기화)':`×${parseFloat(e.v).toFixed(2)}`}</span></div>`).join('')
+    : '<div class="ovh-empty">변경 이력 없음</div>';
+  const vw=window.innerWidth,vh=window.innerHeight;
+  let x=evt.clientX+14,y=evt.clientY-20;
+  if(x+200>vw) x=evt.clientX-205;
+  if(y+200>vh) y=evt.clientY-200;
+  tip.style.left=x+'px'; tip.style.top=y+'px'; tip.style.display='block';
+}
+function hideOvHistory(){ document.getElementById('ov-history-tooltip').style.display='none'; }
+
 function saveOverride(key,val){
   if(!S.supplier){ alert('먼저 Supplier를 선택하세요.'); return; }
   if(!S.settings[S.supplier])S.settings[S.supplier]={};
   const k = key==='sea'?'_seaOv':'_trdOv';
   const v = parseFloat(val);
-  if(!val||isNaN(v)){ delete S.settings[S.supplier][k]; }
-  else { S.settings[S.supplier][k] = Math.min(key==='sea'?3.0:2.0, Math.max(key==='sea'?0.3:0.5, v)); }
+  if(!val||isNaN(v)){
+    delete S.settings[S.supplier][k];
+    recordOvHistory(S.supplier, key, null);
+  } else {
+    const clamped=Math.min(key==='sea'?3.0:2.0, Math.max(key==='sea'?0.3:0.5, v));
+    S.settings[S.supplier][k]=clamped;
+    recordOvHistory(S.supplier, key, clamped);
+  }
   saveSettings(); recompute(); renderTable();
   if(document.getElementById('fc-view').style.display!=='none') renderForecast();
 }
 function clearOverrides(){
   if(!S.supplier)return;
-  if(S.settings[S.supplier]){ delete S.settings[S.supplier]._seaOv; delete S.settings[S.supplier]._trdOv; }
+  if(S.settings[S.supplier]){
+    if(S.settings[S.supplier]._seaOv!==undefined) recordOvHistory(S.supplier,'sea',null);
+    if(S.settings[S.supplier]._trdOv!==undefined) recordOvHistory(S.supplier,'trd',null);
+    delete S.settings[S.supplier]._seaOv;
+    delete S.settings[S.supplier]._trdOv;
+  }
   document.getElementById('inp-sea').value='';
   document.getElementById('inp-trd').value='';
   saveSettings(); recompute(); renderTable();
@@ -1515,8 +1575,8 @@ function renderTable(){
         <td style="max-width:var(--name-col-width,180px);overflow:hidden;text-overflow:ellipsis;cursor:default" title="${xe(r.name)}">${xe(r.name)}</td>
         <td class="${r.adu>0?'':'vz'}" title="${r.adu>0?'가중이동평균 ADU':'판매 데이터 없음'}">${r.adu>0?r.adu.toFixed(2):'—'}</td>
         <td class="${r.orderAdu!==null&&r.orderAdu>0?'':'vz'}" title="${r.orderAduData?'주문ADU 기간별:\n전달말-3M: '+(r.orderAduData.adu_p1!==null?r.orderAduData.adu_p1.toFixed(2):'—')+'\n전달말-6M: '+(r.orderAduData.adu_p2!==null?r.orderAduData.adu_p2.toFixed(2):'—')+'\n전달말-1Y: '+(r.orderAduData.adu_p3!==null?r.orderAduData.adu_p3.toFixed(2):'—')+'\n오늘-3M: '+(r.orderAduData.adu_p4!==null?r.orderAduData.adu_p4.toFixed(2):'—'):'주문 데이터 없음'}">${r.orderAdu!==null?r.orderAdu.toFixed(2):'—'}</td>
-        <td class="${r.sea>1.1?'vp':r.sea<0.9?'vw':''}" onclick="editSkuOverride('${jse(r.sku)}','sea',${r.sea},event)" title="클릭해서 수동 수정 (BQ자동: ×${r.seaAuto})">${r.adu>0?`×${r.sea.toFixed(2)}${r.seaOv!==null?'<span style=\'color:var(--yellow);font-size:8px\'>✎</span>':''}`:'—'}</td>
-        <td class="${r.trd>1.05?'vp':r.trd<0.95?'vw':''}" onclick="editSkuOverride('${jse(r.sku)}','trd',${r.trd},event)" title="클릭해서 수동 수정 (BQ자동: ×${r.trdAuto})">${r.adu>0?`×${r.trd.toFixed(2)}${r.trdOv!==null?'<span style=\'color:var(--yellow);font-size:8px\'>✎</span>':''}`:'—'}</td>
+        <td class="${r.sea>1.1?'vp':r.sea<0.9?'vw':''}" onclick="editSkuOverride('${jse(r.sku)}','sea',${r.sea},event)" onmouseenter="showOvHistory('${jse(r.supplier)}','sea',event)" onmouseleave="hideOvHistory()" title="클릭해서 수동 수정 (BQ자동: ×${r.seaAuto})">${r.adu>0?`×${r.sea.toFixed(2)}${r.seaOv!==null?'<span style=\'color:var(--yellow);font-size:8px\'>✎</span>':''}`:'—'}</td>
+        <td class="${r.trd>1.05?'vp':r.trd<0.95?'vw':''}" onclick="editSkuOverride('${jse(r.sku)}','trd',${r.trd},event)" onmouseenter="showOvHistory('${jse(r.supplier)}','trd',event)" onmouseleave="hideOvHistory()" title="클릭해서 수동 수정 (BQ자동: ×${r.trdAuto})">${r.adu>0?`×${r.trd.toFixed(2)}${r.trdOv!==null?'<span style=\'color:var(--yellow);font-size:8px\'>✎</span>':''}`:'—'}</td>
         <td class="sep ${cc}">${ct}</td>
         <td><span class="${r.avail<=0?'vn':r.avail<10?'vw':''}">${r.avail.toLocaleString()}</span></td>
         <td title="${r.ss>0?`σ=${(r.ss/(1.65*Math.sqrt(r.lt||30))).toFixed(1)}/일`:'판매데이터 없음'}">${r.ss>0?`<span class="vw">${Math.round(r.ss)}</span>`:'<span class="vz">—</span>'}</td>
@@ -1759,12 +1819,12 @@ function renderForecast(){
     const seaClass=r.sea>1.1?'vp':r.sea<0.9?'vw':'';
     const trdClass=r.trd>1.05?'vp':r.trd<0.95?'vw':'';
     return `<tr>
-      <td>${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}" title="A=상위20% B=상위50% C=나머지">${r.abc}</span>`:''}</td>
+      <td onmouseenter="showSparkline('${jse(r.sku)}','${jse(r.name)}',event)" onmouseleave="hideSparkline()" style="cursor:default">${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}" title="A=상위20% B=상위50% C=나머지">${r.abc}</span>`:''}</td>
       <td style="text-align:left;max-width:var(--name-col-width,180px);overflow:hidden;text-overflow:ellipsis" title="${xe(r.name)}">${xe(r.name)}
 </td>
       <td>${r.adu.toFixed(2)}</td>
-      <td class="${seaClass}" onclick="editSkuOverride('${jse(r.sku)}','sea',${r.sea},event)" style="cursor:pointer" title="클릭해서 수동수정 | 1.0=작년동일 1.5=50%증가 0.7=30%감소">×${r.sea.toFixed(2)}${r.seaOv!==null?'<span style="color:var(--yellow);font-size:8px">✎</span>':''}</td>
-      <td class="${trdClass}" onclick="editSkuOverride('${jse(r.sku)}','trd',${r.trd},event)" style="cursor:pointer" title="클릭해서 수동수정 | 1.0=보합 2.0=강한상승 0.5=하락">×${r.trd.toFixed(2)}${r.trdOv!==null?'<span style="color:var(--yellow);font-size:8px">✎</span>':''}</td>
+      <td class="${seaClass}" onclick="editSkuOverride('${jse(r.sku)}','sea',${r.sea},event)" onmouseenter="showOvHistory('${jse(r.supplier??'')}','sea',event)" onmouseleave="hideOvHistory()" style="cursor:pointer" title="클릭해서 수동수정 | 1.0=작년동일 1.5=50%증가 0.7=30%감소">×${r.sea.toFixed(2)}${r.seaOv!==null?'<span style="color:var(--yellow);font-size:8px">✎</span>':''}</td>
+      <td class="${trdClass}" onclick="editSkuOverride('${jse(r.sku)}','trd',${r.trd},event)" onmouseenter="showOvHistory('${jse(r.supplier??'')}','trd',event)" onmouseleave="hideOvHistory()" style="cursor:pointer" title="클릭해서 수동수정 | 1.0=보합 2.0=강한상승 0.5=하락">×${r.trd.toFixed(2)}${r.trdOv!==null?'<span style="color:var(--yellow);font-size:8px">✎</span>':''}</td>
       <td class="sep">${fc30.toLocaleString()}</td>
       <td style="color:#94a3b8" title="실제 최근 ~30일 판매량">${n>0?act30:'—'}</td>
       <td>${fc60.toLocaleString()}</td>
