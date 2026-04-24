@@ -1589,7 +1589,7 @@ function renderTable(){
   Object.entries(bmap).sort(([a],[b])=>a.localeCompare(b)).forEach(([brand,brows])=>{
     const urg=brows.filter(r=>r.cov<=7&&r.adu>0).length;
     const ord=brows.filter(r=>r.rec!==null&&r.rec>0).length;
-    const isCollapsed = !S.search && !S.sortCol && brows.length > 30;
+    const isCollapsed = false;
     h+=`<div class="bg-group">
       <div class="bg-hdr${isCollapsed?' coll':''}" onclick="toggleBrand(this)">
         <span class="bg-chev">▾</span>
