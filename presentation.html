@@ -758,7 +758,7 @@ function buildWhere(params) {
   if (params.customer) conds.push(`LOWER(Customer_Clean) LIKE LOWER('%${params.customer.replace(/'/g,"''")}%')`);
   if (params.sku)      conds.push(`(LOWER(SKU) LIKE LOWER('%${params.sku.replace(/'/g,"''")}%') OR LOWER(Product_Name) LIKE LOWER('%${params.sku.replace(/'/g,"''")}%'))`);
   if (params.branch)   conds.push(`Location = '${params.branch.replace(/'/g,"''")}'`);
-  if (params.source)   conds.push(`Channel_Clean = '${params.source.replace(/'/g,"''")}'`);
+  if (params.source)   conds.push(`Source_Clean = '${params.source.replace(/'/g,"''")}'`);
   return conds.length ? 'WHERE ' + conds.join(' AND ') : '';
 }
 
@@ -798,11 +798,11 @@ async function runSearch() {
       // Customer top 15
       bqQuery(`SELECT Customer_Clean as customer, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY customer ORDER BY revenue DESC LIMIT 15`),
       // Channel
-      bqQuery(`SELECT Channel_Clean as source, SUM(Total) as revenue, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY source ORDER BY revenue DESC`),
+      bqQuery(`SELECT Source_Clean as source, SUM(Total) as revenue, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY source ORDER BY revenue DESC`),
       // Location
       bqQuery(`SELECT Location as location, SUM(Total) as revenue, SUM(Gross_Profit) as gp FROM ${fullTable} ${where} GROUP BY location ORDER BY revenue DESC`),
       // Detail rows (top 200)
-      bqQuery(`SELECT Date, OrderNumber, Customer_Clean as customer, Brand_Clean as brand, SKU, Product_Name as product, Quantity as qty, Unit_Price as price, Total as total, Gross_Profit as gp, Location as location, Channel_Clean as source FROM ${fullTable} ${where} ORDER BY Date DESC LIMIT 200`),
+      bqQuery(`SELECT Date, OrderNumber, Customer_Clean as customer, Brand_Clean as brand, SKU, Product_Name as product, Quantity as qty, Unit_Price as price, Total as total, Gross_Profit as gp, Location as location, Source_Clean as source FROM ${fullTable} ${where} ORDER BY Date DESC LIMIT 200`),
     ]);
 
     document.getElementById('queryInfo').textContent = `${detailRows.length}+ rows`;
@@ -1418,7 +1418,7 @@ async function runBrandSearch() {
   const brandClauses = brands.map(b => `LOWER(Brand_Clean) LIKE LOWER(${sqlStrW('%'+b.toLowerCase()+'%')})`);
   const conds = ['(' + brandClauses.join(' OR ') + ')'];
   if (branch)   conds.push(`Location = '${branch.replace(/'/g,"''")}'`);
-  if (source)   conds.push(`Channel_Clean = '${source.replace(/'/g,"''")}'`);
+  if (source)   conds.push(`Source_Clean = '${source.replace(/'/g,"''")}'`);
   if (dateFrom) conds.push(`Date >= '${dateFrom}'`);
   if (dateTo)   conds.push(`Date <= '${dateTo}'`);
   const where = 'WHERE ' + conds.join(' AND ');
@@ -1757,7 +1757,7 @@ async function runCustomerSearch() {
   const custClauses = customers.map(c => `LOWER(Customer_Clean) LIKE LOWER(${sqlStr('%'+c.toLowerCase()+'%')})`);
   const conds = ['(' + custClauses.join(' OR ') + ')'];
   if (branch)   conds.push(`Location = ${sqlStr(branch)}`);
-  if (source)   conds.push(`Channel_Clean = ${sqlStr(source)}`);
+  if (source)   conds.push(`Source_Clean = ${sqlStr(source)}`);
   if (dateFrom) conds.push(`Date >= '${dateFrom}'`);
   if (dateTo)   conds.push(`Date <= '${dateTo}'`);
   const where = 'WHERE ' + conds.join(' AND ');
