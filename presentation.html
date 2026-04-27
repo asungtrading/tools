@@ -122,6 +122,9 @@ body::before { content: ''; position: fixed; inset: 0; background: radial-gradie
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
 thead th { position: sticky; top: 0; background: var(--surface2); text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none; }
 thead th:hover { color: var(--mid); }
+thead th.sortable[data-sort-dir="asc"]  .sort-ind::after { content: ' ▲'; opacity: 1; }
+thead th.sortable[data-sort-dir="desc"] .sort-ind::after { content: ' ▼'; opacity: 1; }
+thead th.sortable[data-sort-dir]:not([data-sort-dir=""]) { color: var(--blue2); }
 tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
 tbody tr:hover { background: var(--surface2); }
 tbody td { padding: 10px 14px; color: var(--mid); }
@@ -282,15 +285,7 @@ html, body { overflow-x: hidden; max-width: 100vw; }
     </div>
   </div>
 
-  <!-- TAB NAV -->
-  <div class="tab-nav">
-    <button class="tab-btn active" onclick="switchTab('sales')">📊 Overview</button>
-    <button class="tab-btn" onclick="switchTab('brand')">🏷 Brands</button>
-    <button class="tab-btn" onclick="switchTab('customer')">👤 Customers</button>
-    <button class="tab-btn" onclick="switchTab('monthly')">📅 Period Comparison</button>
-  </div>
-
-  <!-- TAB: SALES (existing content) -->
+  <!-- OVERVIEW (single page) -->
   <div class="tab-panel active" id="tab-sales">
 
   <!-- SEARCH -->
@@ -303,23 +298,29 @@ html, body { overflow-x: hidden; max-width: 100vw; }
           <input type="date" id="dateTo" value="2026-03-31">
         </div>
       </div>
-      <div class="field">
-        <label class="field-label">Brand</label>
-        <div class="ac-wrap">
-          <input type="text" id="searchBrand" placeholder="e.g. ORS, Kim & C" autocomplete="off" oninput="acInput(this,'searchBrand','brand')" onkeydown="acKey(event,'searchBrand')" onfocus="acInput(this,'searchBrand','brand')">
+      <div class="field" style="min-width:240px">
+        <label class="field-label">Brand <span style="color:var(--dim);font-weight:400">(up to 5, press Enter)</span></label>
+        <div class="ac-wrap" style="position:relative">
+          <div id="searchBrandChips" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:34px;padding:4px 8px;background:#0f1625;border:1px solid #1f2a3d;border-radius:6px">
+            <input type="text" id="searchBrand" placeholder="Type brand and press Enter" autocomplete="off" oninput="acInput(this,'searchBrand','brand')" onkeydown="searchBrandKey(event)" onfocus="acInput(this,'searchBrand','brand')" style="flex:1;background:transparent;border:none;outline:none;color:var(--text);font-size:12px;padding:4px;min-width:120px">
+          </div>
           <div class="ac-list" id="ac-searchBrand" style="display:none"></div>
         </div>
       </div>
-      <div class="field">
-        <label class="field-label">Customer</label>
-        <div class="ac-wrap">
-          <input type="text" id="searchCustomer" placeholder="e.g. Clore, Rex Beauty" autocomplete="off" oninput="acInput(this,'searchCustomer')" onkeydown="acKey(event,'searchCustomer')" onfocus="acInput(this,'searchCustomer')">
+      <div class="field" style="min-width:240px">
+        <label class="field-label">Customer <span style="color:var(--dim);font-weight:400">(up to 5, press Enter)</span></label>
+        <div class="ac-wrap" style="position:relative">
+          <div id="searchCustomerChips" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:34px;padding:4px 8px;background:#0f1625;border:1px solid #1f2a3d;border-radius:6px">
+            <input type="text" id="searchCustomer" placeholder="Type customer and press Enter" autocomplete="off" oninput="acInput(this,'searchCustomer')" onkeydown="searchCustomerKey(event)" onfocus="acInput(this,'searchCustomer')" style="flex:1;background:transparent;border:none;outline:none;color:var(--text);font-size:12px;padding:4px;min-width:120px">
+          </div>
           <div class="ac-list" id="ac-searchCustomer" style="display:none"></div>
         </div>
       </div>
-      <div class="field">
-        <label class="field-label">SKU / Product</label>
-        <input type="text" id="searchSku" placeholder="e.g. ORS01234">
+      <div class="field" style="min-width:200px">
+        <label class="field-label">SKU / Product <span style="color:var(--dim);font-weight:400">(up to 5, press Enter)</span></label>
+        <div id="searchSkuChips" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:34px;padding:4px 8px;background:#0f1625;border:1px solid #1f2a3d;border-radius:6px">
+          <input type="text" id="searchSku" placeholder="Type SKU/product and press Enter" autocomplete="off" onkeydown="searchSkuKey(event)" style="flex:1;background:transparent;border:none;outline:none;color:var(--text);font-size:12px;padding:4px;min-width:120px">
+        </div>
       </div>
       <div class="field">
         <label class="field-label">Branch</label>
@@ -363,176 +364,6 @@ html, body { overflow-x: hidden; max-width: 100vw; }
 
   </div><!-- /tab-sales -->
 
-  <!-- TAB: BRAND PERFORMANCE -->
-  <div class="tab-panel" id="tab-brand">
-    <div class="price-search">
-      <div class="field">
-        <label class="field-label">Date Range</label>
-        <div class="date-row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <input type="date" id="bDateFrom">
-          <input type="date" id="bDateTo">
-        </div>
-      </div>
-      <div class="field" style="flex:1;min-width:280px">
-        <label class="field-label">Brand <span style="color:var(--red)">*required</span> <span style="color:var(--dim);font-weight:400">(up to 5, press Enter to add)</span></label>
-        <div class="ac-wrap" style="position:relative">
-          <div id="bBrandChips" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:34px;padding:4px 8px;background:#0f1625;border:1px solid #1f2a3d;border-radius:6px">
-            <input type="text" id="bBrand" placeholder="Type brand name and press Enter" autocomplete="off" oninput="acInput(this,'bBrand','brand')" onkeydown="bBrandKey(event)" onfocus="acInput(this,'bBrand','brand')" style="flex:1background:transparent;border:none;outline:none;color:var(--text);font-size:12px;padding:4px">
-          </div>
-          <div class="ac-list" id="ac-bBrand" style="display:none"></div>
-        </div>
-      </div>
-      <div class="field">
-        <label class="field-label">Branch</label>
-        <select id="bBranch">
-          <option value="">All Branches</option>
-          <option value="Asung Trading Inc.">Toronto</option>
-          <option value="Asung - Edmonton">Edmonton</option>
-        </select>
-      </div>
-      <div class="field">
-        <label class="field-label">Channel</label>
-        <select id="bChannel">
-          <option value="">All</option>
-          <option value="B2B">B2B</option>
-          <option value="Shopify">Shopify</option>
-          <option value="Pos">POS</option>
-          <option value="Backend">Backend</option>
-        </select>
-      </div>
-      <div>
-        <button class="search-btn" id="bSearchBtn" onclick="runBrandSearch()">🔍 Analyze</button>
-      </div>
-    </div>
-    <div class="content" id="brandContent">
-      <div class="empty-state">
-        <div class="empty-icon">🏷</div>
-        <div class="empty-title">Add up to 5 brands to compare</div>
-        <div class="empty-desc">Side-by-side trend, growth, and Top 10 SKUs per brand</div>
-      </div>
-    </div>
-  </div><!-- /tab-brand -->
-
-  <!-- TAB: CUSTOMER PERFORMANCE -->
-  <div class="tab-panel" id="tab-customer">
-    <div class="price-search">
-      <div class="field">
-        <label class="field-label">Date Range</label>
-        <div class="date-row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <input type="date" id="cDateFrom">
-          <input type="date" id="cDateTo">
-        </div>
-      </div>
-      <div class="field" style="flex:1;min-width:280px">
-        <label class="field-label">Customer <span style="color:var(--red)">*required</span> <span style="color:var(--dim);font-weight:400">(up to 5, press Enter to add)</span></label>
-        <div class="ac-wrap" style="position:relative">
-          <div id="cCustChips" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:34px;padding:4px 8px;background:#0f1625;border:1px solid #1f2a3d;border-radius:6px">
-            <input type="text" id="cCustomer" placeholder="Type customer name and press Enter" autocomplete="off" oninput="acInput(this,'cCustomer')" onkeydown="cCustKey(event)" onfocus="acInput(this,'cCustomer')" style="flex:1background:transparent;border:none;outline:none;color:var(--text);font-size:12px;padding:4px">
-          </div>
-          <div class="ac-list" id="ac-cCustomer" style="display:none"></div>
-        </div>
-      </div>
-      <div class="field">
-        <label class="field-label">Branch</label>
-        <select id="cBranch">
-          <option value="">All Branches</option>
-          <option value="Asung Trading Inc.">Toronto</option>
-          <option value="Asung - Edmonton">Edmonton</option>
-        </select>
-      </div>
-      <div class="field">
-        <label class="field-label">Channel</label>
-        <select id="cCustChannel">
-          <option value="">All</option>
-          <option value="B2B">B2B</option>
-          <option value="Shopify">Shopify</option>
-          <option value="Pos">POS</option>
-          <option value="Backend">Backend</option>
-        </select>
-      </div>
-      <div>
-        <button class="search-btn" id="cSearchBtn" onclick="runCustomerSearch()">🔍 Analyze</button>
-      </div>
-    </div>
-    <div class="content" id="customerContent">
-      <div class="empty-state">
-        <div class="empty-icon">👤</div>
-        <div class="empty-title">Add up to 5 customers to compare</div>
-        <div class="empty-desc">Side-by-side trend, growth, and Top 10 products per customer</div>
-      </div>
-    </div>
-  </div><!-- /tab-customer -->
-  <!-- TAB: MONTHLY COMPARISON -->
-  <div class="tab-panel" id="tab-monthly">
-    <div class="price-search" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
-      <div class="field">
-        <label class="field-label">Period 1 (Year)</label>
-        <select id="mYear1">
-          <option value="2026">2026</option>
-          <option value="2025" selected>2025</option>
-          <option value="2024">2024</option>
-          <option value="2023">2023</option>
-          <option value="2022">2022</option>
-        </select>
-      </div>
-      <div class="field">
-        <label class="field-label">Period 2 (Year)</label>
-        <select id="mYear2">
-          <option value="2026">2026</option>
-          <option value="2025">2025</option>
-          <option value="2024" selected>2024</option>
-          <option value="2023">2023</option>
-          <option value="2022">2022</option>
-        </select>
-      </div>
-      <div class="field">
-        <label class="field-label">Branch</label>
-        <select id="mBranch">
-          <option value="">All Branches</option>
-          <option value="Asung Trading Inc.">Toronto</option>
-          <option value="Asung - Edmonton">Edmonton</option>
-        </select>
-      </div>
-      <div class="field">
-        <label class="field-label">Brand (optional)</label>
-        <div class="ac-wrap">
-          <input type="text" id="mBrand" placeholder="All Brand" autocomplete="off" oninput="acInput(this,'mBrand','brand')" onkeydown="acKey(event,'mBrand')" onfocus="acInput(this,'mBrand','brand')" style="">
-          <div class="ac-list" id="ac-mBrand" style="display:none"></div>
-        </div>
-      </div>
-      <div class="field">
-        <label class="field-label">Customer (optional)</label>
-        <div class="ac-wrap">
-          <input type="text" id="mCustomer" placeholder="All Customer" autocomplete="off" oninput="acInput(this,'mCustomer')" onkeydown="acKey(event,'mCustomer')" onfocus="acInput(this,'mCustomer')" style="">
-          <div class="ac-list" id="ac-mCustomer" style="display:none"></div>
-        </div>
-      </div>
-      <button class="search-btn" id="mSearchBtn" onclick="runMonthlyComparison('year')">🔍 Compare Years</button>
-    </div>
-
-    <!-- Quick Select -->
-    <div class="quick-select-row" style="background:var(--surface);border-bottom:1px solid var(--border);padding:10px 12px;display:flex;align-items:center;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch">
-      <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin-right:4px">Quick Select</span>
-      <button class="export-btn" onclick="runQuick('rolling12')">📅 Rolling 12 Months vs Prior 12 Months</button>
-      <button class="export-btn" onclick="runQuick('fy_cur')">📊 Current FY vs Prior FY</button>
-      <button class="export-btn" onclick="runQuick('fy_ytd')">📊 FY YTD vs Prior Year Same Period</button>
-      <button class="export-btn" onclick="runQuick('q1')">Q1 Comparison</button>
-      <button class="export-btn" onclick="runQuick('q2')">Q2 Comparison</button>
-      <button class="export-btn" onclick="runQuick('q3')">Q3 Comparison</button>
-      <button class="export-btn" onclick="runQuick('q4')">Q4 Comparison</button>
-      <button class="export-btn" onclick="runQuick('h1')">H1 Comparison</button>
-      <button class="export-btn" onclick="runQuick('h2')">H2 Comparison</button>
-    </div>
-
-    <div class="content" id="monthlyContent">
-      <div class="empty-state">
-        <div class="empty-icon">📅</div>
-        <div class="empty-title">Select years or use a quick preset</div>
-        <div class="empty-desc">Compare volume and sales trends across two periods · Fiscal Year starts September 1</div>
-      </div>
-    </div>
-  </div><!-- /tab-monthly -->
-
 </div><!-- /mainApp -->
 
 <script>
@@ -550,16 +381,6 @@ let currentUser = null;
 let sortCol = null, sortAsc = true;
 const charts = {};
 const exportData = {}; // cache rendered data for CSV export
-
-// ══════════════════════════════════════
-// TABS
-// ══════════════════════════════════════
-function switchTab(tab) {
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  document.querySelector(`.tab-btn[onclick="switchTab('${tab}')"]`).classList.add('active');
-  document.getElementById('tab-' + tab).classList.add('active');
-}
 
 // ══════════════════════════════════════
 // AUTH  (Google Identity Services)
@@ -662,10 +483,6 @@ async function loadUser() {
     const from = new Date(today.getFullYear(), today.getMonth() - 2, 1);
     document.getElementById('dateFrom').value = from.toISOString().slice(0,10);
     document.getElementById('dateTo').value = today.toISOString().slice(0,10);
-    document.getElementById('bDateFrom').value = '2022-01-01';
-    document.getElementById('bDateTo').value = today.toISOString().slice(0,10);
-    document.getElementById('cDateFrom').value = '2022-01-01';
-    document.getElementById('cDateTo').value = today.toISOString().slice(0,10);
 
     runSearch();
     loadCustomerList(); // preload for autocomplete
@@ -700,16 +517,36 @@ async function bqQuery(sql) {
   return rows;
 }
 
+// Apostrophe-safe SQL string literal — uses ' to avoid BigQuery parser quirks
+const sqlStr = s => "'" + String(s).replace(/\\/g,'\\\\').replace(/'/g,'\\u0027').replace(/\n/g,'\\n') + "'";
+
 function buildWhere(params) {
   const conds = [];
   if (params.dateFrom) conds.push(`Date >= '${params.dateFrom}'`);
   if (params.dateTo)   conds.push(`Date <= '${params.dateTo}'`);
-  if (params.brand)    conds.push(`LOWER(Brand_Clean) LIKE LOWER('%${params.brand.replace(/'/g,"''")}%')`);
-  if (params.customer) conds.push(`LOWER(Customer_Clean) LIKE LOWER('%${params.customer.replace(/'/g,"''")}%')`);
-  if (params.sku)      conds.push(`(LOWER(SKU) LIKE LOWER('%${params.sku.replace(/'/g,"''")}%') OR LOWER(Product_Name) LIKE LOWER('%${params.sku.replace(/'/g,"''")}%'))`);
-  if (params.branch)   conds.push(`Location = '${params.branch.replace(/'/g,"''")}'`);
-  if (params.source)   conds.push(`Source_Clean = '${params.source.replace(/'/g,"''")}'`);
+  if (params.brands && params.brands.length) {
+    const cl = params.brands.map(b => `LOWER(Brand_Clean) LIKE LOWER(${sqlStr('%'+b.toLowerCase()+'%')})`);
+    conds.push('(' + cl.join(' OR ') + ')');
+  }
+  if (params.customers && params.customers.length) {
+    const cl = params.customers.map(c => `LOWER(Customer_Clean) LIKE LOWER(${sqlStr('%'+c.toLowerCase()+'%')})`);
+    conds.push('(' + cl.join(' OR ') + ')');
+  }
+  if (params.skus && params.skus.length) {
+    const cl = params.skus.map(s => `(LOWER(SKU) LIKE LOWER(${sqlStr('%'+s.toLowerCase()+'%')}) OR LOWER(Product_Name) LIKE LOWER(${sqlStr('%'+s.toLowerCase()+'%')}))`);
+    conds.push('(' + cl.join(' OR ') + ')');
+  }
+  if (params.branch) conds.push(`Location = ${sqlStr(params.branch)}`);
+  if (params.source) conds.push(`Source_Clean = ${sqlStr(params.source)}`);
   return conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+}
+
+// CASE expression that buckets each row into the user-typed label
+function bucketCase(col, list) {
+  if (!list || !list.length) return null;
+  return 'CASE ' + list.map(v =>
+    `WHEN LOWER(${col}) LIKE LOWER(${sqlStr('%'+v.toLowerCase()+'%')}) THEN ${sqlStr(v)}`
+  ).join(' ') + ' ELSE NULL END';
 }
 
 // ══════════════════════════════════════
@@ -718,14 +555,19 @@ function buildWhere(params) {
 let currentParams = {};
 
 async function runSearch() {
+  // Flush any unsubmitted typed input into chips
+  const pendBrand = document.getElementById('searchBrand').value.trim();    if (pendBrand) addSearchBrandChip(pendBrand);
+  const pendCust  = document.getElementById('searchCustomer').value.trim(); if (pendCust)  addSearchCustomerChip(pendCust);
+  const pendSku   = document.getElementById('searchSku').value.trim();      if (pendSku)   addSearchSkuChip(pendSku);
+
   const params = {
-    dateFrom: document.getElementById('dateFrom').value,
-    dateTo:   document.getElementById('dateTo').value,
-    brand:    document.getElementById('searchBrand').value.trim(),
-    customer: document.getElementById('searchCustomer').value.trim(),
-    sku:      document.getElementById('searchSku').value.trim(),
-    branch:   document.getElementById('searchBranch').value,
-    source:   document.getElementById('searchChannel').value,
+    dateFrom:  document.getElementById('dateFrom').value,
+    dateTo:    document.getElementById('dateTo').value,
+    brands:    [...searchBrandList],
+    customers: [...searchCustomerList],
+    skus:      [...searchSkuList],
+    branch:    document.getElementById('searchBranch').value,
+    source:    document.getElementById('searchChannel').value,
   };
   currentParams = params;
   updateChips(params);
@@ -737,29 +579,37 @@ async function runSearch() {
   try {
     const where = buildWhere(params);
     const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
+    const brandCase = bucketCase('Brand_Clean', params.brands);
+    const custCase  = bucketCase('Customer_Clean', params.customers);
 
-    const [kpiRows, trendRows, brandRows, custRows, sourceRows, locationRows, regionTrendRows, detailRows] = await Promise.all([
-      // KPI
+    const queries = [
       bqQuery(`SELECT COUNT(DISTINCT OrderNumber) as orders, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(COGS) as cogs, SUM(Gross_Profit) as gp, COUNT(DISTINCT Customer_Clean) as customers FROM ${fullTable} ${where}`),
-      // Monthly trend
       bqQuery(`SELECT FORMAT_DATE('%Y-%m', Date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY month ORDER BY month`),
-      // Brand top 15
       bqQuery(`SELECT Brand_Clean as brand, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY brand ORDER BY revenue DESC LIMIT 15`),
-      // Customer top 15
       bqQuery(`SELECT Customer_Clean as customer, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY customer ORDER BY revenue DESC LIMIT 15`),
-      // Channel
       bqQuery(`SELECT Source_Clean as source, SUM(Total) as revenue, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY source ORDER BY revenue DESC`),
-      // Location
       bqQuery(`SELECT Location as location, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY location ORDER BY qty DESC`),
-      // Regional monthly trend (Toronto vs Edmonton)
       bqQuery(`SELECT FORMAT_DATE('%Y-%m', Date) as month, Location as location, SUM(Quantity) as qty, SUM(Total) as revenue FROM ${fullTable} ${where} GROUP BY month, location ORDER BY month`),
-      // Detail rows (top 200)
       bqQuery(`SELECT Date, OrderNumber, Customer_Clean as customer, Brand_Clean as brand, SKU, Product_Name as product, Quantity as qty, Unit_Price as price, Total as total, Gross_Profit as gp, Location as location, Source_Clean as source FROM ${fullTable} ${where} ORDER BY Date DESC LIMIT 200`),
-    ]);
+      // Top 10 SKUs per typed brand bucket
+      brandCase
+        ? bqQuery(`SELECT brand_label, SKU, product, qty, revenue, gp, orders FROM (
+            SELECT ${brandCase} as brand_label, SKU, MAX(Product_Name) as product, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY brand_label, SKU HAVING brand_label IS NOT NULL
+          ) QUALIFY ROW_NUMBER() OVER (PARTITION BY brand_label ORDER BY qty DESC) <= 10 ORDER BY brand_label, qty DESC`)
+        : Promise.resolve([]),
+      // Top 10 products per typed customer bucket
+      custCase
+        ? bqQuery(`SELECT cust_label, SKU, product, brand, qty, revenue, gp, orders FROM (
+            SELECT ${custCase} as cust_label, SKU, MAX(Product_Name) as product, MAX(Brand_Clean) as brand, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY cust_label, SKU HAVING cust_label IS NOT NULL
+          ) QUALIFY ROW_NUMBER() OVER (PARTITION BY cust_label ORDER BY qty DESC) <= 10 ORDER BY cust_label, qty DESC`)
+        : Promise.resolve([]),
+    ];
+
+    const [kpiRows, trendRows, brandRows, custRows, sourceRows, locationRows, regionTrendRows, detailRows, brandSkuRows, custSkuRows] = await Promise.all(queries);
 
     document.getElementById('queryInfo').textContent = `${detailRows.length}+ rows`;
     btn.disabled = false; btn.textContent = '🔍 Search';
-    renderResults({ kpiRows, trendRows, brandRows, custRows, sourceRows, locationRows, regionTrendRows, detailRows });
+    renderResults({ kpiRows, trendRows, brandRows, custRows, sourceRows, locationRows, regionTrendRows, detailRows, brandSkuRows, custSkuRows, brands: params.brands, customers: params.customers });
   } catch(e) {
     btn.disabled = false; btn.textContent = '🔍 Search';
     document.getElementById('mainContent').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Query Error</div><div class="empty-desc">${e.message}</div></div>`;
@@ -767,6 +617,8 @@ async function runSearch() {
 }
 
 function resetSearch() {
+  searchBrandList = []; searchCustomerList = []; searchSkuList = [];
+  renderSearchBrandChips(); renderSearchCustomerChips(); renderSearchSkuChips();
   document.getElementById('searchBrand').value = '';
   document.getElementById('searchCustomer').value = '';
   document.getElementById('searchSku').value = '';
@@ -779,11 +631,11 @@ function updateChips(params) {
   const row = document.getElementById('filterRow');
   const chips = [];
   if (params.dateFrom || params.dateTo) chips.push(`📅 ${params.dateFrom||'~'} ~ ${params.dateTo||'~'}`);
-  if (params.brand)    chips.push(`🏷 ${params.brand}`);
-  if (params.customer) chips.push(`👤 ${params.customer}`);
-  if (params.sku)      chips.push(`📦 ${params.sku}`);
-  if (params.branch)   chips.push(`🏢 ${params.branch === 'Asung Trading Inc.' ? 'Toronto' : 'Edmonton'}`);
-  if (params.source)   chips.push(`📡 ${params.source}`);
+  (params.brands||[]).forEach(b => chips.push(`🏷 ${b}`));
+  (params.customers||[]).forEach(c => chips.push(`👤 ${c}`));
+  (params.skus||[]).forEach(s => chips.push(`📦 ${s}`));
+  if (params.branch) chips.push(`🏢 ${params.branch === 'Asung Trading Inc.' ? 'Toronto' : 'Edmonton'}`);
+  if (params.source) chips.push(`📡 ${params.source}`);
   row.innerHTML = chips.length
     ? chips.map(c => `<span class="filter-chip">${c}</span>`).join('')
     : '<span class="filter-empty">Showing all data</span>';
@@ -860,7 +712,7 @@ async function exportPDF() {
 }
 
 function renderResults(data) {
-  const { kpiRows, trendRows, brandRows, custRows, sourceRows, locationRows, regionTrendRows, detailRows } = data;
+  const { kpiRows, trendRows, brandRows, custRows, sourceRows, locationRows, regionTrendRows, detailRows, brandSkuRows = [], custSkuRows = [], brands = [], customers = [] } = data;
   // Cache for export
   exportData.salesBrands  = brandRows;
   exportData.salesCusts   = custRows;
@@ -957,6 +809,9 @@ function renderResults(data) {
       </div>
       <div class="tbl-wrap">${renderCustTable(custRows)}</div>
     </div>
+
+    ${renderBrandTopSkuSections(brands, brandSkuRows)}
+    ${renderCustomerTopSkuSections(customers, custSkuRows)}
   `;
 
   // Charts
@@ -1032,28 +887,42 @@ function renderResults(data) {
 
 function renderBrandTable(rows) {
   if(!rows.length) return '<div style="padding:20px;text-align:center;color:var(--dim)">No data</div>';
+  const totalVol = rows.reduce((a,x)=>a+(parseInt(x.qty)||0),0);
+  const k = 'brand_details';
   return `<table><thead><tr>
-    <th>Brand</th><th class="num">Volume</th><th class="num">Orders</th><th class="num">Revenue Share</th>
+    ${_sortHdr('Brand',k,0,'str')}${_sortHdr('Volume',k,1,'num')}${_sortHdr('Revenue',k,2,'num')}${_sortHdr('GP',k,3,'num')}${_sortHdr('GM%',k,4,'num')}${_sortHdr('Orders',k,5,'num')}${_sortHdr('Vol. Share',k,6,'num')}
   </tr></thead><tbody>${rows.map(r=>{
-    const totalVol = rows.reduce((a,x)=>a+(parseInt(x.qty)||0),0);
     const qty = parseInt(r.qty)||0;
+    const rv = parseFloat(r.revenue)||0, g = parseFloat(r.gp)||0;
+    const gm = rv > 0 ? (g/rv*100).toFixed(1) : '0';
+    const share = totalVol>0?(qty/totalVol*100).toFixed(1):0;
     return `<tr>
       <td>${r.brand||'—'}</td>
-      <td class="num">${qty.toLocaleString()}</td>
+      <td class="num" data-sort="${qty}">${qty.toLocaleString()}</td>
+      <td class="num" data-sort="${rv}">${fmt(rv)}</td>
+      <td class="num ${g>=0?'pos':'neg'}" data-sort="${g}">${fmt(g)}</td>
+      <td class="num" data-sort="${gm}" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
       <td class="num">${parseInt(r.orders)||0}</td>
-      <td class="num">${totalVol>0?(qty/totalVol*100).toFixed(1):0}%</td>
+      <td class="num" data-sort="${share}">${share}%</td>
     </tr>`;
   }).join('')}</tbody></table>`;
 }
 
 function renderCustTable(rows) {
   if(!rows.length) return '<div style="padding:20px;text-align:center;color:var(--dim)">No data</div>';
+  const k = 'cust_details';
   return `<table><thead><tr>
-    <th>Customer</th><th class="num">Volume</th><th class="num">Orders</th>
+    ${_sortHdr('Customer',k,0,'str')}${_sortHdr('Volume',k,1,'num')}${_sortHdr('Revenue',k,2,'num')}${_sortHdr('GP',k,3,'num')}${_sortHdr('GM%',k,4,'num')}${_sortHdr('Orders',k,5,'num')}
   </tr></thead><tbody>${rows.map(r=>{
+    const qty = parseInt(r.qty)||0;
+    const rv = parseFloat(r.revenue)||0, g = parseFloat(r.gp)||0;
+    const gm = rv > 0 ? (g/rv*100).toFixed(1) : '0';
     return `<tr>
       <td>${r.customer||'—'}</td>
-      <td class="num">${parseInt(r.qty)||0}</td>
+      <td class="num" data-sort="${qty}">${qty.toLocaleString()}</td>
+      <td class="num" data-sort="${rv}">${fmt(rv)}</td>
+      <td class="num ${g>=0?'pos':'neg'}" data-sort="${g}">${fmt(g)}</td>
+      <td class="num" data-sort="${gm}" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
       <td class="num">${parseInt(r.orders)||0}</td>
     </tr>`;
   }).join('')}</tbody></table>`;
@@ -1061,8 +930,9 @@ function renderCustTable(rows) {
 
 function renderDetailTable(rows) {
   if(!rows.length) return '<div style="padding:20px;text-align:center;color:var(--dim)">No data</div>';
+  const k = 'detail';
   return `<table><thead><tr>
-    <th>Date</th><th>Order #</th><th>Customer</th><th>Brand</th><th>SKU</th><th>Product</th><th class="num">Volume</th><th class="num">Unit Price</th><th class="num">Revenue</th><th class="num">GP</th><th>Branch</th><th>Channel</th>
+    ${_sortHdr('Date',k,0,'str')}${_sortHdr('Order #',k,1,'str')}${_sortHdr('Customer',k,2,'str')}${_sortHdr('Brand',k,3,'str')}${_sortHdr('SKU',k,4,'str')}${_sortHdr('Product',k,5,'str')}${_sortHdr('Volume',k,6,'num')}${_sortHdr('Unit Price',k,7,'num')}${_sortHdr('Revenue',k,8,'num')}${_sortHdr('GP',k,9,'num')}${_sortHdr('Branch',k,10,'str')}${_sortHdr('Channel',k,11,'str')}
   </tr></thead><tbody>${rows.map(r=>{
     const loc=r.location==='Asung Trading Inc.'?'<span class="tag tag-tor">Toronto</span>':'<span class="tag tag-edm">Edmonton</span>';
     const src=r.source==='Shopify'?'<span class="tag tag-shopify">Shopify</span>':r.source==='B2B'?'<span class="tag tag-b2b">B2B</span>':r.source||'—';
@@ -1073,15 +943,101 @@ function renderDetailTable(rows) {
       <td>${r.customer||'—'}</td>
       <td>${r.brand||'—'}</td>
       <td style="font-family:'DM Mono',monospace;font-size:11px">${r.SKU||'—'}</td>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.product||''}">${r.product||'—'}</td>
-      <td class="num">${r.qty||0}</td>
-      <td class="num">${fmt(r.price)}</td>
-      <td class="num">${fmt(r.total)}</td>
-      <td class="num ${gp>=0?'pos':'neg'}">${fmt(gp)}</td>
-      <td>${loc}</td>
-      <td>${src}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.product||'').replace(/"/g,'&quot;')}">${r.product||'—'}</td>
+      <td class="num" data-sort="${parseInt(r.qty)||0}">${r.qty||0}</td>
+      <td class="num" data-sort="${parseFloat(r.price)||0}">${fmt(r.price)}</td>
+      <td class="num" data-sort="${parseFloat(r.total)||0}">${fmt(r.total)}</td>
+      <td class="num ${gp>=0?'pos':'neg'}" data-sort="${gp}">${fmt(gp)}</td>
+      <td data-sort="${r.location||''}">${loc}</td>
+      <td data-sort="${r.source||''}">${src}</td>
     </tr>`;
   }).join('')}</tbody></table>`;
+}
+
+// ── Per-typed-brand Top 10 SKU sections ──
+function renderBrandTopSkuSections(brands, rows) {
+  if (!brands || !brands.length || !rows || !rows.length) return '';
+  const byBrand = {};
+  rows.forEach(r => { (byBrand[r.brand_label] = byBrand[r.brand_label] || []).push(r); });
+  // Cache export
+  exportData.brandTopSkus = [];
+  brands.forEach(b => (byBrand[b]||[]).forEach(r => exportData.brandTopSkus.push({ Brand:b, SKU:r.SKU, Product:r.product, Volume:parseInt(r.qty)||0, Revenue:parseFloat(r.revenue)||0, Gross_Profit:parseFloat(r.gp)||0, GM_Pct: parseFloat(r.revenue)>0?(parseFloat(r.gp)/parseFloat(r.revenue)*100).toFixed(1):0, Orders:parseInt(r.orders)||0 })));
+  const sections = brands.map((b, i) => {
+    const color = BRAND_COLORS[i] || '#3b82f6';
+    const list = byBrand[b] || [];
+    if (!list.length) return '';
+    const k = `brand_top_${i}`;
+    const body = list.map((r, idx) => {
+      const rv = parseFloat(r.revenue)||0, g = parseFloat(r.gp)||0;
+      const gm = rv > 0 ? (g/rv*100).toFixed(1) : 0;
+      const qty = parseInt(r.qty)||0;
+      return `<tr>
+        <td style="text-align:center;color:${color};font-weight:700" data-sort="${idx+1}">#${idx+1}</td>
+        <td style="font-family:monospace;font-size:11px">${r.SKU||'—'}</td>
+        <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.product||'').replace(/"/g,'&quot;')}">${r.product||'—'}</td>
+        <td class="num" data-sort="${qty}">${qty.toLocaleString()}</td>
+        <td class="num" data-sort="${rv}">${fmt(rv)}</td>
+        <td class="num ${g>=0?'pos':'neg'}" data-sort="${g}">${fmt(g)}</td>
+        <td class="num" data-sort="${gm}" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
+        <td class="num">${parseInt(r.orders)||0}</td>
+      </tr>`;
+    }).join('');
+    return `<div class="tbl-card" style="margin-bottom:16px;border-left:3px solid ${color}">
+      <div class="tbl-hdr">
+        <span class="tbl-title" style="color:${color}">🏷 ${b} — Top ${list.length} SKUs</span>
+      </div>
+      <div class="tbl-wrap">
+        <table><thead><tr>
+          ${_sortHdr('Rank',k,0,'num','width:48px')}${_sortHdr('SKU',k,1,'str')}${_sortHdr('Product',k,2,'str')}${_sortHdr('Volume',k,3,'num')}${_sortHdr('Revenue',k,4,'num')}${_sortHdr('GP',k,5,'num')}${_sortHdr('GM%',k,6,'num')}${_sortHdr('Orders',k,7,'num')}
+        </tr></thead><tbody>${body}</tbody></table>
+      </div>
+    </div>`;
+  }).filter(Boolean).join('');
+  if (!sections) return '';
+  return `<div style="margin:24px 0 12px;font-size:12px;font-weight:700;color:var(--mid);letter-spacing:1px;text-transform:uppercase;display:flex;align-items:center;gap:12px">Top 10 SKUs by Brand <button class="export-btn" onclick="exportCSV(exportData.brandTopSkus,'brand_top_skus.csv')">⬇ CSV</button></div>${sections}`;
+}
+
+// ── Per-typed-customer Top 10 product sections ──
+function renderCustomerTopSkuSections(customers, rows) {
+  if (!customers || !customers.length || !rows || !rows.length) return '';
+  const byCust = {};
+  rows.forEach(r => { (byCust[r.cust_label] = byCust[r.cust_label] || []).push(r); });
+  exportData.custTopSkus = [];
+  customers.forEach(c => (byCust[c]||[]).forEach(r => exportData.custTopSkus.push({ Customer:c, SKU:r.SKU, Product:r.product, Brand:r.brand, Volume:parseInt(r.qty)||0, Revenue:parseFloat(r.revenue)||0, Gross_Profit:parseFloat(r.gp)||0, GM_Pct: parseFloat(r.revenue)>0?(parseFloat(r.gp)/parseFloat(r.revenue)*100).toFixed(1):0, Orders:parseInt(r.orders)||0 })));
+  const sections = customers.map((c, i) => {
+    const color = CUSTOMER_COLORS[i] || '#3b82f6';
+    const list = byCust[c] || [];
+    if (!list.length) return '';
+    const k = `cust_top_${i}`;
+    const body = list.map((r, idx) => {
+      const rv = parseFloat(r.revenue)||0, g = parseFloat(r.gp)||0;
+      const gm = rv > 0 ? (g/rv*100).toFixed(1) : 0;
+      const qty = parseInt(r.qty)||0;
+      return `<tr>
+        <td style="text-align:center;color:${color};font-weight:700" data-sort="${idx+1}">#${idx+1}</td>
+        <td style="font-family:monospace;font-size:11px">${r.SKU||'—'}</td>
+        <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.product||'').replace(/"/g,'&quot;')}">${r.product||'—'}</td>
+        <td style="font-size:11px;color:var(--dim)">${r.brand||'—'}</td>
+        <td class="num" data-sort="${qty}">${qty.toLocaleString()}</td>
+        <td class="num" data-sort="${rv}">${fmt(rv)}</td>
+        <td class="num ${g>=0?'pos':'neg'}" data-sort="${g}">${fmt(g)}</td>
+        <td class="num" data-sort="${gm}" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
+        <td class="num">${parseInt(r.orders)||0}</td>
+      </tr>`;
+    }).join('');
+    return `<div class="tbl-card" style="margin-bottom:16px;border-left:3px solid ${color}">
+      <div class="tbl-hdr">
+        <span class="tbl-title" style="color:${color}">👤 ${c} — Top ${list.length} Products</span>
+      </div>
+      <div class="tbl-wrap">
+        <table><thead><tr>
+          ${_sortHdr('Rank',k,0,'num','width:48px')}${_sortHdr('SKU',k,1,'str')}${_sortHdr('Product',k,2,'str')}${_sortHdr('Brand',k,3,'str')}${_sortHdr('Volume',k,4,'num')}${_sortHdr('Revenue',k,5,'num')}${_sortHdr('GP',k,6,'num')}${_sortHdr('GM%',k,7,'num')}${_sortHdr('Orders',k,8,'num')}
+        </tr></thead><tbody>${body}</tbody></table>
+      </div>
+    </div>`;
+  }).filter(Boolean).join('');
+  if (!sections) return '';
+  return `<div style="margin:24px 0 12px;font-size:12px;font-weight:700;color:var(--mid);letter-spacing:1px;text-transform:uppercase;display:flex;align-items:center;gap:12px">Top 10 Products by Customer <button class="export-btn" onclick="exportCSV(exportData.custTopSkus,'customer_top_products.csv')">⬇ CSV</button></div>${sections}`;
 }
 
 // ══════════════════════════════════════
@@ -1353,778 +1309,131 @@ function renderPriceAnalysis({ priceRows, summaryRows, custRows, sku }) {
 }
 */
 
-// ══════════════════════════════════════
-// BRAND PERFORMANCE
-// ══════════════════════════════════════
-// ─── Multi-brand chip state ───
-let bBrandList = [];
-const BRAND_COLORS = ['#3b82f6','#22c55e','#f59e0b','#a855f7','#ef4444'];
-
-function bBrandKey(e) {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    const v = e.target.value.trim();
-    if (v) addBrandChip(v);
-    return;
-  }
-  acKey(e, 'bBrand');
-}
-function addBrandChip(name) {
-  if (!name) return;
-  if (bBrandList.length >= 5) { alert('You can compare up to 5 brands'); return; }
-  if (bBrandList.some(b => b.toLowerCase() === name.toLowerCase())) return;
-  bBrandList.push(name);
-  const inp = document.getElementById('bBrand');
-  inp.value = '';
-  document.getElementById('ac-bBrand').style.display = 'none';
-  renderBrandChips();
-  inp.focus();
-}
-function removeBrandChip(name) {
-  bBrandList = bBrandList.filter(b => b !== name);
-  renderBrandChips();
-}
-function renderBrandChips() {
-  const container = document.getElementById('bBrandChips');
-  const inp = document.getElementById('bBrand');
-  container.querySelectorAll('.brand-chip').forEach(n => n.remove());
-  bBrandList.forEach((b, i) => {
-    const chip = document.createElement('span');
-    chip.className = 'brand-chip';
-    chip.style.cssText = `display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:${BRAND_COLORS[i]}22;border:1px solid ${BRAND_COLORS[i]};color:${BRAND_COLORS[i]};border-radius:12px;font-size:11px;font-weight:600`;
-    chip.innerHTML = `${b}<span style="cursor:pointer;font-weight:700" onclick="removeBrandChip('${b.replace(/'/g,"\\'")}')">×</span>`;
-    container.insertBefore(chip, inp);
-  });
-}
-// (bBrand chip behavior is wired directly into acSelect below)
-
-async function runBrandSearch() {
-  // Allow free-text remaining in input as an extra brand
-  const remaining = document.getElementById('bBrand').value.trim();
-  if (remaining) addBrandChip(remaining);
-
-  const brands   = [...bBrandList];
-  const branch   = document.getElementById('bBranch').value;
-  const source   = document.getElementById('bChannel').value;
-  const dateFrom = document.getElementById('bDateFrom').value;
-  const dateTo   = document.getElementById('bDateTo').value;
-
-  if (!brands.length) {
-    document.getElementById('brandContent').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Please enter at least one brand</div></div>`;
-    return;
-  }
-  const btn = document.getElementById('bSearchBtn');
-  btn.disabled = true; btn.textContent = '⏳ Querying...';
-  document.getElementById('brandContent').innerHTML = '<div class="loading"><div class="spinner"></div> Querying BigQuery...</div>';
-
-  const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
-  // Each brand uses LIKE for fuzzy match, joined by OR (apostrophes escaped as \u0027)
-  const sqlStrW = s => "'" + s.replace(/\\/g,'\\\\').replace(/'/g,'\\u0027').replace(/\n/g,'\\n') + "'";
-  const brandClauses = brands.map(b => `LOWER(Brand_Clean) LIKE LOWER(${sqlStrW('%'+b.toLowerCase()+'%')})`);
-  const conds = ['(' + brandClauses.join(' OR ') + ')'];
-  if (branch)   conds.push(`Location = '${branch.replace(/'/g,"''")}'`);
-  if (source)   conds.push(`Source_Clean = '${source.replace(/'/g,"''")}'`);
-  if (dateFrom) conds.push(`Date >= '${dateFrom}'`);
-  if (dateTo)   conds.push(`Date <= '${dateTo}'`);
-  const where = 'WHERE ' + conds.join(' AND ');
-
-  // Build a CASE expression to bucket rows into the user-typed brand label.
-  // Use single-quoted literals with apostrophes escaped as \u0027 — BigQuery's parser
-  // treats both '' inside '...' and ' inside "..." as ambiguous in some contexts,
-  // producing "concatenated string literals must be separated by whitespace" errors.
-  // Unicode escapes avoid this entirely.
-  const sqlStr = s => "'" + s
-    .replace(/\\/g, '\\\\')
-    .replace(/'/g, '\\u0027')
-    .replace(/\n/g, '\\n') + "'";
-  const caseExpr = 'CASE ' + brands.map(b =>
-    `WHEN LOWER(Brand_Clean) LIKE LOWER(${sqlStr('%'+b.toLowerCase()+'%')}) THEN ${sqlStr(b)}`
-  ).join(' ') + ' ELSE NULL END';
-
-  try {
-    const queries = [
-      // Summary per brand bucket
-      bqQuery(`SELECT ${caseExpr} as brand_label, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders, COUNT(DISTINCT Customer_Clean) as customers, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY brand_label HAVING brand_label IS NOT NULL`),
-      // Monthly trend per brand bucket
-      bqQuery(`SELECT ${caseExpr} as brand_label, FORMAT_DATE('%Y-%m', Date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty FROM ${fullTable} ${where} GROUP BY brand_label, month HAVING brand_label IS NOT NULL ORDER BY month`),
-      // Top 10 SKUs per brand bucket (supplier-facing detail)
-      bqQuery(`SELECT brand_label, SKU, product, qty, revenue, gp, orders, first_date, last_date FROM (
-        SELECT ${caseExpr} as brand_label, SKU, MAX(Product_Name) as product, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY brand_label, SKU HAVING brand_label IS NOT NULL
-      ) QUALIFY ROW_NUMBER() OVER (PARTITION BY brand_label ORDER BY qty DESC) <= 10 ORDER BY brand_label, qty DESC`),
-    ];
-    // Single-brand mode also loads Customer deep dive
-    if (brands.length === 1) {
-      queries.push(
-        bqQuery(`SELECT Customer_Clean as customer, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY customer ORDER BY qty DESC LIMIT 50`)
-      );
-    }
-    const results = await Promise.all(queries);
-    const summaryRows = results[0];
-    const trendRows   = results[1];
-    const topSkuRows  = results[2] || [];
-    const custRows    = results[3] || [];
-
-    // For single-brand, derive skuRows from topSkuRows (already filtered to one brand)
-    const skuRows = topSkuRows;
-
-    btn.disabled = false; btn.textContent = '🔍 Analyze';
-    if (!summaryRows.length) {
-      document.getElementById('brandContent').innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">No Results</div><div class="empty-desc">No data found for the selected brand(s)</div></div>`;
-      return;
-    }
-    renderBrandPerformance({ summaryRows, trendRows, skuRows, topSkuRows, custRows, brands });
-  } catch(e) {
-    btn.disabled = false; btn.textContent = '🔍 Analyze';
-    document.getElementById('brandContent').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Query Error</div><div class="empty-desc">${e.message}</div></div>`;
-  }
-}
-
-function renderBrandPerformance({ summaryRows, trendRows, skuRows, topSkuRows, custRows, brands }) {
-  const isMulti = brands.length > 1;
-  const brand = brands[0]; // for single-brand exports
-
-  // ── MULTI-BRAND COMPARISON VIEW ──
-  if (isMulti) {
-    // Order summary rows to match the chip order (brands array)
-    const summaryByBrand = {};
-    summaryRows.forEach(r => { summaryByBrand[r.brand_label] = r; });
-    const orderedSummary = brands.map(b => summaryByBrand[b]).filter(Boolean);
-
-    // Build month universe across all brands
-    const monthSet = new Set();
-    trendRows.forEach(r => monthSet.add(r.month));
-    const months = [...monthSet].sort();
-
-    // Pivot: brand -> month -> {rev, gp, qty}
-    const pivot = {};
-    brands.forEach(b => { pivot[b] = {}; months.forEach(m => pivot[b][m] = { rev:0, gp:0, qty:0 }); });
-    trendRows.forEach(r => {
-      if (pivot[r.brand_label] && pivot[r.brand_label][r.month]) {
-        pivot[r.brand_label][r.month] = { rev: parseFloat(r.revenue)||0, gp: parseFloat(r.gp)||0, qty: parseInt(r.qty)||0 };
-      }
-    });
-
-    // Cache export
-    exportData.brandCompare = [];
-    brands.forEach(b => months.forEach(m => {
-      const c = pivot[b][m];
-      exportData.brandCompare.push({ Brand:b, Month:m, Revenue:c.rev, Gross_Profit:c.gp, GM_Pct: c.rev>0?(c.gp/c.rev*100).toFixed(1):0, Quantity:c.qty });
-    }));
-
-    // KPI cards
-    const kpiCards = orderedSummary.map((s, i) => {
-      const color = BRAND_COLORS[brands.indexOf(s.brand_label)] || '#3b82f6';
-      const rev = parseFloat(s.revenue)||0, gp = parseFloat(s.gp)||0;
-      const gm = rev > 0 ? (gp/rev*100).toFixed(1) : '0';
-      // Growth: compare first half vs second half of months
-      const bMonths = months.map(m => pivot[s.brand_label][m].rev);
-      const mid = Math.floor(bMonths.length/2);
-      const firstHalf = bMonths.slice(0,mid).reduce((a,b)=>a+b,0);
-      const secondHalf = bMonths.slice(mid).reduce((a,b)=>a+b,0);
-      const growth = firstHalf>0 ? ((secondHalf-firstHalf)/firstHalf*100).toFixed(1) : 'N/A';
-      const growthColor = growth === 'N/A' ? 'var(--dim)' : (parseFloat(growth)>=0 ? 'var(--green)' : 'var(--red)');
-      const growthSign = growth !== 'N/A' && parseFloat(growth)>=0 ? '+' : '';
-      return `
-        <div style="background:#0f1625;border:1px solid ${color};border-left:3px solid ${color};border-radius:6px;padding:12px 14px;min-width:180px">
-          <div style="font-size:12px;font-weight:700;color:${color};margin-bottom:8px">${s.brand_label}</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:11px">
-            <div><div style="color:var(--dim);font-size:10px">Revenue</div><div style="font-weight:600;color:var(--text)">${fmtK(rev)}</div></div>
-            <div><div style="color:var(--dim);font-size:10px">GP</div><div style="font-weight:600;color:var(--text)">${fmtK(gp)}</div></div>
-            <div><div style="color:var(--dim);font-size:10px">GM%</div><div style="font-weight:600;color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</div></div>
-            <div><div style="color:var(--dim);font-size:10px">Growth</div><div style="font-weight:600;color:${growthColor}">${growth==='N/A'?'N/A':growthSign+growth+'%'}</div></div>
-            <div><div style="color:var(--dim);font-size:10px">Orders</div><div style="font-weight:600;color:var(--text)">${parseInt(s.orders)||0}</div></div>
-            <div><div style="color:var(--dim);font-size:10px">Customer</div><div style="font-weight:600;color:var(--text)">${parseInt(s.customers)||0}</div></div>
-          </div>
-        </div>`;
-    }).join('');
-
-    // Group topSkuRows by brand and build per-brand Top 10 SKU tables
-    const skusByBrand = {};
-    (topSkuRows||[]).forEach(r => {
-      if (!skusByBrand[r.brand_label]) skusByBrand[r.brand_label] = [];
-      skusByBrand[r.brand_label].push(r);
-    });
-    exportData.brandTopSkus = [];
-    brands.forEach(b => (skusByBrand[b]||[]).forEach(r => {
-      exportData.brandTopSkus.push({ Brand:b, SKU:r.SKU, Product:r.product, Volume:parseInt(r.qty)||0, Revenue:parseFloat(r.revenue)||0, Gross_Profit:parseFloat(r.gp)||0, GM_Pct: parseFloat(r.revenue)>0?(parseFloat(r.gp)/parseFloat(r.revenue)*100).toFixed(1):0, Orders:parseInt(r.orders)||0 });
-    }));
-    const brandSkuSections = brands.map((b, i) => {
-      const color = BRAND_COLORS[i] || '#3b82f6';
-      const list = skusByBrand[b] || [];
-      if (!list.length) return '';
-      const rows = list.map((r, idx) => {
-        const rv = parseFloat(r.revenue)||0, g = parseFloat(r.gp)||0;
-        const gm = rv > 0 ? (g/rv*100).toFixed(1) : 0;
-        return `<tr>
-          <td style="text-align:center;color:${color};font-weight:700">#${idx+1}</td>
-          <td style="font-family:monospace;font-size:11px">${r.SKU||'—'}</td>
-          <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.product||'').replace(/"/g,'&quot;')}">${r.product||'—'}</td>
-          <td class="num">${(parseInt(r.qty)||0).toLocaleString()}</td>
-          <td class="num">${fmt(rv)}</td>
-          <td class="num ${g>=0?'pos':'neg'}">${fmt(g)}</td>
-          <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
-          <td class="num">${parseInt(r.orders)||0}</td>
-        </tr>`;
-      }).join('');
-      return `
-        <div class="tbl-card" style="margin-bottom:16px;border-left:3px solid ${color}">
-          <div class="tbl-hdr">
-            <span class="tbl-title" style="color:${color}">🏷 ${b} — Top ${list.length} SKUs</span>
-          </div>
-          <div class="tbl-wrap">
-            <table><thead><tr>
-              <th style="width:48px">Rank</th><th>SKU</th><th>Product</th>
-              <th class="num">Volume</th><th class="num">Revenue</th><th class="num">GP</th><th class="num">GM%</th><th class="num">Orders</th>
-            </tr></thead><tbody>${rows}</tbody></table>
-          </div>
-        </div>`;
-    }).join('');
-
-    document.getElementById('brandContent').innerHTML = `
-      <div style="padding:20px 24px 24px">
-        <div style="margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-          <span style="font-size:13px;font-weight:700;color:var(--text)">🏷 Brand Comparison (${brands.length} brands)</span>
-          <button class="export-btn" onclick="exportCSV(exportData.brandCompare,'brand_compare.csv')">⬇ Compare CSV</button>
-          <button class="export-btn" onclick="exportCSV(exportData.brandTopSkus,'brand_top_skus.csv')">⬇ Top SKUs CSV</button>
-        </div>
-        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px">${kpiCards}</div>
-        <div class="charts-grid" style="margin-bottom:16px">
-          <div class="card">
-            <div class="card-hdr"><span class="card-title">Monthly Volume Trend</span><span class="card-badge">${months.length} months</span></div>
-            <div class="chart-box tall"><canvas id="cBrandCmpRev"></canvas></div>
-          </div>
-          <div class="card">
-            <div class="card-hdr"><span class="card-title">Monthly Volume — YoY Growth (%)</span></div>
-            <div class="chart-box tall"><canvas id="cBrandCmpGm"></canvas></div>
-          </div>
-        </div>
-        <div style="margin:24px 0 12px;font-size:12px;font-weight:700;color:var(--mid);letter-spacing:1px;text-transform:uppercase">Top 10 SKUs by Brand</div>
-        ${brandSkuSections}
-      </div>
-    `;
-
-    const revDatasets = brands.map((b,i) => ({
-      label: b, data: months.map(m => pivot[b][m].qty),
-      borderColor: BRAND_COLORS[i], backgroundColor: BRAND_COLORS[i]+'33',
-      tension: 0.3, borderWidth: 2, pointRadius: 3
-    }));
-    mkChart('cBrandCmpRev', { type:'line', data:{ labels:months, datasets:revDatasets },
-      options:{...baseOpts(), plugins:{...baseOpts().plugins, legend:{display:true,position:'top',labels:{color:'#94a3b8',font:{size:10}}}, tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>' '+ctx.dataset.label+': '+parseInt(ctx.raw).toLocaleString()+' units'}}}}});
-
-    // YoY growth % per brand (volume-based)
-    const gmDatasets = brands.map((b,i) => {
-      const qtyArr = months.map(m => pivot[b][m].qty);
-      // month-over-month growth %
-      const growthArr = qtyArr.map((v,idx) => idx === 0 ? null : (qtyArr[idx-1] > 0 ? +((v - qtyArr[idx-1]) / qtyArr[idx-1] * 100).toFixed(1) : null));
-      return { label: b, data: growthArr, borderColor: BRAND_COLORS[i], backgroundColor: BRAND_COLORS[i]+'33', tension: 0.3, borderWidth: 2, pointRadius: 3, spanGaps: true };
-    });
-    mkChart('cBrandCmpGm', { type:'line', data:{ labels:months, datasets:gmDatasets },
-      options:{...baseOpts(), plugins:{...baseOpts().plugins, legend:{display:true,position:'top',labels:{color:'#94a3b8',font:{size:10}}}, tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>' '+ctx.dataset.label+': '+(ctx.raw==null?'—':ctx.raw+'%')}}}, scales:{...baseOpts().scales, y:{...baseOpts().scales.y, ticks:{...baseOpts().scales.y.ticks, callback:v=>v+'%'}}}}});
-    return;
-  }
-
-  // ── SINGLE BRAND DEEP-DIVE (original) ──
-  // Convert comparison-style trendRows to single-brand shape
-  trendRows.forEach(r => { if (r.orders == null) r.orders = 0; });
-  const s0 = summaryRows[0] || {};
-  const singleSummary = [{
-    brand: s0.brand_label || brand,
-    revenue: s0.revenue, gp: s0.gp, qty: s0.qty,
-    orders: s0.orders, customers: s0.customers,
-    first_date: s0.first_date, last_date: s0.last_date
-  }];
-
-  // Cache for export
-  exportData.brandTrend = trendRows.map(r => ({ Brand: brand, Month: r.month, Revenue: r.revenue, Gross_Profit: r.gp, Quantity: r.qty, Orders: r.orders }));
-  exportData.brandSkus  = skuRows.map(r => ({ Brand: brand, SKU: r.SKU, Product: r.product, First_Date: r.first_date, Last_Date: r.last_date, Revenue: r.revenue, Gross_Profit: r.gp, GM_Pct: (parseFloat(r.revenue)>0?(parseFloat(r.gp)/parseFloat(r.revenue)*100).toFixed(1):0), Quantity: r.qty, Orders: r.orders }));
-  exportData.brandCusts = custRows.map(r => ({ Brand: brand, Customer: r.customer, First_Date: r.first_date, Last_Date: r.last_date, Revenue: r.revenue, Gross_Profit: r.gp, GM_Pct: (parseFloat(r.revenue)>0?(parseFloat(r.gp)/parseFloat(r.revenue)*100).toFixed(1):0), Quantity: r.qty, Orders: r.orders }));
-  const s = singleSummary[0] || {};
-  const rev = parseFloat(s.revenue)||0, gp = parseFloat(s.gp)||0;
-  const gm = rev > 0 ? (gp/rev*100).toFixed(1) : '0';
-
-  document.getElementById('brandContent').innerHTML = `
-    <div style="padding:20px 24px 0">
-      <div style="margin-bottom:14px">
-        <span style="font-size:13px;font-weight:700;color:var(--text)">${s.brand || brand}</span>
-        <span style="font-size:11px;color:var(--dim);margin-left:8px">${s.first_date||''} ~ ${s.last_date||''}</span>
-      </div>
-      <div class="kpi-strip" style="margin-bottom:20px">
-        <div class="kpi blue"><div class="kpi-lbl">Total Revenue</div><div class="kpi-val">${fmtK(rev)}</div><div class="kpi-sub">${parseInt(s.orders)||0} orders</div></div>
-        <div class="kpi green"><div class="kpi-lbl">Gross Profit</div><div class="kpi-val">${fmtK(gp)}</div><div class="kpi-sub">GM ${gm}%</div></div>
-        <div class="kpi yellow"><div class="kpi-lbl">Total Units</div><div class="kpi-val">${(parseInt(s.qty)||0).toLocaleString()}</div><div class="kpi-sub">units</div></div>
-        <div class="kpi purple"><div class="kpi-lbl">Customers</div><div class="kpi-val">${parseInt(s.customers)||0}</div><div class="kpi-sub">unique</div></div>
-        <div class="kpi teal"><div class="kpi-lbl">Top SKUs Shown</div><div class="kpi-val">${skuRows.length}</div><div class="kpi-sub">by volume</div></div>
-        <div class="kpi blue"><div class="kpi-lbl">Avg. Monthly Revenue</div><div class="kpi-val">${fmtK(rev / Math.max(trendRows.length,1))}</div><div class="kpi-sub">${trendRows.length} months</div></div>
-      </div>
-      <div class="charts-grid" style="margin-bottom:16px">
-        <div class="card">
-          <div class="card-hdr"><span class="card-title">Monthly Revenue Trend</span><span class="card-badge">${trendRows.length} months</span></div>
-          <div class="chart-box tall"><canvas id="cBrandTrend"></canvas></div>
-        </div>
-        <div class="card">
-          <div class="card-hdr"><span class="card-title">Monthly Volume</span></div>
-          <div class="chart-box tall"><canvas id="cBrandQty"></canvas></div>
-        </div>
-      </div>
-      <div class="tbl-card" style="margin-bottom:16px">
-        <div class="tbl-hdr">
-          <span class="tbl-title">Top ${skuRows.length} SKUs</span>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span class="tbl-count">ranked by volume</span>
-            <button class="export-btn" onclick="exportCSV(exportData.brandSkus,'brand_sku_${brand}.csv')">⬇ CSV</button>
-          </div>
-        </div>
-        <div class="tbl-wrap">
-          <table><thead><tr>
-            <th style="width:48px">Rank</th><th>SKU</th><th>Product</th>
-            <th>First Sale</th><th>Last Sale</th>
-            <th class="num">Revenue</th><th class="num">GP</th><th class="num">GM%</th>
-            <th class="num">Volume</th><th class="num">Orders</th>
-          </tr></thead><tbody>
-            ${skuRows.map((r, idx) => {
-              const rv=parseFloat(r.revenue)||0, g=parseFloat(r.gp)||0, gm=rv>0?(g/rv*100).toFixed(1):0;
-              return `<tr>
-                <td style="text-align:center;font-weight:700;color:var(--blue2)">#${idx+1}</td>
-                <td style="font-family:monospace;font-size:11px">${r.SKU||'—'}</td>
-                <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.product||'—'}</td>
-                <td style="font-size:11px;color:var(--dim)">${r.first_date||'—'}</td>
-                <td style="font-size:11px;color:var(--dim)">${r.last_date||'—'}</td>
-                <td class="num">${fmt(rv)}</td>
-                <td class="num ${g>=0?'pos':'neg'}">${fmt(g)}</td>
-                <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
-                <td class="num">${parseInt(r.qty)||0}</td>
-                <td class="num">${parseInt(r.orders)||0}</td>
-              </tr>`;
-            }).join('')}
-          </tbody></table>
-        </div>
-      </div>
-      <div class="tbl-card" style="margin-bottom:24px">
-        <div class="tbl-hdr">
-          <span class="tbl-title">Customer Breakdown</span>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span class="tbl-count">${custRows.length} customers</span>
-            <button class="export-btn" onclick="exportCSV(exportData.brandCusts,'brand_customers_${brand}.csv')">⬇ CSV</button>
-          </div>
-        </div>
-        <div class="tbl-wrap">
-          <table><thead><tr>
-            <th>Customer</th>
-            <th>First Purchase</th><th>Last Purchase</th>
-            <th class="num">Revenue</th><th class="num">GP</th><th class="num">GM%</th>
-            <th class="num">Volume</th><th class="num">Orders</th>
-          </tr></thead><tbody>
-            ${custRows.map(r => {
-              const rv=parseFloat(r.revenue)||0, g=parseFloat(r.gp)||0, gm=rv>0?(g/rv*100).toFixed(1):0;
-              return `<tr>
-                <td>${r.customer||'—'}</td>
-                <td style="font-size:11px;color:var(--dim)">${r.first_date||'—'}</td>
-                <td style="font-size:11px;color:var(--dim)">${r.last_date||'—'}</td>
-                <td class="num">${fmt(rv)}</td>
-                <td class="num ${g>=0?'pos':'neg'}">${fmt(g)}</td>
-                <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
-                <td class="num">${parseInt(r.qty)||0}</td>
-                <td class="num">${parseInt(r.orders)||0}</td>
-              </tr>`;
-            }).join('')}
-          </tbody></table>
-        </div>
-      </div>
-    </div>
-  `;
-
-  const labels = trendRows.map(r => r.month);
-  mkChart('cBrandTrend', { type:'bar', data:{ labels, datasets:[
-    {label:'Volume (units)', data:trendRows.map(r=>parseInt(r.qty)||0), backgroundColor:'rgba(59,130,246,0.7)', borderRadius:4},
-    {label:'Trend', data:linReg(trendRows.map(r=>parseInt(r.qty)||0)), type:'line', borderColor:'rgba(249,115,22,0.9)', backgroundColor:'transparent', borderWidth:2, pointRadius:0, borderDash:[5,3], tension:0},
-  ]}, options:{...baseOpts(), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>ctx.dataset.label==='Trend'?null:' '+ctx.dataset.label+': '+parseInt(ctx.raw).toLocaleString()}}}}});
-
-  mkChart('cBrandQty', { type:'line', data:{ labels, datasets:[
-    {label:'Monthly Volume', data:trendRows.map(r=>parseInt(r.qty)||0), borderColor:'rgba(168,85,247,0.9)', backgroundColor:'rgba(168,85,247,0.15)', borderWidth:2, pointRadius:3, tension:0.3, fill:true},
-    {label:'Trend', data:linReg(trendRows.map(r=>parseInt(r.qty)||0)), borderColor:'#f97316', backgroundColor:'transparent', borderWidth:2, pointRadius:0, borderDash:[5,3], tension:0},
-  ]}, options:{...baseOpts(), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>ctx.dataset.label==='Trend'?null:' '+ctx.dataset.label+': '+parseInt(ctx.raw).toLocaleString()}}}}});
-}
 
 // ══════════════════════════════════════
-// CUSTOMER PERFORMANCE
+// OVERVIEW — MULTI-SELECT CHIPS (Brand / Customer / SKU)
 // ══════════════════════════════════════
-// ─── Multi-customer chip state ───
-let cCustList = [];
+const BRAND_COLORS    = ['#3b82f6','#22c55e','#f59e0b','#a855f7','#ef4444'];
 const CUSTOMER_COLORS = ['#3b82f6','#22c55e','#f59e0b','#a855f7','#ef4444'];
+const SKU_COLORS      = ['#14b8a6','#eab308','#ec4899','#6366f1','#f97316'];
+let searchBrandList = [], searchCustomerList = [], searchSkuList = [];
 
-function cCustKey(e) {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    const v = e.target.value.trim();
-    if (v) addCustChip(v);
-    return;
+function _addChip(list, max, kind, val) {
+  if (!val) return false;
+  if (list.length >= max) { alert('You can add up to ' + max + ' ' + kind); return false; }
+  if (list.some(x => x.toLowerCase() === val.toLowerCase())) return false;
+  list.push(val);
+  return true;
+}
+function addSearchBrandChip(v) {
+  if (_addChip(searchBrandList, 5, 'brands', v)) {
+    const inp = document.getElementById('searchBrand'); inp.value=''; document.getElementById('ac-searchBrand').style.display='none';
+    renderSearchBrandChips(); inp.focus();
   }
-  acKey(e, 'cCustomer');
 }
-function addCustChip(name) {
-  if (!name) return;
-  if (cCustList.length >= 5) { alert('You can compare up to 5 customers'); return; }
-  if (cCustList.some(c => c.toLowerCase() === name.toLowerCase())) return;
-  cCustList.push(name);
-  const inp = document.getElementById('cCustomer');
-  inp.value = '';
-  document.getElementById('ac-cCustomer').style.display = 'none';
-  renderCustChips();
-  inp.focus();
-}
-function removeCustChip(name) {
-  cCustList = cCustList.filter(c => c !== name);
-  renderCustChips();
-}
-function renderCustChips() {
-  const container = document.getElementById('cCustChips');
-  const inp = document.getElementById('cCustomer');
-  container.querySelectorAll('.cust-chip').forEach(n => n.remove());
-  cCustList.forEach((c, i) => {
+function removeSearchBrandChip(v) { searchBrandList = searchBrandList.filter(x => x !== v); renderSearchBrandChips(); }
+function renderSearchBrandChips() {
+  const c = document.getElementById('searchBrandChips');
+  const inp = document.getElementById('searchBrand');
+  c.querySelectorAll('.chip').forEach(n => n.remove());
+  searchBrandList.forEach((v,i) => {
+    const color = BRAND_COLORS[i] || '#3b82f6';
     const chip = document.createElement('span');
-    chip.className = 'cust-chip';
-    chip.style.cssText = `display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:${CUSTOMER_COLORS[i]}22;border:1px solid ${CUSTOMER_COLORS[i]};color:${CUSTOMER_COLORS[i]};border-radius:12px;font-size:11px;font-weight:600;max-width:220px`;
-    const safe = c.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    chip.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c}">${c}</span><span style="cursor:pointer;font-weight:700;flex-shrink:0" onclick="removeCustChip('${safe}')">×</span>`;
-    container.insertBefore(chip, inp);
+    chip.className = 'chip';
+    chip.style.cssText = `display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:${color}22;border:1px solid ${color};color:${color};border-radius:12px;font-size:11px;font-weight:600;max-width:200px`;
+    const safe = v.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    chip.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${v.replace(/"/g,'&quot;')}">${v}</span><span style="cursor:pointer;font-weight:700;flex-shrink:0" onclick="removeSearchBrandChip('${safe}')">×</span>`;
+    c.insertBefore(chip, inp);
   });
 }
-
-async function runCustomerSearch() {
-  const remaining = document.getElementById('cCustomer').value.trim();
-  if (remaining) addCustChip(remaining);
-
-  const customers = [...cCustList];
-  const branch   = document.getElementById('cBranch').value;
-  const source   = document.getElementById('cCustChannel').value;
-  const dateFrom = document.getElementById('cDateFrom').value;
-  const dateTo   = document.getElementById('cDateTo').value;
-
-  if (!customers.length) {
-    document.getElementById('customerContent').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Please enter at least one customer</div></div>`;
-    return;
-  }
-  const btn = document.getElementById('cSearchBtn');
-  btn.disabled = true; btn.textContent = '⏳ Querying...';
-  document.getElementById('customerContent').innerHTML = '<div class="loading"><div class="spinner"></div> Querying BigQuery...</div>';
-
-  const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
-  // Apostrophe-safe literal encoder (same pattern as brand tab)
-  const sqlStr = s => "'" + s.replace(/\\/g,'\\\\').replace(/'/g,'\\u0027').replace(/\n/g,'\\n') + "'";
-  const custClauses = customers.map(c => `LOWER(Customer_Clean) LIKE LOWER(${sqlStr('%'+c.toLowerCase()+'%')})`);
-  const conds = ['(' + custClauses.join(' OR ') + ')'];
-  if (branch)   conds.push(`Location = ${sqlStr(branch)}`);
-  if (source)   conds.push(`Source_Clean = ${sqlStr(source)}`);
-  if (dateFrom) conds.push(`Date >= '${dateFrom}'`);
-  if (dateTo)   conds.push(`Date <= '${dateTo}'`);
-  const where = 'WHERE ' + conds.join(' AND ');
-
-  const caseExpr = 'CASE ' + customers.map(c =>
-    `WHEN LOWER(Customer_Clean) LIKE LOWER(${sqlStr('%'+c.toLowerCase()+'%')}) THEN ${sqlStr(c)}`
-  ).join(' ') + ' ELSE NULL END';
-
-  try {
-    const queries = [
-      bqQuery(`SELECT ${caseExpr} as cust_label, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders, COUNT(DISTINCT Brand_Clean) as brands, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY cust_label HAVING cust_label IS NOT NULL`),
-      bqQuery(`SELECT ${caseExpr} as cust_label, FORMAT_DATE('%Y-%m', Date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY cust_label, month HAVING cust_label IS NOT NULL ORDER BY month`),
-      // Top 10 products per customer (works for single AND multi)
-      bqQuery(`SELECT cust_label, SKU, product, brand, qty, revenue, gp, orders, avg_price, first_date, last_date FROM (
-        SELECT ${caseExpr} as cust_label, SKU, MAX(Product_Name) as product, MAX(Brand_Clean) as brand, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, ROUND(SUM(Total)/NULLIF(SUM(Quantity),0),2) as avg_price, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY cust_label, SKU HAVING cust_label IS NOT NULL
-      ) QUALIFY ROW_NUMBER() OVER (PARTITION BY cust_label ORDER BY qty DESC) <= 10 ORDER BY cust_label, qty DESC`),
-    ];
-    if (customers.length === 1) {
-      queries.push(
-        bqQuery(`SELECT Brand_Clean as brand, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY brand ORDER BY qty DESC LIMIT 30`)
-      );
-    }
-    const results = await Promise.all(queries);
-    const summaryRows = results[0];
-    const trendRows   = results[1];
-    const topSkuRows  = results[2] || [];
-    const brandRows   = results[3] || [];
-    // skuRows for single-mode = topSkuRows (already filtered to one customer)
-    const skuRows = topSkuRows;
-
-    btn.disabled = false; btn.textContent = '🔍 Analyze';
-    if (!summaryRows.length) {
-      document.getElementById('customerContent').innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">No Results</div><div class="empty-desc">No data found for the selected customer(s)</div></div>`;
-      return;
-    }
-    renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows, topSkuRows, customers });
-  } catch(e) {
-    btn.disabled = false; btn.textContent = '🔍 Analyze';
-    document.getElementById('customerContent').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Query Error</div><div class="empty-desc">${e.message}</div></div>`;
-  }
+function searchBrandKey(e) {
+  if (e.key === 'Enter') { e.preventDefault(); const v=e.target.value.trim(); if(v) addSearchBrandChip(v); return; }
+  if (e.key === 'Backspace' && !e.target.value && searchBrandList.length) { searchBrandList.pop(); renderSearchBrandChips(); return; }
+  acKey(e, 'searchBrand');
 }
 
-function renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows, topSkuRows, customers }) {
-  const isMulti = customers.length > 1;
-  const customer = customers[0];
-
-  // ── MULTI-CUSTOMER COMPARISON VIEW ──
-  if (isMulti) {
-    const summaryByCust = {};
-    summaryRows.forEach(r => { summaryByCust[r.cust_label] = r; });
-    const orderedSummary = customers.map(c => summaryByCust[c]).filter(Boolean);
-
-    const monthSet = new Set();
-    trendRows.forEach(r => monthSet.add(r.month));
-    const months = [...monthSet].sort();
-
-    const pivot = {};
-    customers.forEach(c => { pivot[c] = {}; months.forEach(m => pivot[c][m] = { rev:0, gp:0, qty:0, orders:0 }); });
-    trendRows.forEach(r => {
-      if (pivot[r.cust_label] && pivot[r.cust_label][r.month]) {
-        pivot[r.cust_label][r.month] = {
-          rev: parseFloat(r.revenue)||0, gp: parseFloat(r.gp)||0,
-          qty: parseInt(r.qty)||0, orders: parseInt(r.orders)||0
-        };
-      }
-    });
-
-    exportData.custCompare = [];
-    customers.forEach(c => months.forEach(m => {
-      const x = pivot[c][m];
-      exportData.custCompare.push({ Customer:c, Month:m, Revenue:x.rev, Gross_Profit:x.gp, GM_Pct: x.rev>0?(x.gp/x.rev*100).toFixed(1):0, Quantity:x.qty, Orders:x.orders });
-    }));
-
-    const today = new Date();
-    const kpiCards = orderedSummary.map(s => {
-      const color = CUSTOMER_COLORS[customers.indexOf(s.cust_label)] || '#3b82f6';
-      const rev = parseFloat(s.revenue)||0, gp = parseFloat(s.gp)||0;
-      const gm = rev > 0 ? (gp/rev*100).toFixed(1) : '0';
-      const cMonths = months.map(m => pivot[s.cust_label][m].rev);
-      const mid = Math.floor(cMonths.length/2);
-      const firstHalf = cMonths.slice(0,mid).reduce((a,b)=>a+b,0);
-      const secondHalf = cMonths.slice(mid).reduce((a,b)=>a+b,0);
-      const growth = firstHalf>0 ? ((secondHalf-firstHalf)/firstHalf*100).toFixed(1) : 'N/A';
-      const growthColor = growth === 'N/A' ? 'var(--dim)' : (parseFloat(growth)>=0 ? 'var(--green)' : 'var(--red)');
-      const growthSign = growth !== 'N/A' && parseFloat(growth)>=0 ? '+' : '';
-      // Days since last purchase
-      let daysAgo = '—';
-      if (s.last_date) {
-        const d = new Date(s.last_date);
-        const diff = Math.floor((today - d) / (1000*60*60*24));
-        daysAgo = diff + ' days ago';
-      }
-      return `
-        <div style="background:#0f1625;border:1px solid ${color};border-left:3px solid ${color};border-radius:6px;padding:12px 14px;min-width:190px;flex:1">
-          <div style="font-size:12px;font-weight:700;color:${color};margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${s.cust_label}">${s.cust_label}</div>
-          <div style="font-size:10px;color:var(--dim);margin-bottom:8px">Last Purchase: ${s.last_date||'—'} · ${daysAgo}</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:11px">
-            <div><div style="color:var(--dim);font-size:10px">Revenue</div><div style="font-weight:600;color:var(--text)">${fmtK(rev)}</div></div>
-            <div><div style="color:var(--dim);font-size:10px">GP</div><div style="font-weight:600;color:var(--text)">${fmtK(gp)}</div></div>
-            <div><div style="color:var(--dim);font-size:10px">GM%</div><div style="font-weight:600;color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</div></div>
-            <div><div style="color:var(--dim);font-size:10px">Growth</div><div style="font-weight:600;color:${growthColor}">${growth==='N/A'?'N/A':growthSign+growth+'%'}</div></div>
-            <div><div style="color:var(--dim);font-size:10px">Orders</div><div style="font-weight:600;color:var(--text)">${parseInt(s.orders)||0}</div></div>
-            <div><div style="color:var(--dim);font-size:10px">Brand</div><div style="font-weight:600;color:var(--text)">${parseInt(s.brands)||0}</div></div>
-          </div>
-        </div>`;
-    }).join('');
-
-    // Group topSkuRows by customer for per-customer Top 10 product tables
-    const skusByCust = {};
-    (topSkuRows||[]).forEach(r => {
-      if (!skusByCust[r.cust_label]) skusByCust[r.cust_label] = [];
-      skusByCust[r.cust_label].push(r);
-    });
-    exportData.custTopSkus = [];
-    customers.forEach(c => (skusByCust[c]||[]).forEach(r => {
-      exportData.custTopSkus.push({ Customer:c, SKU:r.SKU, Product:r.product, Brand:r.brand, Volume:parseInt(r.qty)||0, Avg_Price:r.avg_price, Revenue:parseFloat(r.revenue)||0, Gross_Profit:parseFloat(r.gp)||0, GM_Pct: parseFloat(r.revenue)>0?(parseFloat(r.gp)/parseFloat(r.revenue)*100).toFixed(1):0, Orders:parseInt(r.orders)||0 });
-    }));
-    const custSkuSections = customers.map((c, i) => {
-      const color = CUSTOMER_COLORS[i] || '#3b82f6';
-      const list = skusByCust[c] || [];
-      if (!list.length) return '';
-      const rowsHtml = list.map((r, idx) => {
-        const rv = parseFloat(r.revenue)||0, g = parseFloat(r.gp)||0;
-        const gm = rv > 0 ? (g/rv*100).toFixed(1) : 0;
-        return `<tr>
-          <td style="text-align:center;color:${color};font-weight:700">#${idx+1}</td>
-          <td style="font-family:monospace;font-size:11px">${r.SKU||'—'}</td>
-          <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.product||'').replace(/"/g,'&quot;')}">${r.product||'—'}</td>
-          <td style="font-size:11px;color:var(--dim)">${r.brand||'—'}</td>
-          <td class="num">${(parseInt(r.qty)||0).toLocaleString()}</td>
-          <td class="num">${fmt(rv)}</td>
-          <td class="num ${g>=0?'pos':'neg'}">${fmt(g)}</td>
-          <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
-          <td class="num">${parseInt(r.orders)||0}</td>
-        </tr>`;
-      }).join('');
-      return `
-        <div class="tbl-card" style="margin-bottom:16px;border-left:3px solid ${color}">
-          <div class="tbl-hdr">
-            <span class="tbl-title" style="color:${color}">👤 ${c} — Top ${list.length} Products</span>
-          </div>
-          <div class="tbl-wrap">
-            <table><thead><tr>
-              <th style="width:48px">Rank</th><th>SKU</th><th>Product</th><th>Brand</th>
-              <th class="num">Volume</th><th class="num">Revenue</th><th class="num">GP</th><th class="num">GM%</th><th class="num">Orders</th>
-            </tr></thead><tbody>${rowsHtml}</tbody></table>
-          </div>
-        </div>`;
-    }).join('');
-
-    document.getElementById('customerContent').innerHTML = `
-      <div style="padding:20px 24px 24px">
-        <div style="margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-          <span style="font-size:13px;font-weight:700;color:var(--text)">👥 Customer Comparison (${customers.length} customers)</span>
-          <button class="export-btn" onclick="exportCSV(exportData.custCompare,'customer_compare.csv')">⬇ Compare CSV</button>
-          <button class="export-btn" onclick="exportCSV(exportData.custTopSkus,'customer_top_products.csv')">⬇ Top Products CSV</button>
-        </div>
-        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px">${kpiCards}</div>
-        <div class="charts-grid" style="margin-bottom:16px">
-          <div class="card">
-            <div class="card-hdr"><span class="card-title">Monthly Volume Trend</span><span class="card-badge">${months.length} months</span></div>
-            <div class="chart-box tall"><canvas id="cCustCmpRev"></canvas></div>
-          </div>
-          <div class="card">
-            <div class="card-hdr"><span class="card-title">Monthly Growth Comparison</span></div>
-            <div class="chart-box tall"><canvas id="cCustCmpGm"></canvas></div>
-          </div>
-        </div>
-        <div style="margin:24px 0 12px;font-size:12px;font-weight:700;color:var(--mid);letter-spacing:1px;text-transform:uppercase">Top 10 Products by Customer</div>
-        ${custSkuSections}
-      </div>
-    `;
-
-    const revDatasets = customers.map((c,i) => ({
-      label: c, data: months.map(m => pivot[c][m].qty),
-      borderColor: CUSTOMER_COLORS[i], backgroundColor: CUSTOMER_COLORS[i]+'33',
-      tension: 0.3, borderWidth: 2, pointRadius: 3
-    }));
-    mkChart('cCustCmpRev', { type:'line', data:{ labels:months, datasets:revDatasets },
-      options:{...baseOpts(), plugins:{...baseOpts().plugins, legend:{display:true,position:'top',labels:{color:'#94a3b8',font:{size:10}}}, tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>' '+ctx.dataset.label+': '+parseInt(ctx.raw).toLocaleString()+' units'}}}}});
-
-    const gmDatasets = customers.map((c,i) => {
-      const qArr = months.map(m => pivot[c][m].qty);
-      const growArr = qArr.map((v,idx) => idx===0?null:(qArr[idx-1]>0?+((v-qArr[idx-1])/qArr[idx-1]*100).toFixed(1):null));
-      return { label:c, data:growArr, borderColor:CUSTOMER_COLORS[i], backgroundColor:CUSTOMER_COLORS[i]+'33', tension:0.3, borderWidth:2, pointRadius:3, spanGaps:true };
-    });
-    mkChart('cCustCmpGm', { type:'line', data:{ labels:months, datasets:gmDatasets },
-      options:{...baseOpts(), plugins:{...baseOpts().plugins, legend:{display:true,position:'top',labels:{color:'#94a3b8',font:{size:10}}}, tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>' '+ctx.dataset.label+': '+(ctx.raw==null?'—':ctx.raw+'%')}}}, scales:{...baseOpts().scales, y:{...baseOpts().scales.y, ticks:{...baseOpts().scales.y.ticks, callback:v=>v+'%'}}}}});
-    return;
+function addSearchCustomerChip(v) {
+  if (_addChip(searchCustomerList, 5, 'customers', v)) {
+    const inp = document.getElementById('searchCustomer'); inp.value=''; document.getElementById('ac-searchCustomer').style.display='none';
+    renderSearchCustomerChips(); inp.focus();
   }
+}
+function removeSearchCustomerChip(v) { searchCustomerList = searchCustomerList.filter(x => x !== v); renderSearchCustomerChips(); }
+function renderSearchCustomerChips() {
+  const c = document.getElementById('searchCustomerChips');
+  const inp = document.getElementById('searchCustomer');
+  c.querySelectorAll('.chip').forEach(n => n.remove());
+  searchCustomerList.forEach((v,i) => {
+    const color = CUSTOMER_COLORS[i] || '#3b82f6';
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.style.cssText = `display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:${color}22;border:1px solid ${color};color:${color};border-radius:12px;font-size:11px;font-weight:600;max-width:220px`;
+    const safe = v.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    chip.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${v.replace(/"/g,'&quot;')}">${v}</span><span style="cursor:pointer;font-weight:700;flex-shrink:0" onclick="removeSearchCustomerChip('${safe}')">×</span>`;
+    c.insertBefore(chip, inp);
+  });
+}
+function searchCustomerKey(e) {
+  if (e.key === 'Enter') { e.preventDefault(); const v=e.target.value.trim(); if(v) addSearchCustomerChip(v); return; }
+  if (e.key === 'Backspace' && !e.target.value && searchCustomerList.length) { searchCustomerList.pop(); renderSearchCustomerChips(); return; }
+  acKey(e, 'searchCustomer');
+}
 
-  // ── SINGLE CUSTOMER DEEP-DIVE (original) ──
-  const s0 = summaryRows[0] || {};
-  const singleSummary = [{
-    customer: s0.cust_label || customer,
-    revenue: s0.revenue, gp: s0.gp, qty: s0.qty,
-    orders: s0.orders, brands: s0.brands,
-    first_date: s0.first_date, last_date: s0.last_date
-  }];
+function addSearchSkuChip(v) {
+  if (_addChip(searchSkuList, 5, 'SKUs', v)) {
+    const inp = document.getElementById('searchSku'); inp.value='';
+    renderSearchSkuChips(); inp.focus();
+  }
+}
+function removeSearchSkuChip(v) { searchSkuList = searchSkuList.filter(x => x !== v); renderSearchSkuChips(); }
+function renderSearchSkuChips() {
+  const c = document.getElementById('searchSkuChips');
+  const inp = document.getElementById('searchSku');
+  c.querySelectorAll('.chip').forEach(n => n.remove());
+  searchSkuList.forEach((v,i) => {
+    const color = SKU_COLORS[i] || '#14b8a6';
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.style.cssText = `display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:${color}22;border:1px solid ${color};color:${color};border-radius:12px;font-size:11px;font-weight:600;max-width:200px`;
+    const safe = v.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    chip.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:monospace" title="${v.replace(/"/g,'&quot;')}">${v}</span><span style="cursor:pointer;font-weight:700;flex-shrink:0" onclick="removeSearchSkuChip('${safe}')">×</span>`;
+    c.insertBefore(chip, inp);
+  });
+}
+function searchSkuKey(e) {
+  if (e.key === 'Enter') { e.preventDefault(); const v=e.target.value.trim(); if(v) addSearchSkuChip(v); return; }
+  if (e.key === 'Backspace' && !e.target.value && searchSkuList.length) { searchSkuList.pop(); renderSearchSkuChips(); return; }
+}
 
-  // Cache for export
-  exportData.custTrend  = trendRows.map(r => ({ Customer: customer, Month: r.month, Revenue: r.revenue, Gross_Profit: r.gp, Quantity: r.qty, Orders: r.orders }));
-  exportData.custBrands = brandRows.map(r => ({ Customer: customer, Brand: r.brand, First_Date: r.first_date, Last_Date: r.last_date, Revenue: r.revenue, Gross_Profit: r.gp, GM_Pct: (parseFloat(r.revenue)>0?(parseFloat(r.gp)/parseFloat(r.revenue)*100).toFixed(1):0), Quantity: r.qty, Orders: r.orders }));
-  exportData.custSkus   = skuRows.map(r => ({ Customer: customer, SKU: r.SKU, Product: r.product, Brand: r.brand, First_Date: r.first_date, Last_Date: r.last_date, Avg_Price: r.avg_price, Revenue: r.revenue, Gross_Profit: r.gp, GM_Pct: (parseFloat(r.revenue)>0?(parseFloat(r.gp)/parseFloat(r.revenue)*100).toFixed(1):0), Quantity: r.qty, Orders: r.orders }));
-  const s = singleSummary[0] || {};
-  const rev = parseFloat(s.revenue)||0, gp = parseFloat(s.gp)||0;
-  const gm = rev > 0 ? (gp/rev*100).toFixed(1) : '0';
-  const avgOrder = (parseInt(s.orders)||0) > 0 ? rev / (parseInt(s.orders)||1) : 0;
-
-  document.getElementById('customerContent').innerHTML = `
-    <div style="padding:20px 24px 0">
-      <div style="margin-bottom:14px">
-        <span style="font-size:13px;font-weight:700;color:var(--text)">${s.customer || customer}</span>
-        <span style="font-size:11px;color:var(--dim);margin-left:8px">${s.first_date||''} ~ ${s.last_date||''}</span>
-      </div>
-      <div class="kpi-strip" style="margin-bottom:20px">
-        <div class="kpi blue"><div class="kpi-lbl">Total Revenue</div><div class="kpi-val">${fmtK(rev)}</div><div class="kpi-sub">${parseInt(s.orders)||0} orders</div></div>
-        <div class="kpi green"><div class="kpi-lbl">Gross Profit</div><div class="kpi-val">${fmtK(gp)}</div><div class="kpi-sub">GM ${gm}%</div></div>
-        <div class="kpi yellow"><div class="kpi-lbl">Total Units</div><div class="kpi-val">${(parseInt(s.qty)||0).toLocaleString()}</div><div class="kpi-sub">units</div></div>
-        <div class="kpi teal"><div class="kpi-lbl">Avg. Order Value</div><div class="kpi-val">${fmtK(avgOrder)}</div><div class="kpi-sub">per order</div></div>
-        <div class="kpi purple"><div class="kpi-lbl">Brands Purchased</div><div class="kpi-val">${parseInt(s.brands)||0}</div><div class="kpi-sub">brands</div></div>
-        <div class="kpi blue"><div class="kpi-lbl">Top Products Shown</div><div class="kpi-val">${skuRows.length}</div><div class="kpi-sub">by volume</div></div>
-      </div>
-      <div class="charts-grid" style="margin-bottom:16px">
-        <div class="card">
-          <div class="card-hdr"><span class="card-title">Monthly Purchase Trend</span><span class="card-badge">${trendRows.length} months</span></div>
-          <div class="chart-box tall"><canvas id="cCustTrend"></canvas></div>
-        </div>
-        <div class="card">
-          <div class="card-hdr"><span class="card-title">Revenue by Brand</span></div>
-          <div class="chart-box tall"><canvas id="cCustBrand"></canvas></div>
-        </div>
-      </div>
-      <div class="tbl-card" style="margin-bottom:16px">
-        <div class="tbl-hdr">
-          <span class="tbl-title">Brand Breakdown</span>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span class="tbl-count">${brandRows.length} brands</span>
-            <button class="export-btn" onclick="exportCSV(exportData.custBrands,'customer_brands_${customer}.csv')">⬇ CSV</button>
-          </div>
-        </div>
-        <div class="tbl-wrap">
-          <table><thead><tr>
-            <th>Brand</th>
-            <th>First Purchase</th><th>Last Purchase</th>
-            <th class="num">Revenue</th><th class="num">GP</th><th class="num">GM%</th>
-            <th class="num">Volume</th><th class="num">Orders</th>
-          </tr></thead><tbody>
-            ${brandRows.map(r => {
-              const rv=parseFloat(r.revenue)||0, g=parseFloat(r.gp)||0, gm=rv>0?(g/rv*100).toFixed(1):0;
-              return `<tr>
-                <td style="font-weight:500">${r.brand||'—'}</td>
-                <td style="font-size:11px;color:var(--dim)">${r.first_date||'—'}</td>
-                <td style="font-size:11px;color:var(--dim)">${r.last_date||'—'}</td>
-                <td class="num">${fmt(rv)}</td>
-                <td class="num ${g>=0?'pos':'neg'}">${fmt(g)}</td>
-                <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
-                <td class="num">${parseInt(r.qty)||0}</td>
-                <td class="num">${parseInt(r.orders)||0}</td>
-              </tr>`;
-            }).join('')}
-          </tbody></table>
-        </div>
-      </div>
-      <div class="tbl-card" style="margin-bottom:24px">
-        <div class="tbl-hdr">
-          <span class="tbl-title">Top ${skuRows.length} Products</span>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span class="tbl-count">ranked by volume</span>
-            <button class="export-btn" onclick="exportCSV(exportData.custSkus,'customer_skus_${customer}.csv')">⬇ CSV</button>
-          </div>
-        </div>
-        <div class="tbl-wrap">
-          <table><thead><tr>
-            <th style="width:48px">Rank</th><th>SKU</th><th>Product</th><th>Brand</th>
-            <th>First Purchase</th><th>Last Purchase</th>
-            <th class="num">Avg. Unit Price</th><th class="num">Revenue</th>
-            <th class="num">GP</th><th class="num">GM%</th><th class="num">Volume</th>
-          </tr></thead><tbody>
-            ${skuRows.map((r, idx) => {
-              const rv=parseFloat(r.revenue)||0, g=parseFloat(r.gp)||0, gm=rv>0?(g/rv*100).toFixed(1):0;
-              return `<tr>
-                <td style="text-align:center;font-weight:700;color:var(--blue2)">#${idx+1}</td>
-                <td style="font-family:monospace;font-size:11px">${r.SKU||'—'}</td>
-                <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.product||'—'}</td>
-                <td style="font-size:11px;color:var(--mid)">${r.brand||'—'}</td>
-                <td style="font-size:11px;color:var(--dim)">${r.first_date||'—'}</td>
-                <td style="font-size:11px;color:var(--dim)">${r.last_date||'—'}</td>
-                <td class="num" style="font-family:monospace">$${parseFloat(r.avg_price||0).toFixed(2)}</td>
-                <td class="num">${fmt(rv)}</td>
-                <td class="num ${g>=0?'pos':'neg'}">${fmt(g)}</td>
-                <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
-                <td class="num">${parseInt(r.qty)||0}</td>
-              </tr>`;
-            }).join('')}
-          </tbody></table>
-        </div>
-      </div>
-    </div>
-  `;
-
-  const labels = trendRows.map(r => r.month);
-  const cqtyData = trendRows.map(r=>parseInt(r.qty)||0);
-  mkChart('cCustTrend', { type:'bar', data:{ labels, datasets:[
-    {label:'Volume (units)', data:cqtyData, backgroundColor:'rgba(59,130,246,0.7)', borderRadius:4},
-    {label:'Trend', data:linReg(cqtyData), type:'line', borderColor:'rgba(249,115,22,0.9)', backgroundColor:'transparent', borderWidth:2, pointRadius:0, borderDash:[5,3], tension:0},
-  ]}, options:{...baseOpts(), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>ctx.dataset.label==='Trend'?null:' '+ctx.dataset.label+': '+parseInt(ctx.raw).toLocaleString()}}}}});
-
-  const COLORS = ['rgba(59,130,246,0.8)','rgba(34,197,94,0.8)','rgba(249,115,22,0.8)','rgba(168,85,247,0.8)','rgba(20,184,166,0.8)','rgba(234,179,8,0.8)','rgba(239,68,68,0.8)','rgba(99,102,241,0.8)'];
-  mkChart('cCustBrand', { type:'doughnut', data:{ labels: brandRows.slice(0,8).map(r=>r.brand), datasets:[{ data: brandRows.slice(0,8).map(r=>parseInt(r.qty)||0), backgroundColor: COLORS, borderWidth:1, borderColor:'#080a0f' }]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:10},boxWidth:10}},tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+parseInt(ctx.raw).toLocaleString()+' units'}}}}});
+// ══════════════════════════════════════
+// SORTABLE TABLES — clickable headers with persistent state
+// ══════════════════════════════════════
+const _tableState = {}; // tableKey -> { col, asc }
+function _coerce(v, type) {
+  if (v == null || v === '—') return type === 'num' ? -Infinity : '';
+  if (type === 'num') { const n = parseFloat(String(v).replace(/[$,%\s]/g,'')); return isNaN(n) ? -Infinity : n; }
+  return String(v).toLowerCase();
+}
+function sortTable(th, key, colIdx, type) {
+  const tbl = th.closest('table');
+  const tbody = tbl.querySelector('tbody');
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  const st = _tableState[key] || { col: -1, asc: false };
+  const asc = st.col === colIdx ? !st.asc : (type === 'num' ? false : true);
+  _tableState[key] = { col: colIdx, asc };
+  rows.sort((a,b) => {
+    const av = _coerce(a.children[colIdx]?.dataset.sort ?? a.children[colIdx]?.textContent, type);
+    const bv = _coerce(b.children[colIdx]?.dataset.sort ?? b.children[colIdx]?.textContent, type);
+    if (av < bv) return asc ? -1 : 1;
+    if (av > bv) return asc ? 1 : -1;
+    return 0;
+  });
+  rows.forEach(r => tbody.appendChild(r));
+  tbl.querySelectorAll('th.sortable').forEach(h => { h.dataset.sortDir = ''; });
+  th.dataset.sortDir = asc ? 'asc' : 'desc';
+}
+function _sortHdr(label, key, idx, type, extra='') {
+  return `<th class="sortable" onclick="sortTable(this,'${key}',${idx},'${type}')" style="cursor:pointer;user-select:none${extra?';'+extra:''}">${label}<span class="sort-ind" style="font-size:9px;opacity:0.5;margin-left:3px">⇅</span></th>`;
 }
 
 // ══════════════════════════════════════
@@ -2181,14 +1490,8 @@ function acInput(input, fieldId, type='customer') {
 function acSelect(e, fieldId) {
   e.preventDefault();
   const val = e.currentTarget.dataset.val;
-  if (fieldId === 'bBrand') {
-    addBrandChip(val);
-    return;
-  }
-  if (fieldId === 'cCustomer') {
-    addCustChip(val);
-    return;
-  }
+  if (fieldId === 'searchBrand')    { addSearchBrandChip(val); return; }
+  if (fieldId === 'searchCustomer') { addSearchCustomerChip(val); return; }
   const input = document.getElementById(fieldId);
   input.value = val;
   document.getElementById('ac-' + fieldId).style.display = 'none';
@@ -2255,277 +1558,6 @@ function exportCSV(rows, filename) {
   URL.revokeObjectURL(url);
 }
 
-// ══════════════════════════════════════
-// MONTHLY COMPARISON
-// ══════════════════════════════════════
-const FY_MONTH = 9; // Fiscal Year start month (Sept)
-
-function getFYRange(offset) {
-  // offset=0: current FY, offset=-1: prior FY
-  const today = new Date();
-  const m = today.getMonth() + 1; // 1-12
-  const y = today.getFullYear();
-  const fyStartYear = m >= FY_MONTH ? y + offset : y - 1 + offset;
-  const from = `${fyStartYear}-0${FY_MONTH}-01`;
-  const to   = `${fyStartYear + 1}-0${FY_MONTH - 1}-${new Date(fyStartYear+1, FY_MONTH-1, 0).getDate()}`;
-  return { from, to, label: `FY${fyStartYear}/${String(fyStartYear+1).slice(2)}` };
-}
-
-function getFYYTD(offset) {
-  const today = new Date();
-  const m = today.getMonth() + 1;
-  const y = today.getFullYear();
-  const fyStartYear = m >= FY_MONTH ? y + offset : y - 1 + offset;
-  const from = `${fyStartYear}-0${FY_MONTH}-01`;
-  // YTD: elapsed days match
-  const elapsed = Math.floor((today - new Date(`${fyStartYear}-0${FY_MONTH}-01`)) / 86400000);
-  const toDate = new Date(`${fyStartYear}-0${FY_MONTH}-01`);
-  toDate.setDate(toDate.getDate() + elapsed);
-  const to = toDate.toISOString().slice(0,10);
-  return { from, to, label: `FY${fyStartYear}/${String(fyStartYear+1).slice(2)} YTD` };
-}
-
-async function runQuick(type) {
-  const today = new Date();
-  const fmt = d => d instanceof Date ? d.toISOString().slice(0,10) : d;
-  const y = today.getFullYear();
-  const m = today.getMonth() + 1;
-  let from1, to1, from2, to2, label1, label2;
-
-  if (type === 'rolling12') {
-    const t1 = new Date(today);
-    const f1 = new Date(today); f1.setFullYear(f1.getFullYear()-1); f1.setDate(f1.getDate()+1);
-    const t2 = new Date(f1); t2.setDate(t2.getDate()-1);
-    const f2 = new Date(t2); f2.setFullYear(f2.getFullYear()-1); f2.setDate(f2.getDate()+1);
-    from1=fmt(f1); to1=fmt(t1); from2=fmt(f2); to2=fmt(t2);
-    label1=`${from1} ~ ${to1}`; label2=`${from2} ~ ${to2}`;
-
-  } else if (type === 'fy_cur') {
-    const cur  = getFYRange(0);
-    const prev = getFYRange(-1);
-    from1=cur.from;  to1=cur.to;  label1=cur.label;
-    from2=prev.from; to2=prev.to; label2=prev.label;
-
-  } else if (type === 'fy_ytd') {
-    const cur  = getFYYTD(0);
-    const prev = getFYYTD(-1);
-    from1=cur.from;  to1=cur.to;  label1=cur.label;
-    from2=prev.from; to2=prev.to; label2=prev.label;
-
-  } else if (type === 'q1') {
-    from1=`${y}-01-01`; to1=`${y}-03-31`; label1=`${y} Q1`;
-    from2=`${y-1}-01-01`; to2=`${y-1}-03-31`; label2=`${y-1} Q1`;
-  } else if (type === 'q2') {
-    from1=`${y}-04-01`; to1=`${y}-06-30`; label1=`${y} Q2`;
-    from2=`${y-1}-04-01`; to2=`${y-1}-06-30`; label2=`${y-1} Q2`;
-  } else if (type === 'q3') {
-    from1=`${y}-07-01`; to1=`${y}-09-30`; label1=`${y} Q3`;
-    from2=`${y-1}-07-01`; to2=`${y-1}-09-30`; label2=`${y-1} Q3`;
-  } else if (type === 'q4') {
-    from1=`${y}-10-01`; to1=`${y}-12-31`; label1=`${y} Q4`;
-    from2=`${y-1}-10-01`; to2=`${y-1}-12-31`; label2=`${y-1} Q4`;
-  } else if (type === 'h1') {
-    from1=`${y}-01-01`; to1=`${y}-06-30`; label1=`${y} H1`;
-    from2=`${y-1}-01-01`; to2=`${y-1}-06-30`; label2=`${y-1} H1`;
-  } else if (type === 'h2') {
-    from1=`${y}-07-01`; to1=`${y}-12-31`; label1=`${y} H2`;
-    from2=`${y-1}-07-01`; to2=`${y-1}-12-31`; label2=`${y-1} H2`;
-  }
-
-  await runMonthlyComparison('custom', { from1, to1, from2, to2, label1, label2 });
-}
-
-async function runMonthlyComparison(mode='year', custom=null) {
-  const branch   = document.getElementById('mBranch').value;
-  const brand    = document.getElementById('mBrand').value.trim();
-  const customer = document.getElementById('mCustomer').value.trim();
-
-  let from1, to1, from2, to2, label1, label2;
-
-  if (mode === 'year') {
-    const year1 = document.getElementById('mYear1').value;
-    const year2 = document.getElementById('mYear2').value;
-    from1=`${year1}-01-01`; to1=`${year1}-12-31`; label1=year1;
-    from2=`${year2}-01-01`; to2=`${year2}-12-31`; label2=year2;
-  } else {
-    ({ from1, to1, from2, to2, label1, label2 } = custom);
-  }
-
-  const btn = document.getElementById('mSearchBtn');
-  btn.disabled = true; btn.textContent = '⏳ Querying...';
-  document.getElementById('monthlyContent').innerHTML = '<div class="loading"><div class="spinner"></div> Querying BigQuery...</div>';
-
-  const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
-  const conds = [];
-  if (branch)   conds.push(`Location = '${branch.replace(/'/g,"''")}'`);
-  if (brand)    conds.push(`LOWER(Brand_Clean) LIKE LOWER('%${brand.replace(/'/g,"''")}%')`);
-  if (customer) conds.push(`LOWER(Customer_Clean) LIKE LOWER('%${customer.replace(/'/g,"''")}%')`);
-  const baseWhere = conds.length ? 'AND ' + conds.join(' AND ') : '';
-
-  try {
-    const [rows1, rows2] = await Promise.all([
-      bqQuery(`SELECT FORMAT_DATE('%Y-%m', Date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders, COUNT(DISTINCT Customer_Clean) as customers FROM ${fullTable} WHERE Date >= '${from1}' AND Date <= '${to1}' ${baseWhere} GROUP BY month ORDER BY month`),
-      bqQuery(`SELECT FORMAT_DATE('%Y-%m', Date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders, COUNT(DISTINCT Customer_Clean) as customers FROM ${fullTable} WHERE Date >= '${from2}' AND Date <= '${to2}' ${baseWhere} GROUP BY month ORDER BY month`)
-    ]);
-    btn.disabled = false; btn.textContent = '🔍 Compare Years';
-    renderMonthlyComparison({ rows1, rows2, label1, label2 });
-  } catch(e) {
-    btn.disabled = false; btn.textContent = '🔍 Compare Years';
-    document.getElementById('monthlyContent').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Query Error</div><div class="empty-desc">${e.message}</div></div>`;
-  }
-}
-
-function renderMonthlyComparison({ rows1, rows2, label1, label2 }) {
-  // Match by position (index) - handles cross-year rolling comparisons
-  // Use the longer array length as reference
-  const maxLen = Math.max(rows1.length, rows2.length);
-  const months1 = rows1.map(r => r.month);
-  const months2 = rows2.map(r => r.month);
-
-  // Totals
-  const tot1 = { rev: rows1.reduce((a,r)=>a+(parseFloat(r.revenue)||0),0), gp: rows1.reduce((a,r)=>a+(parseFloat(r.gp)||0),0), qty: rows1.reduce((a,r)=>a+(parseInt(r.qty)||0),0), orders: rows1.reduce((a,r)=>a+(parseInt(r.orders)||0),0) };
-  const tot2 = { rev: rows2.reduce((a,r)=>a+(parseFloat(r.revenue)||0),0), gp: rows2.reduce((a,r)=>a+(parseFloat(r.gp)||0),0), qty: rows2.reduce((a,r)=>a+(parseInt(r.qty)||0),0), orders: rows2.reduce((a,r)=>a+(parseInt(r.orders)||0),0) };
-  const chgRev = tot2.rev > 0 ? ((tot1.rev - tot2.rev)/tot2.rev*100).toFixed(1) : '—';
-  const chgGp  = tot2.gp  > 0 ? ((tot1.gp  - tot2.gp )/tot2.gp *100).toFixed(1) : '—';
-
-  // Build index-based rows for display and charts
-  const tableRows = Array.from({length: maxLen}, (_, i) => ({
-    r1: rows1[i] || null,
-    r2: rows2[i] || null,
-    m1: months1[i] || '—',
-    m2: months2[i] || '—',
-  }));
-
-  const rev1Data = tableRows.map(t => t.r1 ? parseFloat(t.r1.revenue)||0 : null);
-  const rev2Data = tableRows.map(t => t.r2 ? parseFloat(t.r2.revenue)||0 : null);
-  const gp1Data  = tableRows.map(t => t.r1 ? parseFloat(t.r1.gp)||0 : null);
-  const gp2Data  = tableRows.map(t => t.r2 ? parseFloat(t.r2.gp)||0 : null);
-  const qty1Data = tableRows.map(t => t.r1 ? parseInt(t.r1.qty)||0 : null);
-  const qty2Data = tableRows.map(t => t.r2 ? parseInt(t.r2.qty)||0 : null);
-  const pctData  = tableRows.map((t,i) => (rev1Data[i]!==null&&rev2Data[i]!==null&&rev2Data[i]>0) ? parseFloat(((rev1Data[i]-rev2Data[i])/rev2Data[i]*100).toFixed(1)) : null);
-  const momData  = tableRows.map((t,i) => (i>0&&rev1Data[i]!==null&&rev1Data[i-1]!==null&&rev1Data[i-1]>0) ? parseFloat(((rev1Data[i]-rev1Data[i-1])/rev1Data[i-1]*100).toFixed(1)) : null);
-
-  // Chart labels: period 1 months
-  const chartLabels = tableRows.map(t => t.m1);
-
-  document.getElementById('monthlyContent').innerHTML = `
-    <div style="padding:20px 24px 0">
-      <div style="margin-bottom:16px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--dim)">Summary — ${label1} vs ${label2}</div>
-      <div class="kpi-strip" style="margin-bottom:24px">
-        <div class="kpi blue"><div class="kpi-lbl">${label1} Total Revenue</div><div class="kpi-val">${fmtK(tot1.rev)}</div><div class="kpi-sub">${tot1.orders} orders</div></div>
-        <div class="kpi ${parseFloat(chgRev)>=0?'green':'red'}"><div class="kpi-lbl">Revenue Change</div><div class="kpi-val">${chgRev==='—'?'—':chgRev+'%'}</div><div class="kpi-sub">vs prior period</div></div>
-        <div class="kpi green"><div class="kpi-lbl">${label1} GP</div><div class="kpi-val">${fmtK(tot1.gp)}</div><div class="kpi-sub">GM ${tot1.rev>0?(tot1.gp/tot1.rev*100).toFixed(1):0}%</div></div>
-        <div class="kpi ${parseFloat(chgGp)>=0?'green':'red'}"><div class="kpi-lbl">Growth Rate</div><div class="kpi-val">${chgGp==='—'?'—':chgGp+'%'}</div><div class="kpi-sub">vs ${fmtK(tot2.gp)}</div></div>
-        <div class="kpi yellow"><div class="kpi-lbl">${label1} Volume</div><div class="kpi-val">${tot1.qty.toLocaleString()}</div><div class="kpi-sub">units</div></div>
-        <div class="kpi purple"><div class="kpi-lbl">${label2} Volume</div><div class="kpi-val">${tot2.qty.toLocaleString()}</div><div class="kpi-sub">units</div></div>
-      </div>
-
-      <div class="charts-grid" style="margin-bottom:16px">
-        <div class="card">
-          <div class="card-hdr"><span class="card-title">Monthly Volume Comparison</span><span class="card-badge">${label1} vs ${label2}</span></div>
-          <div class="chart-box tall"><canvas id="cYoYRev"></canvas></div>
-        </div>
-        <div class="card">
-          <div class="card-hdr"><span class="card-title">Period Comparison</span></div>
-          <div class="chart-box tall"><canvas id="cYoYGp"></canvas></div>
-        </div>
-      </div>
-
-      <div class="charts-row" style="margin-bottom:16px">
-        <div class="card">
-          <div class="card-hdr"><span class="card-title">Revenue Change (%)</span></div>
-          <div class="chart-box"><canvas id="cYoYPct"></canvas></div>
-        </div>
-        <div class="card">
-          <div class="card-hdr"><span class="card-title">MoM Change — ${label1} (%)</span></div>
-          <div class="chart-box"><canvas id="cMoM"></canvas></div>
-        </div>
-        <div class="card">
-          <div class="card-hdr"><span class="card-title">Volume Growth Comparison</span></div>
-          <div class="chart-box"><canvas id="cYoYQty"></canvas></div>
-        </div>
-      </div>
-
-      <div class="tbl-card" style="margin-bottom:24px">
-        <div class="tbl-hdr">
-          <span class="tbl-title">Monthly Volume Comparison</span>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span class="tbl-count">${tableRows.length} months</span>
-            <button class="export-btn" onclick="exportCSV(exportData.monthly,'monthly_comparison.csv')">⬇ CSV</button>
-          </div>
-        </div>
-        <div class="tbl-wrap">
-          <table><thead><tr>
-            <th>${label1} Month</th><th>${label2} Month</th>
-            <th class="num">${label1} Revenue</th><th class="num">${label2} Revenue</th>
-            <th class="num">Change ($)</th><th class="num">Change (%)</th>
-            <th class="num">${label1} GP</th><th class="num">${label2} GP</th><th class="num">GP%</th>
-            <th class="num">${label1} Volume</th><th class="num">${label2} Volume</th>
-            <th class="num">${label1} Orders</th><th class="num">${label2} Orders</th>
-          </tr></thead><tbody>
-            ${tableRows.map((t,i) => {
-              const rev1=rev1Data[i], rev2=rev2Data[i];
-              const gp1=gp1Data[i], gp2=gp2Data[i];
-              const qty1=qty1Data[i], qty2=qty2Data[i];
-              const ord1=t.r1?parseInt(t.r1.orders)||0:null;
-              const ord2=t.r2?parseInt(t.r2.orders)||0:null;
-              const revPct=(rev1!==null&&rev2!==null&&rev2>0)?((rev1-rev2)/rev2*100).toFixed(1):'—';
-              const gpPct =(gp1!==null&&gp2!==null&&gp2>0)?((gp1-gp2)/gp2*100).toFixed(1):'—';
-              const revDiff=(rev1!==null&&rev2!==null)?rev1-rev2:null;
-              const qtyDiff = (qty1!==null&&qty2!==null)?qty1-qty2:null;
-              return `<tr>
-                <td style="font-weight:600;white-space:nowrap">${t.m1}</td>
-                <td style="color:var(--dim);white-space:nowrap">${t.m2}</td>
-                <td class="num">${qty1!==null?qty1.toLocaleString():'—'}</td>
-                <td class="num" style="color:var(--dim)">${qty2!==null?qty2.toLocaleString():'—'}</td>
-                <td class="num ${qtyDiff!==null?(qtyDiff>=0?'pos':'neg'):''}">${qtyDiff!==null?qtyDiff.toLocaleString():'—'}</td>
-                <td class="num" style="color:${revPct==='—'?'var(--dim)':parseFloat(revPct)>=0?'var(--green)':'var(--red)'};font-weight:600">${revPct==='—'?'—':revPct+'%'}</td>
-                <td class="num">${ord1!==null?ord1:'—'}</td>
-                <td class="num" style="color:var(--dim)">${ord2!==null?ord2:'—'}</td>
-              </tr>`;
-            }).join('')}
-          </tbody></table>
-        </div>
-      </div>
-    </div>
-  `;
-
-  // Cache for export
-  exportData.monthly = tableRows.map((t,i) => ({
-    [`${label1}_Month`]: t.m1, [`${label2}_Month`]: t.m2,
-    [`${label1}_Revenue`]: rev1Data[i]??'', [`${label2}_Revenue`]: rev2Data[i]??'',
-    Revenue_Change_Pct: pctData[i]??'',
-    [`${label1}_GP`]: gp1Data[i]??'', [`${label2}_GP`]: gp2Data[i]??'',
-    [`${label1}_Qty`]: qty1Data[i]??'', [`${label2}_Qty`]: qty2Data[i]??'',
-  }));
-
-  mkChart('cYoYRev', {type:'bar', data:{labels:chartLabels, datasets:[
-    {label:label1, data:qty1Data, backgroundColor:'rgba(59,130,246,0.75)', borderRadius:4},
-    {label:label2, data:qty2Data, backgroundColor:'rgba(59,130,246,0.25)', borderRadius:4},
-  ]}, options:{...baseOpts(45), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>' '+ctx.dataset.label+': '+(ctx.raw??'—').toLocaleString()+' units'}}}}});
-
-  // Volume trendlines comparison
-  const qty1Trend = linReg(qty1Data.map(v=>v??0));
-  const qty2Trend = linReg(qty2Data.map(v=>v??0));
-  mkChart('cYoYGp', {type:'line', data:{labels:chartLabels, datasets:[
-    {label:label1+' Vol', data:qty1Data, borderColor:'rgba(59,130,246,0.9)', backgroundColor:'rgba(59,130,246,0.1)', borderWidth:2, pointRadius:3, tension:0.3, fill:false},
-    {label:label2+' Vol', data:qty2Data, borderColor:'rgba(168,85,247,0.9)', backgroundColor:'rgba(168,85,247,0.1)', borderWidth:2, pointRadius:3, tension:0.3, fill:false, borderDash:[4,2]},
-    {label:label1+' Trend', data:qty1Trend, borderColor:'rgba(59,130,246,0.5)', backgroundColor:'transparent', borderWidth:1, pointRadius:0, borderDash:[6,4], tension:0},
-    {label:label2+' Trend', data:qty2Trend, borderColor:'rgba(168,85,247,0.5)', backgroundColor:'transparent', borderWidth:1, pointRadius:0, borderDash:[6,4], tension:0},
-  ]}, options:{...baseOpts(45), plugins:{...baseOpts().plugins, legend:{display:true,position:'top',labels:{color:'#94a3b8',font:{size:9}}}, tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>ctx.dataset.label.includes('Trend')?null:' '+ctx.dataset.label+': '+(ctx.raw??'—').toLocaleString()}}}}});
-
-  // Revenue change % - uses revenue data for the % calculation (still valuable)
-  mkChart('cYoYPct', {type:'bar', data:{labels:chartLabels, datasets:[{label:'Change (%)', data:pctData, borderRadius:4, backgroundColor:pctData.map(v=>v===null?'transparent':v>=0?'rgba(34,197,94,0.75)':'rgba(239,68,68,0.75)')}]}, options:{...baseOpts(45), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+(ctx.raw??'—')+'%'}}}, scales:{...baseOpts().scales, y:{...baseOpts().scales.y, ticks:{...baseOpts().scales.y.ticks, callback:v=>v+'%'}}}}});
-
-  // MoM volume change
-  const momQty = qty1Data.map((v,i) => (i>0&&v!==null&&qty1Data[i-1]!==null&&qty1Data[i-1]>0) ? parseFloat(((v-qty1Data[i-1])/qty1Data[i-1]*100).toFixed(1)) : null);
-  mkChart('cMoM', {type:'bar', data:{labels:chartLabels, datasets:[{label:'MoM Vol%', data:momQty, borderRadius:4, backgroundColor:momQty.map(v=>v===null?'transparent':v>=0?'rgba(59,130,246,0.75)':'rgba(239,68,68,0.75)')}]}, options:{...baseOpts(45), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+(ctx.raw??'—')+'%'}}}, scales:{...baseOpts().scales, y:{...baseOpts().scales.y, ticks:{...baseOpts().scales.y.ticks, callback:v=>v+'%'}}}}});
-
-  mkChart('cYoYQty', {type:'bar', data:{labels:chartLabels, datasets:[
-    {label:label1, data:qty1Data, backgroundColor:'rgba(168,85,247,0.75)', borderRadius:4},
-    {label:label2, data:qty2Data, backgroundColor:'rgba(168,85,247,0.25)', borderRadius:4},
-  ]}, options:{...baseOpts(45), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>' '+ctx.dataset.label+': '+(ctx.raw??'—').toLocaleString()+' units'}}}}});
-}
 
 // ── INIT ──
 initGIS();
