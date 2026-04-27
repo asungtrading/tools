@@ -31,7 +31,6 @@
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { background: var(--bg); color: var(--text); font-family: 'DM Sans', 'Segoe UI', sans-serif; font-size: 13px; min-height: 100vh; }
-body { /* default: confidential mode active — CSS class set by inline script after auth */ }
 body::before { content: ''; position: fixed; inset: 0; background: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(59,130,246,.08), transparent); pointer-events: none; z-index: 0; }
 
 /* ── AUTH ── */
@@ -60,30 +59,6 @@ body::before { content: ''; position: fixed; inset: 0; background: radial-gradie
 .hdr-name { font-size: 12px; color: var(--mid); }
 .hdr-signout { font-size: 11px; color: var(--dim); cursor: pointer; padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px; transition: all .2s; background: none; }
 .hdr-signout:hover { color: var(--text); border-color: var(--border2); }
-
-/* ── CONFIDENTIAL MODE ── (default ON; toggleable) */
-body.conf-on .sensitive-value,
-body.conf-on .sensitive-cell {
-  filter: blur(7px);
-  user-select: none;
-  pointer-events: none;
-  transition: filter .25s;
-}
-body.conf-on .sensitive-value::before {
-  content: '$ • • •';
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  filter: none;
-  color: var(--dim);
-  font-weight: 600;
-}
-body.conf-on .sensitive-value { position: relative; color: transparent !important; }
-body.conf-on .sensitive-axis { display: none; }
-body.conf-on .conf-hide { visibility: hidden; }
-.sensitive-value { transition: filter .25s; }
 
 /* ── SEARCH PANEL ── */
 .search-panel { background: var(--surface); border-bottom: 1px solid var(--border); padding: 20px 24px; }
@@ -300,7 +275,6 @@ html, body { overflow-x: hidden; max-width: 100vw; }
       <span class="hdr-title">Business Performance</span>
     </div>
     <div class="hdr-user">
-      <button class="hdr-signout" id="confToggleBtn" onclick="toggleSensitive()" style="border-color:var(--gold);color:var(--gold)">🔒 Confidential</button>
       <button class="hdr-signout" onclick="exportPDF()" style="border-color:var(--blue);color:var(--blue2)">📄 Export PDF</button>
       <img class="hdr-avatar" id="userAvatar" src="" alt="">
       <span class="hdr-name" id="userName">—</span>
@@ -310,9 +284,9 @@ html, body { overflow-x: hidden; max-width: 100vw; }
 
   <!-- TAB NAV -->
   <div class="tab-nav">
-    <button class="tab-btn active" onclick="switchTab('sales')">📊 Sales Overview</button>
-    <button class="tab-btn" onclick="switchTab('brand')">🏷 Brand Performance</button>
-    <button class="tab-btn" onclick="switchTab('customer')">👤 Customer Performance</button>
+    <button class="tab-btn active" onclick="switchTab('sales')">📊 Overview</button>
+    <button class="tab-btn" onclick="switchTab('brand')">🏷 Brands</button>
+    <button class="tab-btn" onclick="switchTab('customer')">👤 Customers</button>
     <button class="tab-btn" onclick="switchTab('monthly')">📅 Period Comparison</button>
   </div>
 
@@ -433,8 +407,8 @@ html, body { overflow-x: hidden; max-width: 100vw; }
     <div class="content" id="brandContent">
       <div class="empty-state">
         <div class="empty-icon">🏷</div>
-        <div class="empty-title">Enter a brand and click Analyze</div>
-        <div class="empty-desc">Monthly trend, top SKUs, and customer breakdown by brand</div>
+        <div class="empty-title">Add up to 5 brands to compare</div>
+        <div class="empty-desc">Side-by-side trend, growth, and Top 10 SKUs per brand</div>
       </div>
     </div>
   </div><!-- /tab-brand -->
@@ -483,8 +457,8 @@ html, body { overflow-x: hidden; max-width: 100vw; }
     <div class="content" id="customerContent">
       <div class="empty-state">
         <div class="empty-icon">👤</div>
-        <div class="empty-title">Enter a customer name and click Analyze</div>
-        <div class="empty-desc">Monthly trend, brand mix, and purchase patterns by customer</div>
+        <div class="empty-title">Add up to 5 customers to compare</div>
+        <div class="empty-desc">Side-by-side trend, growth, and Top 10 products per customer</div>
       </div>
     </div>
   </div><!-- /tab-customer -->
@@ -683,9 +657,6 @@ async function loadUser() {
     document.getElementById('authScreen').style.display = 'none';
     document.getElementById('mainApp').style.display = 'block';
 
-    // Default: confidential mode ON (presentation use)
-    document.body.classList.add('conf-on');
-
     // Default date range
     const today = new Date();
     const from = new Date(today.getFullYear(), today.getMonth() - 2, 1);
@@ -779,7 +750,7 @@ async function runSearch() {
       // Channel
       bqQuery(`SELECT Source_Clean as source, SUM(Total) as revenue, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY source ORDER BY revenue DESC`),
       // Location
-      bqQuery(`SELECT Location as location, SUM(Total) as revenue, SUM(Gross_Profit) as gp FROM ${fullTable} ${where} GROUP BY location ORDER BY revenue DESC`),
+      bqQuery(`SELECT Location as location, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY location ORDER BY qty DESC`),
       // Regional monthly trend (Toronto vs Edmonton)
       bqQuery(`SELECT FORMAT_DATE('%Y-%m', Date) as month, Location as location, SUM(Quantity) as qty, SUM(Total) as revenue FROM ${fullTable} ${where} GROUP BY month, location ORDER BY month`),
       // Detail rows (top 200)
@@ -846,30 +817,11 @@ function linReg(data) {
   return data.map((_,i) => parseFloat((m*i+b).toFixed(2)));
 }
 
-// ══════════════════════════════════════
-// CONFIDENTIAL MODE — hides revenue, GP, and GM% via CSS class on body
-// ══════════════════════════════════════
-let showSensitive = false; // default: hidden (presenting to externals)
-function toggleSensitive() {
-  showSensitive = !showSensitive;
-  document.body.classList.toggle('conf-on', !showSensitive);
-  const btn = document.getElementById('confToggleBtn');
-  if (btn) {
-    btn.textContent = showSensitive ? '🔓 Visible' : '🔒 Confidential';
-    btn.style.borderColor = showSensitive ? 'var(--green)' : 'var(--gold)';
-    btn.style.color = showSensitive ? 'var(--green)' : 'var(--gold)';
-  }
-}
-
-// Wraps any $ amount or %; CSS handles masking when body has .conf-on
-function sensitiveVal(n) {
-  return `<span class="sensitive-value">${fmtK(n)}</span>`;
-}
-function sensitivePct(n) {
-  return `<span class="sensitive-value">${n}%</span>`;
-}
-function sensitiveCardStyle() { return ''; } // legacy no-op; CSS class drives masking
-function toggleBtnHTML() { return ''; }       // legacy no-op; header has the button
+// (Confidential mode removed — revenue KPIs are simply not rendered on the dashboard)
+function sensitiveVal(n) { return fmtK(n); }
+function sensitivePct(n) { return n + '%'; }
+function sensitiveCardStyle() { return ''; }
+function toggleBtnHTML() { return ''; }
 
 // ══════════════════════════════════════
 // PDF EXPORT — captures the active dashboard tab into a presentation-ready PDF
@@ -918,22 +870,22 @@ function renderResults(data) {
   const gp = parseFloat(k.gp)||0;
   const gmPct = revenue > 0 ? (gp/revenue*100).toFixed(1) : '0';
 
-  const locMap = {};
-  locationRows.forEach(r => { locMap[r.location] = parseFloat(r.revenue)||0; });
-  const torRev = locMap['Asung Trading Inc.']||0;
-  const edmRev = locMap['Asung - Edmonton']||0;
+  const locQtyMap = {};
+  locationRows.forEach(r => { locQtyMap[r.location] = parseInt(r.qty)||0; });
+  const totalQty = parseInt(k.qty)||0;
+  const torQty = locQtyMap['Asung Trading Inc.']||0;
+  const edmQty = locQtyMap['Asung - Edmonton']||0;
+  const torPct = totalQty > 0 ? (torQty/totalQty*100).toFixed(1) : 0;
+  const edmPct = totalQty > 0 ? (edmQty/totalQty*100).toFixed(1) : 0;
 
   document.getElementById('mainContent').innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:12px;gap:8px">
-      ${toggleBtnHTML()}
-    </div>
     <div class="kpi-strip">
-      <div class="kpi blue"><div class="kpi-lbl">Total Revenue</div><div class="kpi-val sensitive-card" style="${sensitiveCardStyle()}">${sensitiveVal(revenue)}</div><div class="kpi-sub">${parseInt(k.orders)||0} orders</div></div>
-      <div class="kpi yellow"><div class="kpi-lbl">Total Volume</div><div class="kpi-val">${(parseInt(k.qty)||0).toLocaleString()}</div><div class="kpi-sub">units sold</div></div>
+      <div class="kpi yellow"><div class="kpi-lbl">Total Volume</div><div class="kpi-val">${totalQty.toLocaleString()}</div><div class="kpi-sub">units sold</div></div>
+      <div class="kpi blue"><div class="kpi-lbl">Total Orders</div><div class="kpi-val">${(parseInt(k.orders)||0).toLocaleString()}</div><div class="kpi-sub">orders</div></div>
       <div class="kpi purple"><div class="kpi-lbl">Customers</div><div class="kpi-val">${parseInt(k.customers)||0}</div><div class="kpi-sub">unique</div></div>
-      <div class="kpi blue"><div class="kpi-lbl">Toronto</div><div class="kpi-val sensitive-card" style="${sensitiveCardStyle()}">${sensitiveVal(torRev)}</div><div class="kpi-sub">${revenue>0?(torRev/revenue*100).toFixed(1):0}%</div></div>
-      <div class="kpi teal"><div class="kpi-lbl">Edmonton</div><div class="kpi-val sensitive-card" style="${sensitiveCardStyle()}">${sensitiveVal(edmRev)}</div><div class="kpi-sub">${revenue>0?(edmRev/revenue*100).toFixed(1):0}%</div></div>
       <div class="kpi green"><div class="kpi-lbl">Active Brands</div><div class="kpi-val">${brandRows.length}</div><div class="kpi-sub">brands</div></div>
+      <div class="kpi blue"><div class="kpi-lbl">Toronto Volume</div><div class="kpi-val">${torQty.toLocaleString()}</div><div class="kpi-sub">${torPct}% of units</div></div>
+      <div class="kpi teal"><div class="kpi-lbl">Edmonton Volume</div><div class="kpi-val">${edmQty.toLocaleString()}</div><div class="kpi-sub">${edmPct}% of units</div></div>
     </div>
 
     <div class="charts-grid">
@@ -942,7 +894,7 @@ function renderResults(data) {
         <div class="chart-box tall"><canvas id="cTrend"></canvas></div>
       </div>
       <div class="card">
-        <div class="card-hdr"><span class="card-title">Revenue by Channel</span></div>
+        <div class="card-hdr"><span class="card-title">Orders by Channel</span></div>
         <div class="chart-box tall"><canvas id="cChannel"></canvas></div>
       </div>
     </div>
@@ -1123,9 +1075,9 @@ function renderDetailTable(rows) {
       <td style="font-family:'DM Mono',monospace;font-size:11px">${r.SKU||'—'}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.product||''}">${r.product||'—'}</td>
       <td class="num">${r.qty||0}</td>
-      <td class="num"><span class="sensitive-value">${fmt(r.price)}</span></td>
-      <td class="num"><span class="sensitive-value">${fmt(r.total)}</span></td>
-      <td class="num ${gp>=0?'pos':'neg'}"><span class="sensitive-value">${fmt(gp)}</span></td>
+      <td class="num">${fmt(r.price)}</td>
+      <td class="num">${fmt(r.total)}</td>
+      <td class="num ${gp>=0?'pos':'neg'}">${fmt(gp)}</td>
       <td>${loc}</td>
       <td>${src}</td>
     </tr>`;
@@ -1495,33 +1447,39 @@ async function runBrandSearch() {
       bqQuery(`SELECT ${caseExpr} as brand_label, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders, COUNT(DISTINCT Customer_Clean) as customers, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY brand_label HAVING brand_label IS NOT NULL`),
       // Monthly trend per brand bucket
       bqQuery(`SELECT ${caseExpr} as brand_label, FORMAT_DATE('%Y-%m', Date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty FROM ${fullTable} ${where} GROUP BY brand_label, month HAVING brand_label IS NOT NULL ORDER BY month`),
+      // Top 10 SKUs per brand bucket (supplier-facing detail)
+      bqQuery(`SELECT brand_label, SKU, product, qty, revenue, gp, orders, first_date, last_date FROM (
+        SELECT ${caseExpr} as brand_label, SKU, MAX(Product_Name) as product, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY brand_label, SKU HAVING brand_label IS NOT NULL
+      ) QUALIFY ROW_NUMBER() OVER (PARTITION BY brand_label ORDER BY qty DESC) <= 10 ORDER BY brand_label, qty DESC`),
     ];
-    // Single-brand mode also loads SKU / Customer deep dive
+    // Single-brand mode also loads Customer deep dive
     if (brands.length === 1) {
       queries.push(
-        bqQuery(`SELECT SKU, MAX(Product_Name) as product, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY SKU ORDER BY revenue DESC LIMIT 50`),
-        bqQuery(`SELECT Customer_Clean as customer, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY customer ORDER BY revenue DESC LIMIT 50`)
+        bqQuery(`SELECT Customer_Clean as customer, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY customer ORDER BY qty DESC LIMIT 50`)
       );
     }
     const results = await Promise.all(queries);
     const summaryRows = results[0];
     const trendRows   = results[1];
-    const skuRows     = results[2] || [];
+    const topSkuRows  = results[2] || [];
     const custRows    = results[3] || [];
+
+    // For single-brand, derive skuRows from topSkuRows (already filtered to one brand)
+    const skuRows = topSkuRows;
 
     btn.disabled = false; btn.textContent = '🔍 Analyze';
     if (!summaryRows.length) {
       document.getElementById('brandContent').innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">No Results</div><div class="empty-desc">No data found for the selected brand(s)</div></div>`;
       return;
     }
-    renderBrandPerformance({ summaryRows, trendRows, skuRows, custRows, brands });
+    renderBrandPerformance({ summaryRows, trendRows, skuRows, topSkuRows, custRows, brands });
   } catch(e) {
     btn.disabled = false; btn.textContent = '🔍 Analyze';
     document.getElementById('brandContent').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Query Error</div><div class="empty-desc">${e.message}</div></div>`;
   }
 }
 
-function renderBrandPerformance({ summaryRows, trendRows, skuRows, custRows, brands }) {
+function renderBrandPerformance({ summaryRows, trendRows, skuRows, topSkuRows, custRows, brands }) {
   const isMulti = brands.length > 1;
   const brand = brands[0]; // for single-brand exports
 
@@ -1570,9 +1528,9 @@ function renderBrandPerformance({ summaryRows, trendRows, skuRows, custRows, bra
         <div style="background:#0f1625;border:1px solid ${color};border-left:3px solid ${color};border-radius:6px;padding:12px 14px;min-width:180px">
           <div style="font-size:12px;font-weight:700;color:${color};margin-bottom:8px">${s.brand_label}</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:11px">
-            <div><div style="color:var(--dim);font-size:10px">Revenue</div><div style="font-weight:600;color:var(--text)"><span class="sensitive-value">${fmtK(rev)}</span></div></div>
-            <div><div style="color:var(--dim);font-size:10px">GP</div><div style="font-weight:600;color:var(--text)"><span class="sensitive-value">${fmtK(gp)}</span></div></div>
-            <div><div style="color:var(--dim);font-size:10px">GM%</div><div style="font-weight:600;color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}"><span class="sensitive-value">${gm}%</span></div></div>
+            <div><div style="color:var(--dim);font-size:10px">Revenue</div><div style="font-weight:600;color:var(--text)">${fmtK(rev)}</div></div>
+            <div><div style="color:var(--dim);font-size:10px">GP</div><div style="font-weight:600;color:var(--text)">${fmtK(gp)}</div></div>
+            <div><div style="color:var(--dim);font-size:10px">GM%</div><div style="font-weight:600;color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</div></div>
             <div><div style="color:var(--dim);font-size:10px">Growth</div><div style="font-weight:600;color:${growthColor}">${growth==='N/A'?'N/A':growthSign+growth+'%'}</div></div>
             <div><div style="color:var(--dim);font-size:10px">Orders</div><div style="font-weight:600;color:var(--text)">${parseInt(s.orders)||0}</div></div>
             <div><div style="color:var(--dim);font-size:10px">Customer</div><div style="font-weight:600;color:var(--text)">${parseInt(s.customers)||0}</div></div>
@@ -1580,11 +1538,54 @@ function renderBrandPerformance({ summaryRows, trendRows, skuRows, custRows, bra
         </div>`;
     }).join('');
 
+    // Group topSkuRows by brand and build per-brand Top 10 SKU tables
+    const skusByBrand = {};
+    (topSkuRows||[]).forEach(r => {
+      if (!skusByBrand[r.brand_label]) skusByBrand[r.brand_label] = [];
+      skusByBrand[r.brand_label].push(r);
+    });
+    exportData.brandTopSkus = [];
+    brands.forEach(b => (skusByBrand[b]||[]).forEach(r => {
+      exportData.brandTopSkus.push({ Brand:b, SKU:r.SKU, Product:r.product, Volume:parseInt(r.qty)||0, Revenue:parseFloat(r.revenue)||0, Gross_Profit:parseFloat(r.gp)||0, GM_Pct: parseFloat(r.revenue)>0?(parseFloat(r.gp)/parseFloat(r.revenue)*100).toFixed(1):0, Orders:parseInt(r.orders)||0 });
+    }));
+    const brandSkuSections = brands.map((b, i) => {
+      const color = BRAND_COLORS[i] || '#3b82f6';
+      const list = skusByBrand[b] || [];
+      if (!list.length) return '';
+      const rows = list.map((r, idx) => {
+        const rv = parseFloat(r.revenue)||0, g = parseFloat(r.gp)||0;
+        const gm = rv > 0 ? (g/rv*100).toFixed(1) : 0;
+        return `<tr>
+          <td style="text-align:center;color:${color};font-weight:700">#${idx+1}</td>
+          <td style="font-family:monospace;font-size:11px">${r.SKU||'—'}</td>
+          <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.product||'').replace(/"/g,'&quot;')}">${r.product||'—'}</td>
+          <td class="num">${(parseInt(r.qty)||0).toLocaleString()}</td>
+          <td class="num">${fmt(rv)}</td>
+          <td class="num ${g>=0?'pos':'neg'}">${fmt(g)}</td>
+          <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
+          <td class="num">${parseInt(r.orders)||0}</td>
+        </tr>`;
+      }).join('');
+      return `
+        <div class="tbl-card" style="margin-bottom:16px;border-left:3px solid ${color}">
+          <div class="tbl-hdr">
+            <span class="tbl-title" style="color:${color}">🏷 ${b} — Top ${list.length} SKUs</span>
+          </div>
+          <div class="tbl-wrap">
+            <table><thead><tr>
+              <th style="width:48px">Rank</th><th>SKU</th><th>Product</th>
+              <th class="num">Volume</th><th class="num">Revenue</th><th class="num">GP</th><th class="num">GM%</th><th class="num">Orders</th>
+            </tr></thead><tbody>${rows}</tbody></table>
+          </div>
+        </div>`;
+    }).join('');
+
     document.getElementById('brandContent').innerHTML = `
       <div style="padding:20px 24px 24px">
-        <div style="margin-bottom:14px">
+        <div style="margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
           <span style="font-size:13px;font-weight:700;color:var(--text)">🏷 Brand Comparison (${brands.length} brands)</span>
-          <button class="export-btn" style="margin-left:12px" onclick="exportCSV(exportData.brandCompare,'brand_compare.csv')">⬇ CSV</button>
+          <button class="export-btn" onclick="exportCSV(exportData.brandCompare,'brand_compare.csv')">⬇ Compare CSV</button>
+          <button class="export-btn" onclick="exportCSV(exportData.brandTopSkus,'brand_top_skus.csv')">⬇ Top SKUs CSV</button>
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px">${kpiCards}</div>
         <div class="charts-grid" style="margin-bottom:16px">
@@ -1597,6 +1598,8 @@ function renderBrandPerformance({ summaryRows, trendRows, skuRows, custRows, bra
             <div class="chart-box tall"><canvas id="cBrandCmpGm"></canvas></div>
           </div>
         </div>
+        <div style="margin:24px 0 12px;font-size:12px;font-weight:700;color:var(--mid);letter-spacing:1px;text-transform:uppercase">Top 10 SKUs by Brand</div>
+        ${brandSkuSections}
       </div>
     `;
 
@@ -1646,12 +1649,12 @@ function renderBrandPerformance({ summaryRows, trendRows, skuRows, custRows, bra
         <span style="font-size:11px;color:var(--dim);margin-left:8px">${s.first_date||''} ~ ${s.last_date||''}</span>
       </div>
       <div class="kpi-strip" style="margin-bottom:20px">
-        <div class="kpi blue"><div class="kpi-lbl">Total Revenue</div><div class="kpi-val"><span class="sensitive-value">${fmtK(rev)}</span></div><div class="kpi-sub">${parseInt(s.orders)||0} orders</div></div>
-        <div class="kpi green"><div class="kpi-lbl">Gross Profit</div><div class="kpi-val"><span class="sensitive-value">${fmtK(gp)}</span></div><div class="kpi-sub">GM <span class="sensitive-value">${gm}%</span></div></div>
+        <div class="kpi blue"><div class="kpi-lbl">Total Revenue</div><div class="kpi-val">${fmtK(rev)}</div><div class="kpi-sub">${parseInt(s.orders)||0} orders</div></div>
+        <div class="kpi green"><div class="kpi-lbl">Gross Profit</div><div class="kpi-val">${fmtK(gp)}</div><div class="kpi-sub">GM ${gm}%</div></div>
         <div class="kpi yellow"><div class="kpi-lbl">Total Units</div><div class="kpi-val">${(parseInt(s.qty)||0).toLocaleString()}</div><div class="kpi-sub">units</div></div>
         <div class="kpi purple"><div class="kpi-lbl">Customers</div><div class="kpi-val">${parseInt(s.customers)||0}</div><div class="kpi-sub">unique</div></div>
-        <div class="kpi teal"><div class="kpi-lbl">SKUs</div><div class="kpi-val">${skuRows.length}</div><div class="kpi-sub">products</div></div>
-        <div class="kpi blue"><div class="kpi-lbl">Avg. Monthly Revenue</div><div class="kpi-val"><span class="sensitive-value">${fmtK(rev / Math.max(trendRows.length,1))}</span></div><div class="kpi-sub">${trendRows.length} months</div></div>
+        <div class="kpi teal"><div class="kpi-lbl">Top SKUs Shown</div><div class="kpi-val">${skuRows.length}</div><div class="kpi-sub">by volume</div></div>
+        <div class="kpi blue"><div class="kpi-lbl">Avg. Monthly Revenue</div><div class="kpi-val">${fmtK(rev / Math.max(trendRows.length,1))}</div><div class="kpi-sub">${trendRows.length} months</div></div>
       </div>
       <div class="charts-grid" style="margin-bottom:16px">
         <div class="card">
@@ -1665,29 +1668,30 @@ function renderBrandPerformance({ summaryRows, trendRows, skuRows, custRows, bra
       </div>
       <div class="tbl-card" style="margin-bottom:16px">
         <div class="tbl-hdr">
-          <span class="tbl-title">SKU Performance</span>
+          <span class="tbl-title">Top ${skuRows.length} SKUs</span>
           <div style="display:flex;align-items:center;gap:8px">
-            <span class="tbl-count">${skuRows.length} SKUs</span>
+            <span class="tbl-count">ranked by volume</span>
             <button class="export-btn" onclick="exportCSV(exportData.brandSkus,'brand_sku_${brand}.csv')">⬇ CSV</button>
           </div>
         </div>
         <div class="tbl-wrap">
           <table><thead><tr>
-            <th>SKU</th><th>Product</th>
+            <th style="width:48px">Rank</th><th>SKU</th><th>Product</th>
             <th>First Sale</th><th>Last Sale</th>
             <th class="num">Revenue</th><th class="num">GP</th><th class="num">GM%</th>
             <th class="num">Volume</th><th class="num">Orders</th>
           </tr></thead><tbody>
-            ${skuRows.map(r => {
+            ${skuRows.map((r, idx) => {
               const rv=parseFloat(r.revenue)||0, g=parseFloat(r.gp)||0, gm=rv>0?(g/rv*100).toFixed(1):0;
               return `<tr>
+                <td style="text-align:center;font-weight:700;color:var(--blue2)">#${idx+1}</td>
                 <td style="font-family:monospace;font-size:11px">${r.SKU||'—'}</td>
                 <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.product||'—'}</td>
                 <td style="font-size:11px;color:var(--dim)">${r.first_date||'—'}</td>
                 <td style="font-size:11px;color:var(--dim)">${r.last_date||'—'}</td>
-                <td class="num"><span class="sensitive-value">${fmt(rv)}</span></td>
-                <td class="num ${g>=0?'pos':'neg'}"><span class="sensitive-value">${fmt(g)}</span></td>
-                <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}"><span class="sensitive-value">${gm}%</span></td>
+                <td class="num">${fmt(rv)}</td>
+                <td class="num ${g>=0?'pos':'neg'}">${fmt(g)}</td>
+                <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
                 <td class="num">${parseInt(r.qty)||0}</td>
                 <td class="num">${parseInt(r.orders)||0}</td>
               </tr>`;
@@ -1716,9 +1720,9 @@ function renderBrandPerformance({ summaryRows, trendRows, skuRows, custRows, bra
                 <td>${r.customer||'—'}</td>
                 <td style="font-size:11px;color:var(--dim)">${r.first_date||'—'}</td>
                 <td style="font-size:11px;color:var(--dim)">${r.last_date||'—'}</td>
-                <td class="num"><span class="sensitive-value">${fmt(rv)}</span></td>
-                <td class="num ${g>=0?'pos':'neg'}"><span class="sensitive-value">${fmt(g)}</span></td>
-                <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}"><span class="sensitive-value">${gm}%</span></td>
+                <td class="num">${fmt(rv)}</td>
+                <td class="num ${g>=0?'pos':'neg'}">${fmt(g)}</td>
+                <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
                 <td class="num">${parseInt(r.qty)||0}</td>
                 <td class="num">${parseInt(r.orders)||0}</td>
               </tr>`;
@@ -1823,32 +1827,37 @@ async function runCustomerSearch() {
     const queries = [
       bqQuery(`SELECT ${caseExpr} as cust_label, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders, COUNT(DISTINCT Brand_Clean) as brands, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY cust_label HAVING cust_label IS NOT NULL`),
       bqQuery(`SELECT ${caseExpr} as cust_label, FORMAT_DATE('%Y-%m', Date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY cust_label, month HAVING cust_label IS NOT NULL ORDER BY month`),
+      // Top 10 products per customer (works for single AND multi)
+      bqQuery(`SELECT cust_label, SKU, product, brand, qty, revenue, gp, orders, avg_price, first_date, last_date FROM (
+        SELECT ${caseExpr} as cust_label, SKU, MAX(Product_Name) as product, MAX(Brand_Clean) as brand, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, ROUND(SUM(Total)/NULLIF(SUM(Quantity),0),2) as avg_price, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY cust_label, SKU HAVING cust_label IS NOT NULL
+      ) QUALIFY ROW_NUMBER() OVER (PARTITION BY cust_label ORDER BY qty DESC) <= 10 ORDER BY cust_label, qty DESC`),
     ];
     if (customers.length === 1) {
       queries.push(
-        bqQuery(`SELECT Brand_Clean as brand, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY brand ORDER BY revenue DESC LIMIT 30`),
-        bqQuery(`SELECT SKU, MAX(Product_Name) as product, MAX(Brand_Clean) as brand, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, ROUND(SUM(Total)/NULLIF(SUM(Quantity),0),2) as avg_price, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY SKU ORDER BY revenue DESC LIMIT 50`)
+        bqQuery(`SELECT Brand_Clean as brand, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY brand ORDER BY qty DESC LIMIT 30`)
       );
     }
     const results = await Promise.all(queries);
     const summaryRows = results[0];
     const trendRows   = results[1];
-    const brandRows   = results[2] || [];
-    const skuRows     = results[3] || [];
+    const topSkuRows  = results[2] || [];
+    const brandRows   = results[3] || [];
+    // skuRows for single-mode = topSkuRows (already filtered to one customer)
+    const skuRows = topSkuRows;
 
     btn.disabled = false; btn.textContent = '🔍 Analyze';
     if (!summaryRows.length) {
       document.getElementById('customerContent').innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">No Results</div><div class="empty-desc">No data found for the selected customer(s)</div></div>`;
       return;
     }
-    renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows, customers });
+    renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows, topSkuRows, customers });
   } catch(e) {
     btn.disabled = false; btn.textContent = '🔍 Analyze';
     document.getElementById('customerContent').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Query Error</div><div class="empty-desc">${e.message}</div></div>`;
   }
 }
 
-function renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows, customers }) {
+function renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows, topSkuRows, customers }) {
   const isMulti = customers.length > 1;
   const customer = customers[0];
 
@@ -1903,9 +1912,9 @@ function renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows,
           <div style="font-size:12px;font-weight:700;color:${color};margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${s.cust_label}">${s.cust_label}</div>
           <div style="font-size:10px;color:var(--dim);margin-bottom:8px">Last Purchase: ${s.last_date||'—'} · ${daysAgo}</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:11px">
-            <div><div style="color:var(--dim);font-size:10px">Revenue</div><div style="font-weight:600;color:var(--text)"><span class="sensitive-value">${fmtK(rev)}</span></div></div>
-            <div><div style="color:var(--dim);font-size:10px">GP</div><div style="font-weight:600;color:var(--text)"><span class="sensitive-value">${fmtK(gp)}</span></div></div>
-            <div><div style="color:var(--dim);font-size:10px">GM%</div><div style="font-weight:600;color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}"><span class="sensitive-value">${gm}%</span></div></div>
+            <div><div style="color:var(--dim);font-size:10px">Revenue</div><div style="font-weight:600;color:var(--text)">${fmtK(rev)}</div></div>
+            <div><div style="color:var(--dim);font-size:10px">GP</div><div style="font-weight:600;color:var(--text)">${fmtK(gp)}</div></div>
+            <div><div style="color:var(--dim);font-size:10px">GM%</div><div style="font-weight:600;color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</div></div>
             <div><div style="color:var(--dim);font-size:10px">Growth</div><div style="font-weight:600;color:${growthColor}">${growth==='N/A'?'N/A':growthSign+growth+'%'}</div></div>
             <div><div style="color:var(--dim);font-size:10px">Orders</div><div style="font-weight:600;color:var(--text)">${parseInt(s.orders)||0}</div></div>
             <div><div style="color:var(--dim);font-size:10px">Brand</div><div style="font-weight:600;color:var(--text)">${parseInt(s.brands)||0}</div></div>
@@ -1913,16 +1922,60 @@ function renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows,
         </div>`;
     }).join('');
 
+    // Group topSkuRows by customer for per-customer Top 10 product tables
+    const skusByCust = {};
+    (topSkuRows||[]).forEach(r => {
+      if (!skusByCust[r.cust_label]) skusByCust[r.cust_label] = [];
+      skusByCust[r.cust_label].push(r);
+    });
+    exportData.custTopSkus = [];
+    customers.forEach(c => (skusByCust[c]||[]).forEach(r => {
+      exportData.custTopSkus.push({ Customer:c, SKU:r.SKU, Product:r.product, Brand:r.brand, Volume:parseInt(r.qty)||0, Avg_Price:r.avg_price, Revenue:parseFloat(r.revenue)||0, Gross_Profit:parseFloat(r.gp)||0, GM_Pct: parseFloat(r.revenue)>0?(parseFloat(r.gp)/parseFloat(r.revenue)*100).toFixed(1):0, Orders:parseInt(r.orders)||0 });
+    }));
+    const custSkuSections = customers.map((c, i) => {
+      const color = CUSTOMER_COLORS[i] || '#3b82f6';
+      const list = skusByCust[c] || [];
+      if (!list.length) return '';
+      const rowsHtml = list.map((r, idx) => {
+        const rv = parseFloat(r.revenue)||0, g = parseFloat(r.gp)||0;
+        const gm = rv > 0 ? (g/rv*100).toFixed(1) : 0;
+        return `<tr>
+          <td style="text-align:center;color:${color};font-weight:700">#${idx+1}</td>
+          <td style="font-family:monospace;font-size:11px">${r.SKU||'—'}</td>
+          <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.product||'').replace(/"/g,'&quot;')}">${r.product||'—'}</td>
+          <td style="font-size:11px;color:var(--dim)">${r.brand||'—'}</td>
+          <td class="num">${(parseInt(r.qty)||0).toLocaleString()}</td>
+          <td class="num">${fmt(rv)}</td>
+          <td class="num ${g>=0?'pos':'neg'}">${fmt(g)}</td>
+          <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
+          <td class="num">${parseInt(r.orders)||0}</td>
+        </tr>`;
+      }).join('');
+      return `
+        <div class="tbl-card" style="margin-bottom:16px;border-left:3px solid ${color}">
+          <div class="tbl-hdr">
+            <span class="tbl-title" style="color:${color}">👤 ${c} — Top ${list.length} Products</span>
+          </div>
+          <div class="tbl-wrap">
+            <table><thead><tr>
+              <th style="width:48px">Rank</th><th>SKU</th><th>Product</th><th>Brand</th>
+              <th class="num">Volume</th><th class="num">Revenue</th><th class="num">GP</th><th class="num">GM%</th><th class="num">Orders</th>
+            </tr></thead><tbody>${rowsHtml}</tbody></table>
+          </div>
+        </div>`;
+    }).join('');
+
     document.getElementById('customerContent').innerHTML = `
       <div style="padding:20px 24px 24px">
-        <div style="margin-bottom:14px">
+        <div style="margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
           <span style="font-size:13px;font-weight:700;color:var(--text)">👥 Customer Comparison (${customers.length} customers)</span>
-          <button class="export-btn" style="margin-left:12px" onclick="exportCSV(exportData.custCompare,'customer_compare.csv')">⬇ CSV</button>
+          <button class="export-btn" onclick="exportCSV(exportData.custCompare,'customer_compare.csv')">⬇ Compare CSV</button>
+          <button class="export-btn" onclick="exportCSV(exportData.custTopSkus,'customer_top_products.csv')">⬇ Top Products CSV</button>
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px">${kpiCards}</div>
         <div class="charts-grid" style="margin-bottom:16px">
           <div class="card">
-            <div class="card-hdr"><span class="card-title">Monthly Revenue Trend</span><span class="card-badge">${months.length} months</span></div>
+            <div class="card-hdr"><span class="card-title">Monthly Volume Trend</span><span class="card-badge">${months.length} months</span></div>
             <div class="chart-box tall"><canvas id="cCustCmpRev"></canvas></div>
           </div>
           <div class="card">
@@ -1930,6 +1983,8 @@ function renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows,
             <div class="chart-box tall"><canvas id="cCustCmpGm"></canvas></div>
           </div>
         </div>
+        <div style="margin:24px 0 12px;font-size:12px;font-weight:700;color:var(--mid);letter-spacing:1px;text-transform:uppercase">Top 10 Products by Customer</div>
+        ${custSkuSections}
       </div>
     `;
 
@@ -1976,12 +2031,12 @@ function renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows,
         <span style="font-size:11px;color:var(--dim);margin-left:8px">${s.first_date||''} ~ ${s.last_date||''}</span>
       </div>
       <div class="kpi-strip" style="margin-bottom:20px">
-        <div class="kpi blue"><div class="kpi-lbl">Total Revenue</div><div class="kpi-val"><span class="sensitive-value">${fmtK(rev)}</span></div><div class="kpi-sub">${parseInt(s.orders)||0} orders</div></div>
-        <div class="kpi green"><div class="kpi-lbl">Gross Profit</div><div class="kpi-val"><span class="sensitive-value">${fmtK(gp)}</span></div><div class="kpi-sub">GM <span class="sensitive-value">${gm}%</span></div></div>
+        <div class="kpi blue"><div class="kpi-lbl">Total Revenue</div><div class="kpi-val">${fmtK(rev)}</div><div class="kpi-sub">${parseInt(s.orders)||0} orders</div></div>
+        <div class="kpi green"><div class="kpi-lbl">Gross Profit</div><div class="kpi-val">${fmtK(gp)}</div><div class="kpi-sub">GM ${gm}%</div></div>
         <div class="kpi yellow"><div class="kpi-lbl">Total Units</div><div class="kpi-val">${(parseInt(s.qty)||0).toLocaleString()}</div><div class="kpi-sub">units</div></div>
-        <div class="kpi teal"><div class="kpi-lbl">Avg. Order Value</div><div class="kpi-val"><span class="sensitive-value">${fmtK(avgOrder)}</span></div><div class="kpi-sub">per order</div></div>
+        <div class="kpi teal"><div class="kpi-lbl">Avg. Order Value</div><div class="kpi-val">${fmtK(avgOrder)}</div><div class="kpi-sub">per order</div></div>
         <div class="kpi purple"><div class="kpi-lbl">Brands Purchased</div><div class="kpi-val">${parseInt(s.brands)||0}</div><div class="kpi-sub">brands</div></div>
-        <div class="kpi blue"><div class="kpi-lbl">SKUs Purchased</div><div class="kpi-val">${skuRows.length}</div><div class="kpi-sub">products</div></div>
+        <div class="kpi blue"><div class="kpi-lbl">Top Products Shown</div><div class="kpi-val">${skuRows.length}</div><div class="kpi-sub">by volume</div></div>
       </div>
       <div class="charts-grid" style="margin-bottom:16px">
         <div class="card">
@@ -2014,9 +2069,9 @@ function renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows,
                 <td style="font-weight:500">${r.brand||'—'}</td>
                 <td style="font-size:11px;color:var(--dim)">${r.first_date||'—'}</td>
                 <td style="font-size:11px;color:var(--dim)">${r.last_date||'—'}</td>
-                <td class="num"><span class="sensitive-value">${fmt(rv)}</span></td>
-                <td class="num ${g>=0?'pos':'neg'}"><span class="sensitive-value">${fmt(g)}</span></td>
-                <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}"><span class="sensitive-value">${gm}%</span></td>
+                <td class="num">${fmt(rv)}</td>
+                <td class="num ${g>=0?'pos':'neg'}">${fmt(g)}</td>
+                <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
                 <td class="num">${parseInt(r.qty)||0}</td>
                 <td class="num">${parseInt(r.orders)||0}</td>
               </tr>`;
@@ -2026,31 +2081,32 @@ function renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows,
       </div>
       <div class="tbl-card" style="margin-bottom:24px">
         <div class="tbl-hdr">
-          <span class="tbl-title">SKU Purchase History</span>
+          <span class="tbl-title">Top ${skuRows.length} Products</span>
           <div style="display:flex;align-items:center;gap:8px">
-            <span class="tbl-count">${skuRows.length} SKUs</span>
+            <span class="tbl-count">ranked by volume</span>
             <button class="export-btn" onclick="exportCSV(exportData.custSkus,'customer_skus_${customer}.csv')">⬇ CSV</button>
           </div>
         </div>
         <div class="tbl-wrap">
           <table><thead><tr>
-            <th>SKU</th><th>Product</th><th>Brand</th>
+            <th style="width:48px">Rank</th><th>SKU</th><th>Product</th><th>Brand</th>
             <th>First Purchase</th><th>Last Purchase</th>
             <th class="num">Avg. Unit Price</th><th class="num">Revenue</th>
             <th class="num">GP</th><th class="num">GM%</th><th class="num">Volume</th>
           </tr></thead><tbody>
-            ${skuRows.map(r => {
+            ${skuRows.map((r, idx) => {
               const rv=parseFloat(r.revenue)||0, g=parseFloat(r.gp)||0, gm=rv>0?(g/rv*100).toFixed(1):0;
               return `<tr>
+                <td style="text-align:center;font-weight:700;color:var(--blue2)">#${idx+1}</td>
                 <td style="font-family:monospace;font-size:11px">${r.SKU||'—'}</td>
                 <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.product||'—'}</td>
                 <td style="font-size:11px;color:var(--mid)">${r.brand||'—'}</td>
                 <td style="font-size:11px;color:var(--dim)">${r.first_date||'—'}</td>
                 <td style="font-size:11px;color:var(--dim)">${r.last_date||'—'}</td>
                 <td class="num" style="font-family:monospace">$${parseFloat(r.avg_price||0).toFixed(2)}</td>
-                <td class="num"><span class="sensitive-value">${fmt(rv)}</span></td>
-                <td class="num ${g>=0?'pos':'neg'}"><span class="sensitive-value">${fmt(g)}</span></td>
-                <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}"><span class="sensitive-value">${gm}%</span></td>
+                <td class="num">${fmt(rv)}</td>
+                <td class="num ${g>=0?'pos':'neg'}">${fmt(g)}</td>
+                <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
                 <td class="num">${parseInt(r.qty)||0}</td>
               </tr>`;
             }).join('')}
@@ -2356,10 +2412,10 @@ function renderMonthlyComparison({ rows1, rows2, label1, label2 }) {
     <div style="padding:20px 24px 0">
       <div style="margin-bottom:16px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--dim)">Summary — ${label1} vs ${label2}</div>
       <div class="kpi-strip" style="margin-bottom:24px">
-        <div class="kpi blue"><div class="kpi-lbl">${label1} Total Revenue</div><div class="kpi-val"><span class="sensitive-value">${fmtK(tot1.rev)}</span></div><div class="kpi-sub">${tot1.orders} orders</div></div>
+        <div class="kpi blue"><div class="kpi-lbl">${label1} Total Revenue</div><div class="kpi-val">${fmtK(tot1.rev)}</div><div class="kpi-sub">${tot1.orders} orders</div></div>
         <div class="kpi ${parseFloat(chgRev)>=0?'green':'red'}"><div class="kpi-lbl">Revenue Change</div><div class="kpi-val">${chgRev==='—'?'—':chgRev+'%'}</div><div class="kpi-sub">vs prior period</div></div>
-        <div class="kpi green"><div class="kpi-lbl">${label1} GP</div><div class="kpi-val"><span class="sensitive-value">${fmtK(tot1.gp)}</span></div><div class="kpi-sub">GM <span class="sensitive-value">${tot1.rev>0?(tot1.gp/tot1.rev*100).toFixed(1):0}%</span></div></div>
-        <div class="kpi ${parseFloat(chgGp)>=0?'green':'red'}"><div class="kpi-lbl">Growth Rate</div><div class="kpi-val">${chgGp==='—'?'—':chgGp+'%'}</div><div class="kpi-sub">vs <span class="sensitive-value">${fmtK(tot2.gp)}</span></div></div>
+        <div class="kpi green"><div class="kpi-lbl">${label1} GP</div><div class="kpi-val">${fmtK(tot1.gp)}</div><div class="kpi-sub">GM ${tot1.rev>0?(tot1.gp/tot1.rev*100).toFixed(1):0}%</div></div>
+        <div class="kpi ${parseFloat(chgGp)>=0?'green':'red'}"><div class="kpi-lbl">Growth Rate</div><div class="kpi-val">${chgGp==='—'?'—':chgGp+'%'}</div><div class="kpi-sub">vs ${fmtK(tot2.gp)}</div></div>
         <div class="kpi yellow"><div class="kpi-lbl">${label1} Volume</div><div class="kpi-val">${tot1.qty.toLocaleString()}</div><div class="kpi-sub">units</div></div>
         <div class="kpi purple"><div class="kpi-lbl">${label2} Volume</div><div class="kpi-val">${tot2.qty.toLocaleString()}</div><div class="kpi-sub">units</div></div>
       </div>
