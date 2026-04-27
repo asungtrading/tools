@@ -6,6 +6,7 @@
 <title>Asung — Business Performance Overview</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
 :root {
   --bg: #080a0f;
@@ -30,6 +31,7 @@
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { background: var(--bg); color: var(--text); font-family: 'DM Sans', 'Segoe UI', sans-serif; font-size: 13px; min-height: 100vh; }
+body { /* default: confidential mode active — CSS class set by inline script after auth */ }
 body::before { content: ''; position: fixed; inset: 0; background: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(59,130,246,.08), transparent); pointer-events: none; z-index: 0; }
 
 /* ── AUTH ── */
@@ -58,6 +60,30 @@ body::before { content: ''; position: fixed; inset: 0; background: radial-gradie
 .hdr-name { font-size: 12px; color: var(--mid); }
 .hdr-signout { font-size: 11px; color: var(--dim); cursor: pointer; padding: 4px 10px; border: 1px solid var(--border); border-radius: 6px; transition: all .2s; background: none; }
 .hdr-signout:hover { color: var(--text); border-color: var(--border2); }
+
+/* ── CONFIDENTIAL MODE ── (default ON; toggleable) */
+body.conf-on .sensitive-value,
+body.conf-on .sensitive-cell {
+  filter: blur(7px);
+  user-select: none;
+  pointer-events: none;
+  transition: filter .25s;
+}
+body.conf-on .sensitive-value::before {
+  content: '$ • • •';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: none;
+  color: var(--dim);
+  font-weight: 600;
+}
+body.conf-on .sensitive-value { position: relative; color: transparent !important; }
+body.conf-on .sensitive-axis { display: none; }
+body.conf-on .conf-hide { visibility: hidden; }
+.sensitive-value { transition: filter .25s; }
 
 /* ── SEARCH PANEL ── */
 .search-panel { background: var(--surface); border-bottom: 1px solid var(--border); padding: 20px 24px; }
@@ -274,6 +300,8 @@ html, body { overflow-x: hidden; max-width: 100vw; }
       <span class="hdr-title">Business Performance</span>
     </div>
     <div class="hdr-user">
+      <button class="hdr-signout" id="confToggleBtn" onclick="toggleSensitive()" style="border-color:var(--gold);color:var(--gold)">🔒 Confidential</button>
+      <button class="hdr-signout" onclick="exportPDF()" style="border-color:var(--blue);color:var(--blue2)">📄 Export PDF</button>
       <img class="hdr-avatar" id="userAvatar" src="" alt="">
       <span class="hdr-name" id="userName">—</span>
       <button class="hdr-signout" onclick="signOut()">Sign out</button>
@@ -283,7 +311,6 @@ html, body { overflow-x: hidden; max-width: 100vw; }
   <!-- TAB NAV -->
   <div class="tab-nav">
     <button class="tab-btn active" onclick="switchTab('sales')">📊 Sales Overview</button>
-    <button class="tab-btn" onclick="switchTab('price')">💰 Price Analysis</button>
     <button class="tab-btn" onclick="switchTab('brand')">🏷 Brand Performance</button>
     <button class="tab-btn" onclick="switchTab('customer')">👤 Customer Performance</button>
     <button class="tab-btn" onclick="switchTab('monthly')">📅 Period Comparison</button>
@@ -361,55 +388,6 @@ html, body { overflow-x: hidden; max-width: 100vw; }
   </div>
 
   </div><!-- /tab-sales -->
-
-  <!-- TAB: PRICE ANALYSIS -->
-  <div class="tab-panel" id="tab-price">
-    <div class="price-search">
-      <div class="field">
-        <label class="field-label">Date Range</label>
-        <div class="date-row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <input type="date" id="pDateFrom">
-          <input type="date" id="pDateTo">
-        </div>
-      </div>
-      <div class="field">
-        <label class="field-label">SKU <span style="color:var(--red)">*required</span></label>
-        <input type="text" id="pSku" placeholder="e.g. ORS11108" style="">
-      </div>
-      <div class="field">
-        <label class="field-label">Brand (optional)</label>
-        <div class="ac-wrap">
-          <input type="text" id="pBrand" placeholder="e.g. ORS, Kim & C" autocomplete="off" oninput="acInput(this,'pBrand','brand')" onkeydown="acKey(event,'pBrand')" onfocus="acInput(this,'pBrand','brand')" style="">
-          <div class="ac-list" id="ac-pBrand" style="display:none"></div>
-        </div>
-      </div>
-      <div class="field">
-        <label class="field-label">Customer (optional)</label>
-        <div class="ac-wrap">
-          <input type="text" id="pCustomer" placeholder="e.g. Clore" autocomplete="off" oninput="acInput(this,'pCustomer')" onkeydown="acKey(event,'pCustomer')" onfocus="acInput(this,'pCustomer')" style="">
-          <div class="ac-list" id="ac-pCustomer" style="display:none"></div>
-        </div>
-      </div>
-      <div class="field">
-        <label class="field-label">Branch</label>
-        <select id="pBranch">
-          <option value="">All Branches</option>
-          <option value="Asung Trading Inc.">Toronto</option>
-          <option value="Asung - Edmonton">Edmonton</option>
-        </select>
-      </div>
-      <div>
-        <button class="search-btn" id="pSearchBtn" onclick="runPriceSearch()">🔍 Analyze</button>
-      </div>
-    </div>
-    <div class="content" id="priceContent">
-      <div class="empty-state">
-        <div class="empty-icon">💰</div>
-        <div class="empty-title">Enter a SKU and click Analyze</div>
-        <div class="empty-desc">Analyzes price band breakdown — volume and revenue by price point</div>
-      </div>
-    </div>
-  </div><!-- /tab-price -->
 
   <!-- TAB: BRAND PERFORMANCE -->
   <div class="tab-panel" id="tab-brand">
@@ -490,7 +468,7 @@ html, body { overflow-x: hidden; max-width: 100vw; }
       </div>
       <div class="field">
         <label class="field-label">Channel</label>
-        <select id="cChannel">
+        <select id="cCustChannel">
           <option value="">All</option>
           <option value="B2B">B2B</option>
           <option value="Shopify">Shopify</option>
@@ -705,13 +683,14 @@ async function loadUser() {
     document.getElementById('authScreen').style.display = 'none';
     document.getElementById('mainApp').style.display = 'block';
 
+    // Default: confidential mode ON (presentation use)
+    document.body.classList.add('conf-on');
+
     // Default date range
     const today = new Date();
     const from = new Date(today.getFullYear(), today.getMonth() - 2, 1);
     document.getElementById('dateFrom').value = from.toISOString().slice(0,10);
     document.getElementById('dateTo').value = today.toISOString().slice(0,10);
-    document.getElementById('pDateFrom').value = '2022-01-01';
-    document.getElementById('pDateTo').value = today.toISOString().slice(0,10);
     document.getElementById('bDateFrom').value = '2022-01-01';
     document.getElementById('bDateTo').value = today.toISOString().slice(0,10);
     document.getElementById('cDateFrom').value = '2022-01-01';
@@ -788,7 +767,7 @@ async function runSearch() {
     const where = buildWhere(params);
     const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
 
-    const [kpiRows, trendRows, brandRows, custRows, sourceRows, locationRows, detailRows] = await Promise.all([
+    const [kpiRows, trendRows, brandRows, custRows, sourceRows, locationRows, regionTrendRows, detailRows] = await Promise.all([
       // KPI
       bqQuery(`SELECT COUNT(DISTINCT OrderNumber) as orders, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(COGS) as cogs, SUM(Gross_Profit) as gp, COUNT(DISTINCT Customer_Clean) as customers FROM ${fullTable} ${where}`),
       // Monthly trend
@@ -801,13 +780,15 @@ async function runSearch() {
       bqQuery(`SELECT Source_Clean as source, SUM(Total) as revenue, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY source ORDER BY revenue DESC`),
       // Location
       bqQuery(`SELECT Location as location, SUM(Total) as revenue, SUM(Gross_Profit) as gp FROM ${fullTable} ${where} GROUP BY location ORDER BY revenue DESC`),
+      // Regional monthly trend (Toronto vs Edmonton)
+      bqQuery(`SELECT FORMAT_DATE('%Y-%m', Date) as month, Location as location, SUM(Quantity) as qty, SUM(Total) as revenue FROM ${fullTable} ${where} GROUP BY month, location ORDER BY month`),
       // Detail rows (top 200)
       bqQuery(`SELECT Date, OrderNumber, Customer_Clean as customer, Brand_Clean as brand, SKU, Product_Name as product, Quantity as qty, Unit_Price as price, Total as total, Gross_Profit as gp, Location as location, Source_Clean as source FROM ${fullTable} ${where} ORDER BY Date DESC LIMIT 200`),
     ]);
 
     document.getElementById('queryInfo').textContent = `${detailRows.length}+ rows`;
     btn.disabled = false; btn.textContent = '🔍 Search';
-    renderResults({ kpiRows, trendRows, brandRows, custRows, sourceRows, locationRows, detailRows });
+    renderResults({ kpiRows, trendRows, brandRows, custRows, sourceRows, locationRows, regionTrendRows, detailRows });
   } catch(e) {
     btn.disabled = false; btn.textContent = '🔍 Search';
     document.getElementById('mainContent').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Query Error</div><div class="empty-desc">${e.message}</div></div>`;
@@ -866,43 +847,68 @@ function linReg(data) {
 }
 
 // ══════════════════════════════════════
-// SENSITIVE DATA TOGGLE
+// CONFIDENTIAL MODE — hides revenue, GP, and GM% via CSS class on body
 // ══════════════════════════════════════
-let showSensitive = false;
+let showSensitive = false; // default: hidden (presenting to externals)
 function toggleSensitive() {
   showSensitive = !showSensitive;
-  document.querySelectorAll('.sensitive-value').forEach(el => {
-    el.textContent = showSensitive ? el.dataset.val : '● ● ●';
-  });
-  document.querySelectorAll('.sensitive-card').forEach(el => {
-    el.style.opacity = showSensitive ? '1' : '0.35';
-    el.style.filter = showSensitive ? 'none' : 'blur(4px)';
-    el.style.pointerEvents = showSensitive ? 'auto' : 'none';
-  });
-  const btn = document.getElementById('sensitiveToggleBtn');
+  document.body.classList.toggle('conf-on', !showSensitive);
+  const btn = document.getElementById('confToggleBtn');
   if (btn) {
-    btn.textContent = showSensitive ? '🔒 Hide Revenue & GP' : '🔓 Show Revenue & GP';
-    btn.style.borderColor = showSensitive ? 'var(--green)' : 'var(--border2)';
-    btn.style.color = showSensitive ? 'var(--green)' : 'var(--dim)';
+    btn.textContent = showSensitive ? '🔓 Visible' : '🔒 Confidential';
+    btn.style.borderColor = showSensitive ? 'var(--green)' : 'var(--gold)';
+    btn.style.color = showSensitive ? 'var(--green)' : 'var(--gold)';
   }
 }
 
+// Wraps any $ amount or %; CSS handles masking when body has .conf-on
 function sensitiveVal(n) {
-  return `<span class="sensitive-value" data-val="${fmtK(n)}" style="filter:${showSensitive?'none':'blur(6px)'};transition:filter .3s">${showSensitive ? fmtK(n) : '● ● ●'}</span>`;
+  return `<span class="sensitive-value">${fmtK(n)}</span>`;
 }
-
-function sensitiveCardStyle() {
-  return showSensitive ? '' : 'opacity:0.35;filter:blur(4px);pointer-events:none;transition:all .3s;';
+function sensitivePct(n) {
+  return `<span class="sensitive-value">${n}%</span>`;
 }
+function sensitiveCardStyle() { return ''; } // legacy no-op; CSS class drives masking
+function toggleBtnHTML() { return ''; }       // legacy no-op; header has the button
 
-function toggleBtnHTML() {
-  return `<button id="sensitiveToggleBtn" class="export-btn" onclick="toggleSensitive()" style="border-color:${showSensitive?'var(--green)':'var(--border2)'};color:${showSensitive?'var(--green)':'var(--dim)'}">
-    ${showSensitive ? '🔒 Hide Revenue & GP' : '🔓 Show Revenue & GP'}
-  </button>`;
+// ══════════════════════════════════════
+// PDF EXPORT — captures the active dashboard tab into a presentation-ready PDF
+// ══════════════════════════════════════
+async function exportPDF() {
+  const btn = document.querySelector('button[onclick="exportPDF()"]');
+  const orig = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Generating...'; }
+  try {
+    const active = document.querySelector('.tab-panel.active') || document.getElementById('mainApp');
+    if (!active) throw new Error('Nothing to export');
+
+    // Force-render hidden chart canvases at full size before snapshot
+    const canvases = active.querySelectorAll('canvas');
+    canvases.forEach(c => { try { c.getContext('2d') && c.toDataURL(); } catch(e){} });
+
+    const today = new Date().toISOString().slice(0,10);
+    const tabName = (active.id || 'dashboard').replace(/^tab-/, '');
+    const filename = `Asung_${tabName}_${today}.pdf`;
+
+    const opt = {
+      margin: [8, 8, 8, 8],
+      filename,
+      image: { type: 'jpeg', quality: 0.95 },
+      html2canvas: { scale: 2, backgroundColor: '#080a0f', useCORS: true, logging: false },
+      jsPDF: { unit: 'mm', format: 'a3', orientation: 'landscape' },
+      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+    };
+
+    await html2pdf().set(opt).from(active).save();
+  } catch (e) {
+    alert('PDF export failed: ' + (e.message || e));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = orig || '📄 Export PDF'; }
+  }
 }
 
 function renderResults(data) {
-  const { kpiRows, trendRows, brandRows, custRows, sourceRows, locationRows, detailRows } = data;
+  const { kpiRows, trendRows, brandRows, custRows, sourceRows, locationRows, regionTrendRows, detailRows } = data;
   // Cache for export
   exportData.salesBrands  = brandRows;
   exportData.salesCusts   = custRows;
@@ -953,6 +959,17 @@ function renderResults(data) {
       <div class="card">
         <div class="card-hdr"><span class="card-title">Branch Split</span></div>
         <div class="chart-box"><canvas id="cLocation"></canvas></div>
+      </div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">Regional Volume Trend — Toronto vs Edmonton</span><span class="card-badge">with trendlines</span></div>
+        <div class="chart-box tall"><canvas id="cRegionTrend"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">Regional Share by Month</span><span class="card-badge">% of volume</span></div>
+        <div class="chart-box tall"><canvas id="cRegionShare"></canvas></div>
       </div>
     </div>
 
@@ -1024,6 +1041,41 @@ function renderResults(data) {
   mkChart('cCust',{type:'bar',indexAxis:'y',data:{labels:top10custs.map(r=>r.customer.length>20?r.customer.slice(0,20)+'…':r.customer),datasets:[{label:'Volume',data:top10custs.map(r=>parseInt(r.qty)||0),backgroundColor:'rgba(20,184,166,0.7)',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+parseInt(ctx.raw).toLocaleString()+' units'}}},scales:{x:{grid:{color:'#1a2233'},ticks:{color:'#475569',font:{size:9}}},y:{grid:{color:'#1a2233'},ticks:{color:'#94a3b8',font:{size:9}}}}}});
 
   mkChart('cLocation',{type:'doughnut',data:{labels:locationRows.map(r=>r.location==='Asung Trading Inc.'?'Toronto':'Edmonton'),datasets:[{data:locationRows.map(r=>parseInt(r.orders)||0),backgroundColor:['rgba(59,130,246,0.8)','rgba(249,115,22,0.8)'],borderWidth:1,borderColor:'#080a0f'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:10},boxWidth:10}},tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+parseInt(ctx.raw).toLocaleString()+' orders'}}}}});
+
+  // ── Regional monthly volume (Toronto vs Edmonton) with trend lines ──
+  const months = [...new Set((regionTrendRows||[]).map(r=>r.month))].sort();
+  const torByMonth = {};
+  const edmByMonth = {};
+  (regionTrendRows||[]).forEach(r => {
+    const q = parseInt(r.qty)||0;
+    if (r.location === 'Asung Trading Inc.') torByMonth[r.month] = q;
+    else if (r.location === 'Asung - Edmonton') edmByMonth[r.month] = q;
+  });
+  const torData = months.map(m => torByMonth[m]||0);
+  const edmData = months.map(m => edmByMonth[m]||0);
+  const torTrend = linReg(torData);
+  const edmTrend = linReg(edmData);
+
+  mkChart('cRegionTrend',{type:'line',data:{labels:months,datasets:[
+    {label:'Toronto',data:torData,borderColor:'rgba(59,130,246,0.95)',backgroundColor:'rgba(59,130,246,0.15)',borderWidth:2,pointRadius:3,tension:0.3,fill:true},
+    {label:'Edmonton',data:edmData,borderColor:'rgba(249,115,22,0.95)',backgroundColor:'rgba(249,115,22,0.12)',borderWidth:2,pointRadius:3,tension:0.3,fill:true},
+    {label:'Toronto Trend',data:torTrend,borderColor:'rgba(59,130,246,0.55)',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,borderDash:[6,4],tension:0,fill:false},
+    {label:'Edmonton Trend',data:edmTrend,borderColor:'rgba(249,115,22,0.55)',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,borderDash:[6,4],tension:0,fill:false},
+  ]},options:{...baseOpts(45),plugins:{...baseOpts().plugins,legend:{display:true,position:'top',labels:{color:'#94a3b8',font:{size:9}}},tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>ctx.dataset.label.includes('Trend')?null:' '+ctx.dataset.label+': '+parseInt(ctx.raw||0).toLocaleString()+' units'}}}}});
+
+  // Regional share (stacked %)
+  const sharePctTor = months.map((m,i) => {
+    const tot = torData[i] + edmData[i];
+    return tot > 0 ? parseFloat((torData[i]/tot*100).toFixed(1)) : 0;
+  });
+  const sharePctEdm = months.map((m,i) => {
+    const tot = torData[i] + edmData[i];
+    return tot > 0 ? parseFloat((edmData[i]/tot*100).toFixed(1)) : 0;
+  });
+  mkChart('cRegionShare',{type:'bar',data:{labels:months,datasets:[
+    {label:'Toronto %',data:sharePctTor,backgroundColor:'rgba(59,130,246,0.75)',borderRadius:2,stack:'a'},
+    {label:'Edmonton %',data:sharePctEdm,backgroundColor:'rgba(249,115,22,0.75)',borderRadius:2,stack:'a'},
+  ]},options:{...baseOpts(45),plugins:{...baseOpts().plugins,legend:{display:true,position:'top',labels:{color:'#94a3b8',font:{size:9}}},tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>' '+ctx.dataset.label+': '+ctx.raw+'%'}}},scales:{...baseOpts().scales,x:{...baseOpts().scales.x,stacked:true},y:{...baseOpts().scales.y,stacked:true,max:100,ticks:{...baseOpts().scales.y.ticks,callback:v=>v+'%'}}}}});
 }
 
 function renderBrandTable(rows) {
@@ -1071,9 +1123,9 @@ function renderDetailTable(rows) {
       <td style="font-family:'DM Mono',monospace;font-size:11px">${r.SKU||'—'}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.product||''}">${r.product||'—'}</td>
       <td class="num">${r.qty||0}</td>
-      <td class="num">${fmt(r.price)}</td>
-      <td class="num">${fmt(r.total)}</td>
-      <td class="num ${gp>=0?'pos':'neg'}">${fmt(gp)}</td>
+      <td class="num"><span class="sensitive-value">${fmt(r.price)}</span></td>
+      <td class="num"><span class="sensitive-value">${fmt(r.total)}</span></td>
+      <td class="num ${gp>=0?'pos':'neg'}"><span class="sensitive-value">${fmt(gp)}</span></td>
       <td>${loc}</td>
       <td>${src}</td>
     </tr>`;
@@ -1081,9 +1133,9 @@ function renderDetailTable(rows) {
 }
 
 // ══════════════════════════════════════
-// PRICE ANALYSIS
+// PRICE ANALYSIS — removed (presentation deck does not expose price detail)
 // ══════════════════════════════════════
-async function runPriceSearch() {
+/* async function runPriceSearch() {
   const sku      = document.getElementById('pSku').value.trim();
   const brand    = document.getElementById('pBrand').value.trim();
   const customer = document.getElementById('pCustomer').value.trim();
@@ -1347,6 +1399,7 @@ function renderPriceAnalysis({ priceRows, summaryRows, custRows, sku }) {
     }
   });
 }
+*/
 
 // ══════════════════════════════════════
 // BRAND PERFORMANCE
@@ -1517,9 +1570,9 @@ function renderBrandPerformance({ summaryRows, trendRows, skuRows, custRows, bra
         <div style="background:#0f1625;border:1px solid ${color};border-left:3px solid ${color};border-radius:6px;padding:12px 14px;min-width:180px">
           <div style="font-size:12px;font-weight:700;color:${color};margin-bottom:8px">${s.brand_label}</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:11px">
-            <div><div style="color:var(--dim);font-size:10px">Revenue</div><div style="font-weight:600;color:var(--text)">${fmtK(rev)}</div></div>
-            <div><div style="color:var(--dim);font-size:10px">GP</div><div style="font-weight:600;color:var(--text)">${fmtK(gp)}</div></div>
-            <div><div style="color:var(--dim);font-size:10px">GM%</div><div style="font-weight:600;color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</div></div>
+            <div><div style="color:var(--dim);font-size:10px">Revenue</div><div style="font-weight:600;color:var(--text)"><span class="sensitive-value">${fmtK(rev)}</span></div></div>
+            <div><div style="color:var(--dim);font-size:10px">GP</div><div style="font-weight:600;color:var(--text)"><span class="sensitive-value">${fmtK(gp)}</span></div></div>
+            <div><div style="color:var(--dim);font-size:10px">GM%</div><div style="font-weight:600;color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}"><span class="sensitive-value">${gm}%</span></div></div>
             <div><div style="color:var(--dim);font-size:10px">Growth</div><div style="font-weight:600;color:${growthColor}">${growth==='N/A'?'N/A':growthSign+growth+'%'}</div></div>
             <div><div style="color:var(--dim);font-size:10px">Orders</div><div style="font-weight:600;color:var(--text)">${parseInt(s.orders)||0}</div></div>
             <div><div style="color:var(--dim);font-size:10px">Customer</div><div style="font-weight:600;color:var(--text)">${parseInt(s.customers)||0}</div></div>
@@ -1593,12 +1646,12 @@ function renderBrandPerformance({ summaryRows, trendRows, skuRows, custRows, bra
         <span style="font-size:11px;color:var(--dim);margin-left:8px">${s.first_date||''} ~ ${s.last_date||''}</span>
       </div>
       <div class="kpi-strip" style="margin-bottom:20px">
-        <div class="kpi blue"><div class="kpi-lbl">Total Revenue</div><div class="kpi-val">${fmtK(rev)}</div><div class="kpi-sub">${parseInt(s.orders)||0} orders</div></div>
-        <div class="kpi green"><div class="kpi-lbl">Gross Profit</div><div class="kpi-val">${fmtK(gp)}</div><div class="kpi-sub">GM ${gm}%</div></div>
+        <div class="kpi blue"><div class="kpi-lbl">Total Revenue</div><div class="kpi-val"><span class="sensitive-value">${fmtK(rev)}</span></div><div class="kpi-sub">${parseInt(s.orders)||0} orders</div></div>
+        <div class="kpi green"><div class="kpi-lbl">Gross Profit</div><div class="kpi-val"><span class="sensitive-value">${fmtK(gp)}</span></div><div class="kpi-sub">GM <span class="sensitive-value">${gm}%</span></div></div>
         <div class="kpi yellow"><div class="kpi-lbl">Total Units</div><div class="kpi-val">${(parseInt(s.qty)||0).toLocaleString()}</div><div class="kpi-sub">units</div></div>
         <div class="kpi purple"><div class="kpi-lbl">Customers</div><div class="kpi-val">${parseInt(s.customers)||0}</div><div class="kpi-sub">unique</div></div>
         <div class="kpi teal"><div class="kpi-lbl">SKUs</div><div class="kpi-val">${skuRows.length}</div><div class="kpi-sub">products</div></div>
-        <div class="kpi blue"><div class="kpi-lbl">Avg. Monthly Revenue</div><div class="kpi-val">${fmtK(rev / Math.max(trendRows.length,1))}</div><div class="kpi-sub">${trendRows.length} months</div></div>
+        <div class="kpi blue"><div class="kpi-lbl">Avg. Monthly Revenue</div><div class="kpi-val"><span class="sensitive-value">${fmtK(rev / Math.max(trendRows.length,1))}</span></div><div class="kpi-sub">${trendRows.length} months</div></div>
       </div>
       <div class="charts-grid" style="margin-bottom:16px">
         <div class="card">
@@ -1632,9 +1685,9 @@ function renderBrandPerformance({ summaryRows, trendRows, skuRows, custRows, bra
                 <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.product||'—'}</td>
                 <td style="font-size:11px;color:var(--dim)">${r.first_date||'—'}</td>
                 <td style="font-size:11px;color:var(--dim)">${r.last_date||'—'}</td>
-                <td class="num">${fmt(rv)}</td>
-                <td class="num ${g>=0?'pos':'neg'}">${fmt(g)}</td>
-                <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
+                <td class="num"><span class="sensitive-value">${fmt(rv)}</span></td>
+                <td class="num ${g>=0?'pos':'neg'}"><span class="sensitive-value">${fmt(g)}</span></td>
+                <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}"><span class="sensitive-value">${gm}%</span></td>
                 <td class="num">${parseInt(r.qty)||0}</td>
                 <td class="num">${parseInt(r.orders)||0}</td>
               </tr>`;
@@ -1663,9 +1716,9 @@ function renderBrandPerformance({ summaryRows, trendRows, skuRows, custRows, bra
                 <td>${r.customer||'—'}</td>
                 <td style="font-size:11px;color:var(--dim)">${r.first_date||'—'}</td>
                 <td style="font-size:11px;color:var(--dim)">${r.last_date||'—'}</td>
-                <td class="num">${fmt(rv)}</td>
-                <td class="num ${g>=0?'pos':'neg'}">${fmt(g)}</td>
-                <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
+                <td class="num"><span class="sensitive-value">${fmt(rv)}</span></td>
+                <td class="num ${g>=0?'pos':'neg'}"><span class="sensitive-value">${fmt(g)}</span></td>
+                <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}"><span class="sensitive-value">${gm}%</span></td>
                 <td class="num">${parseInt(r.qty)||0}</td>
                 <td class="num">${parseInt(r.orders)||0}</td>
               </tr>`;
@@ -1739,7 +1792,7 @@ async function runCustomerSearch() {
 
   const customers = [...cCustList];
   const branch   = document.getElementById('cBranch').value;
-  const source   = document.getElementById('cChannel').value;
+  const source   = document.getElementById('cCustChannel').value;
   const dateFrom = document.getElementById('cDateFrom').value;
   const dateTo   = document.getElementById('cDateTo').value;
 
@@ -1850,9 +1903,9 @@ function renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows,
           <div style="font-size:12px;font-weight:700;color:${color};margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${s.cust_label}">${s.cust_label}</div>
           <div style="font-size:10px;color:var(--dim);margin-bottom:8px">Last Purchase: ${s.last_date||'—'} · ${daysAgo}</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:11px">
-            <div><div style="color:var(--dim);font-size:10px">Revenue</div><div style="font-weight:600;color:var(--text)">${fmtK(rev)}</div></div>
-            <div><div style="color:var(--dim);font-size:10px">GP</div><div style="font-weight:600;color:var(--text)">${fmtK(gp)}</div></div>
-            <div><div style="color:var(--dim);font-size:10px">GM%</div><div style="font-weight:600;color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</div></div>
+            <div><div style="color:var(--dim);font-size:10px">Revenue</div><div style="font-weight:600;color:var(--text)"><span class="sensitive-value">${fmtK(rev)}</span></div></div>
+            <div><div style="color:var(--dim);font-size:10px">GP</div><div style="font-weight:600;color:var(--text)"><span class="sensitive-value">${fmtK(gp)}</span></div></div>
+            <div><div style="color:var(--dim);font-size:10px">GM%</div><div style="font-weight:600;color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}"><span class="sensitive-value">${gm}%</span></div></div>
             <div><div style="color:var(--dim);font-size:10px">Growth</div><div style="font-weight:600;color:${growthColor}">${growth==='N/A'?'N/A':growthSign+growth+'%'}</div></div>
             <div><div style="color:var(--dim);font-size:10px">Orders</div><div style="font-weight:600;color:var(--text)">${parseInt(s.orders)||0}</div></div>
             <div><div style="color:var(--dim);font-size:10px">Brand</div><div style="font-weight:600;color:var(--text)">${parseInt(s.brands)||0}</div></div>
@@ -1923,10 +1976,10 @@ function renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows,
         <span style="font-size:11px;color:var(--dim);margin-left:8px">${s.first_date||''} ~ ${s.last_date||''}</span>
       </div>
       <div class="kpi-strip" style="margin-bottom:20px">
-        <div class="kpi blue"><div class="kpi-lbl">Total Revenue</div><div class="kpi-val">${fmtK(rev)}</div><div class="kpi-sub">${parseInt(s.orders)||0} orders</div></div>
-        <div class="kpi green"><div class="kpi-lbl">Gross Profit</div><div class="kpi-val">${fmtK(gp)}</div><div class="kpi-sub">GM ${gm}%</div></div>
+        <div class="kpi blue"><div class="kpi-lbl">Total Revenue</div><div class="kpi-val"><span class="sensitive-value">${fmtK(rev)}</span></div><div class="kpi-sub">${parseInt(s.orders)||0} orders</div></div>
+        <div class="kpi green"><div class="kpi-lbl">Gross Profit</div><div class="kpi-val"><span class="sensitive-value">${fmtK(gp)}</span></div><div class="kpi-sub">GM <span class="sensitive-value">${gm}%</span></div></div>
         <div class="kpi yellow"><div class="kpi-lbl">Total Units</div><div class="kpi-val">${(parseInt(s.qty)||0).toLocaleString()}</div><div class="kpi-sub">units</div></div>
-        <div class="kpi teal"><div class="kpi-lbl">Avg. Order Value</div><div class="kpi-val">${fmtK(avgOrder)}</div><div class="kpi-sub">per order</div></div>
+        <div class="kpi teal"><div class="kpi-lbl">Avg. Order Value</div><div class="kpi-val"><span class="sensitive-value">${fmtK(avgOrder)}</span></div><div class="kpi-sub">per order</div></div>
         <div class="kpi purple"><div class="kpi-lbl">Brands Purchased</div><div class="kpi-val">${parseInt(s.brands)||0}</div><div class="kpi-sub">brands</div></div>
         <div class="kpi blue"><div class="kpi-lbl">SKUs Purchased</div><div class="kpi-val">${skuRows.length}</div><div class="kpi-sub">products</div></div>
       </div>
@@ -1961,9 +2014,9 @@ function renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows,
                 <td style="font-weight:500">${r.brand||'—'}</td>
                 <td style="font-size:11px;color:var(--dim)">${r.first_date||'—'}</td>
                 <td style="font-size:11px;color:var(--dim)">${r.last_date||'—'}</td>
-                <td class="num">${fmt(rv)}</td>
-                <td class="num ${g>=0?'pos':'neg'}">${fmt(g)}</td>
-                <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
+                <td class="num"><span class="sensitive-value">${fmt(rv)}</span></td>
+                <td class="num ${g>=0?'pos':'neg'}"><span class="sensitive-value">${fmt(g)}</span></td>
+                <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}"><span class="sensitive-value">${gm}%</span></td>
                 <td class="num">${parseInt(r.qty)||0}</td>
                 <td class="num">${parseInt(r.orders)||0}</td>
               </tr>`;
@@ -1995,9 +2048,9 @@ function renderCustomerPerformance({ summaryRows, trendRows, brandRows, skuRows,
                 <td style="font-size:11px;color:var(--dim)">${r.first_date||'—'}</td>
                 <td style="font-size:11px;color:var(--dim)">${r.last_date||'—'}</td>
                 <td class="num" style="font-family:monospace">$${parseFloat(r.avg_price||0).toFixed(2)}</td>
-                <td class="num">${fmt(rv)}</td>
-                <td class="num ${g>=0?'pos':'neg'}">${fmt(g)}</td>
-                <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
+                <td class="num"><span class="sensitive-value">${fmt(rv)}</span></td>
+                <td class="num ${g>=0?'pos':'neg'}"><span class="sensitive-value">${fmt(g)}</span></td>
+                <td class="num" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}"><span class="sensitive-value">${gm}%</span></td>
                 <td class="num">${parseInt(r.qty)||0}</td>
               </tr>`;
             }).join('')}
@@ -2303,10 +2356,10 @@ function renderMonthlyComparison({ rows1, rows2, label1, label2 }) {
     <div style="padding:20px 24px 0">
       <div style="margin-bottom:16px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--dim)">Summary — ${label1} vs ${label2}</div>
       <div class="kpi-strip" style="margin-bottom:24px">
-        <div class="kpi blue"><div class="kpi-lbl">${label1} Total Revenue</div><div class="kpi-val">${fmtK(tot1.rev)}</div><div class="kpi-sub">${tot1.orders} orders</div></div>
+        <div class="kpi blue"><div class="kpi-lbl">${label1} Total Revenue</div><div class="kpi-val"><span class="sensitive-value">${fmtK(tot1.rev)}</span></div><div class="kpi-sub">${tot1.orders} orders</div></div>
         <div class="kpi ${parseFloat(chgRev)>=0?'green':'red'}"><div class="kpi-lbl">Revenue Change</div><div class="kpi-val">${chgRev==='—'?'—':chgRev+'%'}</div><div class="kpi-sub">vs prior period</div></div>
-        <div class="kpi green"><div class="kpi-lbl">${label1} GP</div><div class="kpi-val">${fmtK(tot1.gp)}</div><div class="kpi-sub">GM ${tot1.rev>0?(tot1.gp/tot1.rev*100).toFixed(1):0}%</div></div>
-        <div class="kpi ${parseFloat(chgGp)>=0?'green':'red'}"><div class="kpi-lbl">Growth Rate</div><div class="kpi-val">${chgGp==='—'?'—':chgGp+'%'}</div><div class="kpi-sub">vs ${fmtK(tot2.gp)}</div></div>
+        <div class="kpi green"><div class="kpi-lbl">${label1} GP</div><div class="kpi-val"><span class="sensitive-value">${fmtK(tot1.gp)}</span></div><div class="kpi-sub">GM <span class="sensitive-value">${tot1.rev>0?(tot1.gp/tot1.rev*100).toFixed(1):0}%</span></div></div>
+        <div class="kpi ${parseFloat(chgGp)>=0?'green':'red'}"><div class="kpi-lbl">Growth Rate</div><div class="kpi-val">${chgGp==='—'?'—':chgGp+'%'}</div><div class="kpi-sub">vs <span class="sensitive-value">${fmtK(tot2.gp)}</span></div></div>
         <div class="kpi yellow"><div class="kpi-lbl">${label1} Volume</div><div class="kpi-val">${tot1.qty.toLocaleString()}</div><div class="kpi-sub">units</div></div>
         <div class="kpi purple"><div class="kpi-lbl">${label2} Volume</div><div class="kpi-val">${tot2.qty.toLocaleString()}</div><div class="kpi-sub">units</div></div>
       </div>
