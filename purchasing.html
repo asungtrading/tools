@@ -178,6 +178,16 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .slm-item .del:hover{color:var(--red)}
 .slm-empty{padding:20px;text-align:center;color:var(--text3);font-family:var(--mono);font-size:11px}
 .slm-footer{display:flex;justify-content:flex-end;gap:8px}
+/* CSV 드롭다운 */
+.csv-dropdown{position:relative;display:inline-block}
+.csv-menu{display:none;position:absolute;top:calc(100% + 6px);right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.5);min-width:200px;z-index:200;overflow:hidden;padding:4px 0}
+.csv-menu.open{display:block}
+.csv-menu-section{font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);padding:7px 13px 4px}
+.csv-menu-sep{height:1px;background:var(--border);margin:4px 0}
+.csv-menu-item{display:flex;align-items:center;width:100%;background:none;border:none;color:var(--text2);font-family:var(--mono);font-size:11.5px;padding:7px 13px;cursor:pointer;transition:background .12s;text-align:left;gap:6px}
+.csv-menu-item:hover{background:var(--bg3);color:var(--text)}
+.csv-menu-badge{margin-left:auto;font-size:9px;font-weight:600;padding:1px 5px;border-radius:3px;background:var(--bg4);color:var(--text3);border:1px solid var(--border)}
+.csv-menu-badge.primary{background:rgba(79,142,247,.15);color:var(--accent);border-color:rgba(79,142,247,.3)}
 /* loading overlay */
 #loading{display:none;position:fixed;inset:0;background:rgba(13,15,20,.75);z-index:300;align-items:center;justify-content:center;flex-direction:column;gap:12px}
 #loading.show{display:flex}
@@ -219,9 +229,18 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
       <span id="bq-lbl">판매 BQ 미연결 — 클릭하여 연결</span>
     </div>
     <div class="hsep"></div>
-    <button class="btn primary" onclick="dlCSV('order_current')">↓ 발주 CSV</button>
-    <button class="btn" onclick="dlCSV('order')">↓ 전체 발주</button>
-    <button class="btn" onclick="dlCSV('all')">↓ 전체 CSV</button>
+    <div class="csv-dropdown" id="csv-dropdown">
+      <button class="btn primary" onclick="toggleCsvMenu(event)">↓ CSV <span style="font-size:9px;opacity:.7">▾</span></button>
+      <div class="csv-menu" id="csv-menu">
+        <div class="csv-menu-section">현재 Supplier</div>
+        <button class="csv-menu-item" onclick="dlCSV('order_current');closeCsvMenu()">↓ 발주 제품만 <span class="csv-menu-badge primary">발주</span></button>
+        <button class="csv-menu-item" onclick="dlCSV('supplier_all');closeCsvMenu()">↓ 전체 제품 <span class="csv-menu-badge">전체</span></button>
+        <div class="csv-menu-sep"></div>
+        <div class="csv-menu-section">전체 Supplier</div>
+        <button class="csv-menu-item" onclick="dlCSV('order');closeCsvMenu()">↓ 전체 발주 목록</button>
+        <button class="csv-menu-item" onclick="dlCSV('all');closeCsvMenu()">↓ 전체 제품 CSV</button>
+      </div>
+    </div>
     <div class="hsep"></div>
     <button class="btn" onclick="openSkuLinkModal()" title="구 SKU → 신 SKU 연결 관리">🔗 SKU 연결</button>
   </div>
@@ -1984,6 +2003,21 @@ function dlForecastCSV(){
 }
 
 // ═══════════════════════════════════════════════════════
+//  CSV DROPDOWN
+// ═══════════════════════════════════════════════════════
+function toggleCsvMenu(e){
+  e.stopPropagation();
+  document.getElementById('csv-menu').classList.toggle('open');
+}
+function closeCsvMenu(){
+  document.getElementById('csv-menu').classList.remove('open');
+}
+document.addEventListener('click',function(e){
+  const dd=document.getElementById('csv-dropdown');
+  if(dd&&!dd.contains(e.target))closeCsvMenu();
+});
+
+// ═══════════════════════════════════════════════════════
 //  CSV DOWNLOAD
 // ═══════════════════════════════════════════════════════
 // CSV 문자열 안전 처리: 쉼표/따옴표 포함 시 따옴표로 감싸고 내부 따옴표는 "" 이스케이프
@@ -2003,6 +2037,18 @@ function dlCSV(mode){
       r.adu?.toFixed(2)??'',r.sea?.toFixed(2)??'',r.trd?.toFixed(2)??'',
       r.avail,Math.round(r.ss||0),r.extOO,r.bo,r.rec??'',r._ov??r.rec??'',r.lt,r.tg].join(',');
     dl([hdr.join(','),...rows.map(toLine)].join('\n'),`PO_${S.supplier.replace(/[^a-zA-Z0-9]/g,'_')}_${STOCK_DATE}.csv`);
+    return;
+  }
+  if(mode==='supplier_all'){
+    // 현재 선택된 Supplier의 전체 제품 (발주량 무관)
+    if(!S.supplier){alert('Supplier를 먼저 선택해주세요.');return;}
+    const rows = getRows();
+    if(!rows.length){alert('데이터 없음');return;}
+    const hdr=['Supplier','Brand','SKU','Name','일판매량(ADU)','계절보정','트렌드','Available Stock','Safety Stock','Ordered','백오더','추천발주','실발주량','Lead Time','목표재고일수'];
+    const toLine=r=>[csvQ(r.supplier),csvQ(r.brand),csvQ(r.sku),csvQ(r.name),
+      r.adu?.toFixed(2)??'',r.sea?.toFixed(2)??'',r.trd?.toFixed(2)??'',
+      r.avail,Math.round(r.ss||0),r.extOO,r.bo,r.rec??'',r._ov??r.rec??'',r.lt,r.tg].join(',');
+    dl([hdr.join(','),...rows.map(toLine)].join('\n'),`ALL_${S.supplier.replace(/[^a-zA-Z0-9]/g,'_')}_${STOCK_DATE}.csv`);
     return;
   }
   if(mode==='order'){
