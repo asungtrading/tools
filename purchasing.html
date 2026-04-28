@@ -229,6 +229,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .ds-badge.dead{background:rgba(239,68,68,.18);color:#fca5a5;border:1px solid rgba(239,68,68,.35)}
 .ds-badge.slow{background:rgba(234,179,8,.16);color:#fde68a;border:1px solid rgba(234,179,8,.35)}
 .ds-badge.active{background:rgba(34,197,94,.16);color:#86efac;border:1px solid rgba(34,197,94,.35)}
+.ds-badge.new{background:rgba(59,130,246,.16);color:#93c5fd;border:1px solid rgba(59,130,246,.35)}
 </style>
 </head>
 <body>
@@ -426,6 +427,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
             <button data-st="dead" onclick="setDsStatus('dead',this)">Dead (365일+ 무판매)</button>
             <button data-st="slow" onclick="setDsStatus('slow',this)">Slow (90~365일)</button>
             <button data-st="active" onclick="setDsStatus('active',this)">Active</button>
+            <button data-st="new" onclick="setDsStatus('new',this)">New (판매 이력 없음)</button>
           </div>
           <div class="ptog" id="ds-stock-tog">
             <button class="active" data-sk="instock" onclick="setDsStock('instock',this)">재고있음</button>
@@ -2150,9 +2152,11 @@ function _dsBuildRows(){
     }
     const q90  = agg?.qty_90d  || 0;
     const q365 = agg?.qty_365d || 0;
-    let status = 'dead';   // 365일+ 무판매 OR 한번도 판매 없음
-    if(q90 > 0)        status = 'active';
+    let status;
+    if(!last)          status = 'new';     // 판매 이력 자체가 없음 (신제품 등)
+    else if(q90 > 0)   status = 'active';
     else if(q365 > 0)  status = 'slow';
+    else               status = 'dead';    // 365일+ 무판매 (판매 이력은 있음)
     out.push({
       sku, product:meta.name||'', brand:meta.brand||'—', supplier:meta.supplier||'—',
       tor, edm, total, last, dsls, qty90:q90, qty365:q365, cost, value, status
@@ -2214,6 +2218,7 @@ function renderDeadStock(){
   const dead  = rows.filter(r=>r.status==='dead').length;
   const slow  = rows.filter(r=>r.status==='slow').length;
   const active= rows.filter(r=>r.status==='active').length;
+  const fresh = rows.filter(r=>r.status==='new').length;
   const totalValue = rows.reduce((a,r)=>a+r.value, 0);
   const deadValue  = rows.filter(r=>r.status==='dead').reduce((a,r)=>a+r.value, 0);
   document.getElementById('ds-stats').innerHTML = `
@@ -2221,6 +2226,7 @@ function renderDeadStock(){
     <div class="ds-stat" style="border-color:rgba(239,68,68,.4)">Dead: <b style="color:#fca5a5">${dead.toLocaleString()}</b></div>
     <div class="ds-stat" style="border-color:rgba(234,179,8,.4)">Slow: <b style="color:#fde68a">${slow.toLocaleString()}</b></div>
     <div class="ds-stat" style="border-color:rgba(34,197,94,.4)">Active: <b style="color:#86efac">${active.toLocaleString()}</b></div>
+    <div class="ds-stat" style="border-color:rgba(59,130,246,.4)">New: <b style="color:#93c5fd">${fresh.toLocaleString()}</b></div>
     <div class="ds-stat">총 재고가치: <b>$${totalValue.toLocaleString('en-US',{maximumFractionDigits:0})}</b></div>
     <div class="ds-stat" style="border-color:rgba(239,68,68,.4)">Dead 재고가치: <b style="color:#fca5a5">$${deadValue.toLocaleString('en-US',{maximumFractionDigits:0})}</b></div>
   `;
