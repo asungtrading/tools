@@ -119,8 +119,11 @@ body::before { content: ''; position: fixed; inset: 0; background: radial-gradie
 .tbl-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--mid); }
 .tbl-count { font-size: 11px; color: var(--dim); }
 .tbl-wrap { overflow-x: auto; max-height: 400px; overflow-y: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: auto; }
+tbody td:first-child { min-width: 160px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 thead th { position: sticky; top: 0; background: var(--surface2); text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none; }
+thead th:first-child { min-width: 160px; }
+thead th.num, th.sortable:not(:first-child) { text-align: right; }
 thead th:hover { color: var(--mid); }
 thead th.sortable[data-sort-dir="asc"]  .sort-ind::after { content: ' ▲'; opacity: 1; }
 thead th.sortable[data-sort-dir="desc"] .sort-ind::after { content: ' ▼'; opacity: 1; }
@@ -917,7 +920,7 @@ function renderBrandTable(rows) {
     const gm = rv > 0 ? (g/rv*100).toFixed(1) : '0';
     const share = totalVol>0?(qty/totalVol*100).toFixed(1):0;
     return `<tr>
-      <td>${r.brand||'—'}</td>
+      <td style="min-width:140px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.brand||'—'}</td>
       <td class="num" data-sort="${qty}">${qty.toLocaleString()}</td>
       <td class="num col-fin" data-sort="${rv}">${fmt(rv)}</td>
       <td class="num col-fin ${g>=0?'pos':'neg'}" data-sort="${g}">${fmt(g)}</td>
@@ -938,7 +941,7 @@ function renderCustTable(rows) {
     const rv = parseFloat(r.revenue)||0, g = parseFloat(r.gp)||0;
     const gm = rv > 0 ? (g/rv*100).toFixed(1) : '0';
     return `<tr>
-      <td>${r.customer||'—'}</td>
+      <td style="min-width:160px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.customer||'—'}</td>
       <td class="num" data-sort="${qty}">${qty.toLocaleString()}</td>
       <td class="num col-fin" data-sort="${rv}">${fmt(rv)}</td>
       <td class="num col-fin ${g>=0?'pos':'neg'}" data-sort="${g}">${fmt(g)}</td>
