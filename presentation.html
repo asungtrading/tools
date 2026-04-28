@@ -284,6 +284,7 @@ html, body { overflow-x: hidden; max-width: 100vw; }
       <span class="hdr-title">Business Performance</span>
     </div>
     <div class="hdr-user">
+      <button class="hdr-signout" id="globalFinBtn" onclick="toggleGlobalFin()" style="border-color:var(--border2)">👁 Hide Financials</button>
       <button class="hdr-signout" onclick="exportPDF()" style="border-color:var(--blue);color:var(--blue2)">📄 Export PDF</button>
       <img class="hdr-avatar" id="userAvatar" src="" alt="">
       <span class="hdr-name" id="userName">—</span>
@@ -797,11 +798,10 @@ function renderResults(data) {
         <span class="tbl-title">Brand Details</span>
         <div style="display:flex;align-items:center;gap:8px">
           <span class="tbl-count">${brandRows.length} brands</span>
-          <button class="fin-toggle-btn" id="brandFinBtn" onclick="toggleBrandFin()">👁 Hide Revenue/GP</button>
           <button class="export-btn" onclick="exportCSV(exportData.salesBrands,'sales_brands.csv')">⬇ CSV</button>
         </div>
       </div>
-      <div class="tbl-wrap" id="brandDetailTable">${renderBrandTable(brandRows)}</div>
+      <div class="tbl-wrap">${renderBrandTable(brandRows)}</div>
     </div>
 
     <div class="tbl-card">
@@ -809,11 +809,10 @@ function renderResults(data) {
         <span class="tbl-title">Customer Details</span>
         <div style="display:flex;align-items:center;gap:8px">
           <span class="tbl-count">${custRows.length} customers</span>
-          <button class="fin-toggle-btn" id="custFinBtn" onclick="toggleCustFin()">👁 Hide Revenue/GP</button>
           <button class="export-btn" onclick="exportCSV(exportData.salesCusts,'sales_customers.csv')">⬇ CSV</button>
         </div>
       </div>
-      <div class="tbl-wrap" id="custDetailTable">${renderCustTable(custRows)}</div>
+      <div class="tbl-wrap">${renderCustTable(custRows)}</div>
     </div>
 
     ${renderBrandTopSkuSections(brands, brandSkuRows)}
@@ -899,16 +898,10 @@ function renderResults(data) {
     {label:'Edmonton Trend',data:edmTrend,borderColor:'rgba(249,115,22,0.55)',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,borderDash:[6,4],tension:0,fill:false},
   ]},options:{...baseOpts(45),plugins:{...baseOpts().plugins,legend:{display:true,position:'top',labels:{color:'#94a3b8',font:{size:9}}},tooltip:{...TOOLTIP,mode:'index',callbacks:{label:ctx=>ctx.dataset.label.includes('Trend')?null:' '+ctx.dataset.label+': '+parseInt(ctx.raw||0).toLocaleString()+' units'}}}}});
 
-  // Re-apply financial toggle state after re-render
-  if (brandFinHidden) {
-    const t = document.getElementById('brandDetailTable'), b = document.getElementById('brandFinBtn');
-    if (t) t.classList.add('hide-financial');
-    if (b) { b.textContent = '👁 Show Revenue/GP'; b.classList.add('fin-hidden'); }
-  }
-  if (custFinHidden) {
-    const t = document.getElementById('custDetailTable'), b = document.getElementById('custFinBtn');
-    if (t) t.classList.add('hide-financial');
-    if (b) { b.textContent = '👁 Show Revenue/GP'; b.classList.add('fin-hidden'); }
+  // Re-apply global financial toggle after re-render
+  if (finHidden) {
+    const mc = document.getElementById('mainContent');
+    if (mc) mc.classList.add('hide-financial');
   }
 }
 
@@ -1003,9 +996,9 @@ function renderBrandTopSkuSections(brands, rows) {
         <td style="font-family:monospace;font-size:11px">${r.SKU||'—'}</td>
         <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.product||'').replace(/"/g,'&quot;')}">${r.product||'—'}</td>
         <td class="num" data-sort="${qty}">${qty.toLocaleString()}</td>
-        <td class="num" data-sort="${rv}">${fmt(rv)}</td>
-        <td class="num ${g>=0?'pos':'neg'}" data-sort="${g}">${fmt(g)}</td>
-        <td class="num" data-sort="${gm}" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
+        <td class="num col-fin" data-sort="${rv}">${fmt(rv)}</td>
+        <td class="num col-fin ${g>=0?'pos':'neg'}" data-sort="${g}">${fmt(g)}</td>
+        <td class="num col-fin" data-sort="${gm}" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
         <td class="num">${parseInt(r.orders)||0}</td>
       </tr>`;
     }).join('');
@@ -1015,7 +1008,7 @@ function renderBrandTopSkuSections(brands, rows) {
       </div>
       <div class="tbl-wrap">
         <table><thead><tr>
-          ${_sortHdr('Rank',k,0,'num','width:48px')}${_sortHdr('SKU',k,1,'str')}${_sortHdr('Product',k,2,'str')}${_sortHdr('Volume',k,3,'num')}${_sortHdr('Revenue',k,4,'num')}${_sortHdr('GP',k,5,'num')}${_sortHdr('GM%',k,6,'num')}${_sortHdr('Orders',k,7,'num')}
+          ${_sortHdr('Rank',k,0,'num','width:48px')}${_sortHdr('SKU',k,1,'str')}${_sortHdr('Product',k,2,'str')}${_sortHdr('Volume',k,3,'num')}${_sortHdr('Revenue',k,4,'num','','col-fin')}${_sortHdr('GP',k,5,'num','','col-fin')}${_sortHdr('GM%',k,6,'num','','col-fin')}${_sortHdr('Orders',k,7,'num')}
         </tr></thead><tbody>${body}</tbody></table>
       </div>
     </div>`;
@@ -1046,9 +1039,9 @@ function renderCustomerTopSkuSections(customers, rows) {
         <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(r.product||'').replace(/"/g,'&quot;')}">${r.product||'—'}</td>
         <td style="font-size:11px;color:var(--dim)">${r.brand||'—'}</td>
         <td class="num" data-sort="${qty}">${qty.toLocaleString()}</td>
-        <td class="num" data-sort="${rv}">${fmt(rv)}</td>
-        <td class="num ${g>=0?'pos':'neg'}" data-sort="${g}">${fmt(g)}</td>
-        <td class="num" data-sort="${gm}" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
+        <td class="num col-fin" data-sort="${rv}">${fmt(rv)}</td>
+        <td class="num col-fin ${g>=0?'pos':'neg'}" data-sort="${g}">${fmt(g)}</td>
+        <td class="num col-fin" data-sort="${gm}" style="color:${parseFloat(gm)>=30?'var(--green)':parseFloat(gm)>=20?'var(--yellow)':'var(--red)'}">${gm}%</td>
         <td class="num">${parseInt(r.orders)||0}</td>
       </tr>`;
     }).join('');
@@ -1058,7 +1051,7 @@ function renderCustomerTopSkuSections(customers, rows) {
       </div>
       <div class="tbl-wrap">
         <table><thead><tr>
-          ${_sortHdr('Rank',k,0,'num','width:48px')}${_sortHdr('SKU',k,1,'str')}${_sortHdr('Product',k,2,'str')}${_sortHdr('Brand',k,3,'str')}${_sortHdr('Volume',k,4,'num')}${_sortHdr('Revenue',k,5,'num')}${_sortHdr('GP',k,6,'num')}${_sortHdr('GM%',k,7,'num')}${_sortHdr('Orders',k,8,'num')}
+          ${_sortHdr('Rank',k,0,'num','width:48px')}${_sortHdr('SKU',k,1,'str')}${_sortHdr('Product',k,2,'str')}${_sortHdr('Brand',k,3,'str')}${_sortHdr('Volume',k,4,'num')}${_sortHdr('Revenue',k,5,'num','','col-fin')}${_sortHdr('GP',k,6,'num','','col-fin')}${_sortHdr('GM%',k,7,'num','','col-fin')}${_sortHdr('Orders',k,8,'num')}
         </tr></thead><tbody>${body}</tbody></table>
       </div>
     </div>`;
@@ -1587,24 +1580,20 @@ function exportCSV(rows, filename) {
 
 
 // ══════════════════════════════════════
-// FINANCIAL COLUMN TOGGLE
+// FINANCIAL COLUMN TOGGLE (global)
 // ══════════════════════════════════════
-let brandFinHidden = false, custFinHidden = false;
+let finHidden = false;
 
-function toggleBrandFin() {
-  brandFinHidden = !brandFinHidden;
-  const t = document.getElementById('brandDetailTable');
-  const b = document.getElementById('brandFinBtn');
-  if (t) t.classList.toggle('hide-financial', brandFinHidden);
-  if (b) { b.textContent = brandFinHidden ? '👁 Show Revenue/GP' : '👁 Hide Revenue/GP'; b.classList.toggle('fin-hidden', brandFinHidden); }
-}
-
-function toggleCustFin() {
-  custFinHidden = !custFinHidden;
-  const t = document.getElementById('custDetailTable');
-  const b = document.getElementById('custFinBtn');
-  if (t) t.classList.toggle('hide-financial', custFinHidden);
-  if (b) { b.textContent = custFinHidden ? '👁 Show Revenue/GP' : '👁 Hide Revenue/GP'; b.classList.toggle('fin-hidden', custFinHidden); }
+function toggleGlobalFin() {
+  finHidden = !finHidden;
+  const mc = document.getElementById('mainContent');
+  const btn = document.getElementById('globalFinBtn');
+  if (mc) mc.classList.toggle('hide-financial', finHidden);
+  if (btn) {
+    btn.textContent = finHidden ? '👁 Show Financials' : '👁 Hide Financials';
+    btn.style.borderColor = finHidden ? 'var(--yellow)' : 'var(--border2)';
+    btn.style.color = finHidden ? 'var(--yellow)' : '';
+  }
 }
 
 // ── INIT ──
