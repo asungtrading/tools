@@ -209,6 +209,26 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .fc-kv .fk{font-family:var(--mono);font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text3)}
 .fc-kv .fv{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--text);line-height:1.2}
 .fc-kv .fv.g{color:var(--green)}.fc-kv .fv.r{color:var(--red)}.fc-kv .fv.y{color:var(--yellow)}
+/* Dead Stock view */
+#ds-view{flex:1;overflow-y:auto;padding:16px;display:none;flex-direction:column}
+.ds-hdr{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.ds-title{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text);letter-spacing:.06em;text-transform:uppercase}
+.ds-stat{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--text2);background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:4px 9px}
+.ds-stat b{color:var(--text);font-weight:600}
+.ds-tbl-wrap{flex:1;overflow:auto;border:1px solid var(--border);border-radius:6px}
+.ds-tbl{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px;min-width:1400px}
+.ds-tbl th{background:var(--bg3);color:var(--text2);font-weight:500;font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;padding:8px 9px;border-bottom:1px solid var(--border);text-align:right;cursor:pointer;user-select:none;white-space:nowrap;position:sticky;top:0;z-index:2}
+.ds-tbl th.l{text-align:left}
+.ds-tbl th[data-sort-dir="asc"], .ds-tbl th[data-sort-dir="desc"]{color:var(--accent)}
+.ds-tbl td{padding:7px 9px;border-bottom:1px solid var(--border2);text-align:right;color:var(--text2);white-space:nowrap}
+.ds-tbl td.l{text-align:left}
+.ds-tbl tr:hover td{background:var(--bg3)}
+.ds-tbl .sku{color:var(--accent);font-weight:600}
+.ds-tbl .pname{color:var(--text);max-width:260px;overflow:hidden;text-overflow:ellipsis}
+.ds-badge{display:inline-block;padding:1.5px 7px;border-radius:9px;font-size:10px;font-weight:600;letter-spacing:.04em}
+.ds-badge.dead{background:rgba(239,68,68,.18);color:#fca5a5;border:1px solid rgba(239,68,68,.35)}
+.ds-badge.slow{background:rgba(234,179,8,.16);color:#fde68a;border:1px solid rgba(234,179,8,.35)}
+.ds-badge.active{background:rgba(34,197,94,.16);color:#86efac;border:1px solid rgba(34,197,94,.35)}
 </style>
 </head>
 <body>
@@ -290,6 +310,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
     <div id="tab-bar">
       <button class="mtab active" onclick="setTab('order',this)">발주 추천</button>
       <button class="mtab" onclick="setTab('forecast',this)">Forecast</button>
+      <button class="mtab" onclick="setTab('deadstock',this)">데드 스톡</button>
     </div>
     <div id="content">
       <div id="order-view">
@@ -396,6 +417,60 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
           </table>
         </div>
       </div>
+
+      <div id="ds-view">
+        <div class="ds-hdr">
+          <div class="ds-title">데드 스톡 분석</div>
+          <div class="ptog" id="ds-status-tog">
+            <button class="active" data-st="all" onclick="setDsStatus('all',this)">전체</button>
+            <button data-st="dead" onclick="setDsStatus('dead',this)">Dead (365일+ 무판매)</button>
+            <button data-st="slow" onclick="setDsStatus('slow',this)">Slow (90~365일)</button>
+            <button data-st="active" onclick="setDsStatus('active',this)">Active</button>
+          </div>
+          <div class="ptog" id="ds-stock-tog">
+            <button class="active" data-sk="instock" onclick="setDsStock('instock',this)">재고있음</button>
+            <button data-sk="all" onclick="setDsStock('all',this)">전체</button>
+            <button data-sk="zero" onclick="setDsStock('zero',this)">재고 0</button>
+          </div>
+          <div class="sbox" style="width:170px">
+            <span style="color:var(--text3)">⌕</span>
+            <input type="text" id="ds-srch" placeholder="SKU / 상품명" oninput="renderDeadStock()">
+          </div>
+          <select id="ds-brand" onchange="renderDeadStock()" style="background:var(--bg4);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:11px;padding:4px 8px;outline:none;cursor:pointer;max-width:160px">
+            <option value="">브랜드 전체</option>
+          </select>
+          <select id="ds-supplier" onchange="renderDeadStock()" style="background:var(--bg4);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:11px;padding:4px 8px;outline:none;cursor:pointer;max-width:180px">
+            <option value="">Supplier 전체</option>
+          </select>
+          <button class="btn" onclick="dlDeadStockCSV()" style="margin-left:auto">↓ Dead Stock CSV</button>
+        </div>
+        <div id="ds-stats" style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap"></div>
+        <div id="ds-empty" style="padding:40px;text-align:center;color:var(--text3);font-family:var(--mono);font-size:11.5px;line-height:2">
+          판매 BigQuery 연결 후 데드 스톡 분석이 활성화됩니다.<br>
+          <span style="font-size:10px">재고 보유 SKU의 마지막 판매일·90일·365일 판매·재고가치를 분석</span>
+        </div>
+        <div id="ds-tbl-wrap" class="ds-tbl-wrap" style="display:none">
+          <table class="ds-tbl" id="ds-tbl">
+            <thead><tr>
+              <th class="l" data-col="sku" data-type="str">SKU</th>
+              <th class="l" data-col="product" data-type="str" style="min-width:200px">상품명</th>
+              <th class="l" data-col="brand" data-type="str">브랜드</th>
+              <th class="l" data-col="supplier" data-type="str">Supplier</th>
+              <th data-col="tor" data-type="num">TOR 재고</th>
+              <th data-col="edm" data-type="num">EDM 재고</th>
+              <th data-col="total" data-type="num">총 재고</th>
+              <th data-col="last" data-type="str">마지막 판매</th>
+              <th data-col="dsls" data-type="num">무판매 일수</th>
+              <th data-col="qty90" data-type="num">90일 판매</th>
+              <th data-col="qty365" data-type="num">365일 판매</th>
+              <th data-col="cost" data-type="num">단가($)</th>
+              <th data-col="value" data-type="num">재고가치($)</th>
+              <th class="l" data-col="status" data-type="str">상태</th>
+            </tr></thead>
+            <tbody id="ds-tbody"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </main>
 </div>
@@ -451,7 +526,7 @@ const SCOPES     = 'https://www.googleapis.com/auth/bigquery.readonly';
 const S = { brandFilter:'', abcFilter:'', skuOverrides:{}, sortCol:null, sortDir:1, wmaW1:3, wmaW2:2, wmaW3:1,
   branch:'toronto', supplier:null, filter:'all', search:'',
   fcPeriod:30, settings:{},
-  computed:[], salesData:{}, backorderData:{},
+  computed:[], salesData:{}, salesAgg:{}, backorderData:{},
   bqReady:false, accessToken:null,
 };
 
@@ -868,18 +943,30 @@ async function loadSalesDataFromBQ(){
     // 재고 최신 날짜 조회 + 최신 스냅샷 데이터 로드 (Ordered/On Order 실시간 반영)
     const dateSQL = `SELECT FORMAT_DATE('%Y-%m-%d', MAX(snapshot_date)) as latest_date FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_STOCK}\``;
     const stockSQL = `
-      SELECT sku, location, qty_on_hand, allocated, on_order, in_transit, available
+      SELECT sku, location, qty_on_hand, allocated, on_order, in_transit, available, unit_cost
       FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_STOCK}\`
       WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_STOCK}\`)
     `;
+    // 데드 스톡 분석용: SKU별 마지막 판매일 + 90/365일 판매 합계
+    const deadSQL = `
+      SELECT
+        SKU,
+        FORMAT_DATE('%Y-%m-%d', MAX(Date)) AS last_sale_date,
+        SUM(CASE WHEN Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90  DAY) THEN Quantity ELSE 0 END) AS qty_90d,
+        SUM(CASE WHEN Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY) THEN Quantity ELSE 0 END) AS qty_365d
+      FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_SALES}\`
+      WHERE Quantity > 0
+      GROUP BY SKU
+    `;
     updateBQStatus('load','ADU 계산 중...');
-    const [aduRows, seaRows, boRows, dateRows, orderAduRows, stockRows] = await Promise.all([
+    const [aduRows, seaRows, boRows, dateRows, orderAduRows, stockRows, deadRows] = await Promise.all([
       runBQQuery(aduSQL),
       runBQQuery(seaSQL),
       runBQQuery(boSQL),
       runBQQuery(dateSQL),
       runBQQuery(orderAduSQL),
       runBQQuery(stockSQL).catch(e => { console.warn('[stock refresh] 스키마 불일치, 임베드 재고 유지:', e.message); return []; }),
+      runBQQuery(deadSQL).catch(e => { console.warn('[dead stock] 쿼리 실패:', e.message); return []; }),
     ]);
     // 재고 날짜 업데이트 + 지연 경고
     if(dateRows[0]?.latest_date){
@@ -915,9 +1002,25 @@ async function loadSalesDataFromBQ(){
         STOCK[sku][key].avail = avail !== null
           ? avail
           : (STOCK[sku][key].qoh - STOCK[sku][key].alloc);
+        // unit_cost 는 location 무관하게 SKU 단위로 보존 (마지막 본 값 유지)
+        const uc = num(r.unit_cost);
+        if(uc !== null && uc > 0) STOCK[sku].unit_cost = uc;
       });
       console.log(`[stock refresh] ${stockRows.length}건 스냅샷 반영 완료 (Ordered 최신화)`);
     }
+
+    // ── 데드 스톡 분석 데이터 (SKU → {last_sale_date, qty_90d, qty_365d})
+    S.salesAgg = {};
+    deadRows.forEach(r => {
+      const sku = r.SKU || r.sku;
+      if(!sku) return;
+      S.salesAgg[sku] = {
+        last_sale_date: r.last_sale_date || null,
+        qty_90d:        parseFloat(r.qty_90d)  || 0,
+        qty_365d:       parseFloat(r.qty_365d) || 0,
+      };
+    });
+    console.log(`[dead stock] ${deadRows.length}건 판매 집계 로드 완료`);
 
     // ── ADU 계산 (SKU별 일별 데이터 집계)
     const dailyMap = {};  // sku -> [qty per day over 90 days]
@@ -1038,7 +1141,9 @@ function setTab(tab,btn){
   btn.classList.add('active');
   document.getElementById('order-view').style.display=tab==='order'?'flex':'none';
   document.getElementById('fc-view').style.display=tab==='forecast'?'block':'none';
+  document.getElementById('ds-view').style.display=tab==='deadstock'?'flex':'none';
   if(tab==='forecast') renderForecast();
+  if(tab==='deadstock') renderDeadStock();
 }
 
 let _allSuppliers=[];
@@ -2003,6 +2108,187 @@ function dlForecastCSV(){
 }
 
 // ═══════════════════════════════════════════════════════
+//  DEAD STOCK ANALYSIS
+// ═══════════════════════════════════════════════════════
+S.dsStatus = 'all';      // all / dead / slow / active
+S.dsStock  = 'instock';  // instock / all / zero
+S.dsSort   = { col:'dsls', dir:'desc' };
+
+function setDsStatus(v, btn){
+  S.dsStatus = v;
+  document.querySelectorAll('#ds-status-tog button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderDeadStock();
+}
+function setDsStock(v, btn){
+  S.dsStock = v;
+  document.querySelectorAll('#ds-stock-tog button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderDeadStock();
+}
+
+function _dsBuildRows(){
+  // STOCK 의 모든 SKU 기준 (BQ → 14000개 모두 포함). MASTER 매칭 없으면 brand/supplier '—'
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const allSkus = new Set([...Object.keys(STOCK), ...Object.keys(MASTER)]);
+  const out = [];
+  allSkus.forEach(sku => {
+    const meta = MASTER[sku] || {name:'', brand:'—', supplier:'—'};
+    const st = STOCK[sku] || {toronto:{qoh:0,alloc:0,oo:0,it:0,avail:0}, edmonton:{qoh:0,alloc:0,oo:0,it:0,avail:0}};
+    const tor = (st.toronto?.qoh)||0;
+    const edm = (st.edmonton?.qoh)||0;
+    const total = tor + edm;
+    const cost = (st.unit_cost)||0;
+    const value = total * cost;
+    const agg = S.salesAgg?.[sku];
+    const last = agg?.last_sale_date || null;
+    let dsls = 99999;
+    if(last){
+      const d = new Date(last);
+      d.setHours(0,0,0,0);
+      dsls = Math.round((today - d)/(1000*60*60*24));
+    }
+    const q90  = agg?.qty_90d  || 0;
+    const q365 = agg?.qty_365d || 0;
+    let status = 'dead';   // 365일+ 무판매 OR 한번도 판매 없음
+    if(q90 > 0)        status = 'active';
+    else if(q365 > 0)  status = 'slow';
+    out.push({
+      sku, product:meta.name||'', brand:meta.brand||'—', supplier:meta.supplier||'—',
+      tor, edm, total, last, dsls, qty90:q90, qty365:q365, cost, value, status
+    });
+  });
+  return out;
+}
+
+function renderDeadStock(){
+  if(!S.bqReady){
+    document.getElementById('ds-empty').style.display='block';
+    document.getElementById('ds-tbl-wrap').style.display='none';
+    document.getElementById('ds-stats').innerHTML='';
+    return;
+  }
+  document.getElementById('ds-empty').style.display='none';
+  document.getElementById('ds-tbl-wrap').style.display='block';
+
+  // 브랜드/Supplier 드롭다운 채우기 (한번만)
+  const brandSel = document.getElementById('ds-brand');
+  const supSel   = document.getElementById('ds-supplier');
+  if(brandSel.options.length <= 1){
+    const brands = [...new Set(Object.values(MASTER).map(m=>m.brand).filter(Boolean))].sort();
+    brandSel.innerHTML = '<option value="">브랜드 전체</option>' + brands.map(b=>`<option value="${xeq(b)}">${xe(b)}</option>`).join('');
+  }
+  if(supSel.options.length <= 1){
+    const sups = [...new Set(Object.values(MASTER).map(m=>m.supplier).filter(Boolean))].sort();
+    supSel.innerHTML = '<option value="">Supplier 전체</option>' + sups.map(s=>`<option value="${xeq(s)}">${xe(s)}</option>`).join('');
+  }
+
+  let rows = _dsBuildRows();
+
+  // 필터: 재고 상태
+  if(S.dsStock === 'instock') rows = rows.filter(r=>r.total > 0);
+  else if(S.dsStock === 'zero') rows = rows.filter(r=>r.total === 0);
+
+  // 필터: 판매 상태
+  if(S.dsStatus !== 'all') rows = rows.filter(r=>r.status === S.dsStatus);
+
+  // 필터: 브랜드/Supplier/검색
+  const bf = brandSel.value, sf = supSel.value;
+  if(bf) rows = rows.filter(r=>r.brand === bf);
+  if(sf) rows = rows.filter(r=>r.supplier === sf);
+  const q = (document.getElementById('ds-srch').value||'').toLowerCase();
+  if(q) rows = rows.filter(r => r.sku.toLowerCase().includes(q) || (r.product||'').toLowerCase().includes(q));
+
+  // 정렬
+  const {col, dir} = S.dsSort;
+  const m = dir==='asc' ? 1 : -1;
+  rows.sort((a,b)=>{
+    let av = a[col], bv = b[col];
+    if(col==='last'){ av = av || '0000-00-00'; bv = bv || '0000-00-00'; }
+    if(typeof av === 'string' && typeof bv === 'string') return av.localeCompare(bv) * m;
+    return ((av||0) - (bv||0)) * m;
+  });
+
+  // 통계 카드
+  const total = rows.length;
+  const dead  = rows.filter(r=>r.status==='dead').length;
+  const slow  = rows.filter(r=>r.status==='slow').length;
+  const active= rows.filter(r=>r.status==='active').length;
+  const totalValue = rows.reduce((a,r)=>a+r.value, 0);
+  const deadValue  = rows.filter(r=>r.status==='dead').reduce((a,r)=>a+r.value, 0);
+  document.getElementById('ds-stats').innerHTML = `
+    <div class="ds-stat">총 SKU: <b>${total.toLocaleString()}</b></div>
+    <div class="ds-stat" style="border-color:rgba(239,68,68,.4)">Dead: <b style="color:#fca5a5">${dead.toLocaleString()}</b></div>
+    <div class="ds-stat" style="border-color:rgba(234,179,8,.4)">Slow: <b style="color:#fde68a">${slow.toLocaleString()}</b></div>
+    <div class="ds-stat" style="border-color:rgba(34,197,94,.4)">Active: <b style="color:#86efac">${active.toLocaleString()}</b></div>
+    <div class="ds-stat">총 재고가치: <b>$${totalValue.toLocaleString('en-US',{maximumFractionDigits:0})}</b></div>
+    <div class="ds-stat" style="border-color:rgba(239,68,68,.4)">Dead 재고가치: <b style="color:#fca5a5">$${deadValue.toLocaleString('en-US',{maximumFractionDigits:0})}</b></div>
+  `;
+
+  // 테이블 정렬 인디케이터
+  document.querySelectorAll('#ds-tbl thead th').forEach(th => {
+    th.removeAttribute('data-sort-dir');
+    if(th.dataset.col === col) th.dataset.sortDir = dir;
+  });
+
+  // tbody 렌더 (대용량 대비 제한 — 첫 2000행만 렌더, 나머지는 CSV로)
+  const display = rows.slice(0, 2000);
+  const overflow = rows.length - display.length;
+  const fmt0 = n => (n||0).toLocaleString();
+  const fmt$ = n => '$'+(n||0).toLocaleString('en-US',{maximumFractionDigits:2});
+  const dsls = n => n>=99999 ? '—' : n.toLocaleString()+'일';
+  document.getElementById('ds-tbody').innerHTML = display.map(r => `
+    <tr>
+      <td class="l sku" onmouseenter="showSparkline('${jse(r.sku)}','${jse(r.product)}',event)" onmouseleave="hideSparkline()">${xe(r.sku)}</td>
+      <td class="l pname" title="${xeq(r.product)}">${xe(r.product||'—')}</td>
+      <td class="l">${xe(r.brand)}</td>
+      <td class="l">${xe(r.supplier)}</td>
+      <td>${fmt0(r.tor)}</td>
+      <td>${fmt0(r.edm)}</td>
+      <td><b>${fmt0(r.total)}</b></td>
+      <td>${r.last||'—'}</td>
+      <td style="color:${r.dsls>=365?'#fca5a5':r.dsls>=90?'#fde68a':'var(--text2)'}">${dsls(r.dsls)}</td>
+      <td>${fmt0(r.qty90)}</td>
+      <td>${fmt0(r.qty365)}</td>
+      <td>${r.cost?fmt$(r.cost):'—'}</td>
+      <td>${r.value?fmt$(r.value):'—'}</td>
+      <td class="l"><span class="ds-badge ${r.status}">${r.status.toUpperCase()}</span></td>
+    </tr>
+  `).join('') + (overflow>0 ? `<tr><td colspan="14" style="text-align:center;padding:14px;color:var(--text3)">... +${overflow.toLocaleString()}개 더 (CSV 다운로드로 전체 확인)</td></tr>` : '');
+}
+
+// 헤더 클릭 정렬
+document.addEventListener('click', e => {
+  const th = e.target.closest('#ds-tbl thead th');
+  if(!th || !th.dataset.col) return;
+  const col = th.dataset.col;
+  if(S.dsSort.col === col) S.dsSort.dir = S.dsSort.dir === 'asc' ? 'desc' : 'asc';
+  else { S.dsSort.col = col; S.dsSort.dir = (th.dataset.type === 'str') ? 'asc' : 'desc'; }
+  renderDeadStock();
+});
+
+function dlDeadStockCSV(){
+  if(!S.bqReady){alert('BigQuery 연결 후 사용 가능합니다.');return;}
+  let rows = _dsBuildRows();
+  if(S.dsStock === 'instock') rows = rows.filter(r=>r.total > 0);
+  else if(S.dsStock === 'zero') rows = rows.filter(r=>r.total === 0);
+  if(S.dsStatus !== 'all') rows = rows.filter(r=>r.status === S.dsStatus);
+  const bf = document.getElementById('ds-brand').value;
+  const sf = document.getElementById('ds-supplier').value;
+  if(bf) rows = rows.filter(r=>r.brand === bf);
+  if(sf) rows = rows.filter(r=>r.supplier === sf);
+  const q = (document.getElementById('ds-srch').value||'').toLowerCase();
+  if(q) rows = rows.filter(r => r.sku.toLowerCase().includes(q) || (r.product||'').toLowerCase().includes(q));
+  rows.sort((a,b)=>(b.value-a.value));  // CSV는 가치 내림차순
+  const hdr = ['SKU','상품명','Brand','Supplier','TOR재고','EDM재고','총재고','마지막판매일','무판매일수','90일판매','365일판매','단가','재고가치','상태'];
+  const toLine = r => [csvQ(r.sku),csvQ(r.product),csvQ(r.brand),csvQ(r.supplier),
+    r.tor,r.edm,r.total,r.last||'',r.dsls>=99999?'':r.dsls,r.qty90,r.qty365,
+    (r.cost||0).toFixed(2),(r.value||0).toFixed(2),r.status].join(',');
+  dl([hdr.join(','),...rows.map(toLine)].join('\n'),`DeadStock_${STOCK_DATE}.csv`);
+}
+
+// ═══════════════════════════════════════════════════════
 //  CSV DROPDOWN
 // ═══════════════════════════════════════════════════════
 function toggleCsvMenu(e){
@@ -2142,6 +2428,7 @@ buildNav();
 renderTable();
 document.getElementById('order-view').style.display='flex';
 document.getElementById('fc-view').style.display='none';
+document.getElementById('ds-view').style.display='none';
 checkOAuthCallback(); // OAuth redirect 처리
 
 // BQ 미연결 시 pill 초기 상태
