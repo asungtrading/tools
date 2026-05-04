@@ -1572,7 +1572,7 @@ function recompute(){
 
       // ── 백오더: Toronto 재고=0인 경우만, 중복 제거됨
       const torAvail=STOCK[sku]?.toronto?.avail??0;
-      const bo=(S.bqReady&&torAvail<=0)?(S.backorderData[sku]||0):0;
+      const bo=S.bqReady?Math.max(0,(S.backorderData[sku]||0)-Math.max(0,torAvail)):0;
 
       // ── ABC 분류
       const abc = calcABC(sku);
@@ -2352,7 +2352,7 @@ function dlCSV(mode){
       const extOO=S.branch==='edmonton'?edmSupOO2:S.branch==='toronto'?torOO2:torOO2+edmSupOO2;
       const sd=S.salesData[sku];
       const adu=sd?.adu??0,sea=sd?.sea??1,trd=sd?.trd??1,adj=Math.min(1.5,sea*trd);
-      const bo=(S.bqReady&&(STOCK[sku]?.toronto?.avail??0)<=0)?(S.backorderData[sku]||0):0;
+      const bo=S.bqReady?Math.max(0,(S.backorderData[sku]||0)-Math.max(0,STOCK[sku]?.toronto?.avail??0)):0;
       const sup=meta.supplier,lt=getSetting(sup,'leadtime'),tg=getSetting(sup,'target');
       const rawDays=sd?.days||[];
       const ss=S.bqReady?calcSafetyStock(rawDays,lt):0;
@@ -2389,7 +2389,7 @@ function dlCSV(mode){
       const extOO=S.branch==='edmonton'?edmSupOO2:S.branch==='toronto'?torOO2:torOO2+edmSupOO2;
       const sd=S.salesData[sku];
       const adu=sd?.adu??0,sea=sd?.sea??1,trd=sd?.trd??1,adj=sd?.adj??1;
-      const bo=(S.bqReady&&(STOCK[sku]?.toronto?.avail??0)<=0)?(S.backorderData[sku]||0):0;
+      const bo=S.bqReady?Math.max(0,(S.backorderData[sku]||0)-Math.max(0,STOCK[sku]?.toronto?.avail??0)):0;
       const sup=meta.supplier,lt=getSetting(sup,'leadtime'),tg=getSetting(sup,'target');
       const rec=S.bqReady&&adu>0?Math.round(adu*tg*adj-avail-extOO+bo):null;
       const r=S.computed.find(r=>r.sku===sku);
