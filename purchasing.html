@@ -930,13 +930,20 @@ async function loadSalesDataFromBQ(){
           MAX(Quantity) AS qty,
           MAX(Order_Date) AS last_order_date
         FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_ORDERS}\`
-        WHERE Order_Progress NOT IN ('Invoiced','Voided','Void','Cancelled')
+        WHERE Order_Progress NOT IN ('Invoiced','Voided','Void','Cancelled','2.Release to WMS','3.Finalized')
           AND Invoice_Date IS NULL
-          AND Order_Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+          AND Order_Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
           AND Quantity > 0
         GROUP BY SKU, Customer
       )
-      SELECT SKU, SUM(qty) AS bo_qty
+      SELECT
+        SKU,
+        SUM(CASE WHEN last_order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY) THEN qty ELSE 0 END) AS bo_0_30,
+        SUM(CASE WHEN last_order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 60 DAY)
+                  AND last_order_date < DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY) THEN qty ELSE 0 END) AS bo_30_60,
+        SUM(CASE WHEN last_order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
+                  AND last_order_date < DATE_SUB(CURRENT_DATE(), INTERVAL 60 DAY) THEN qty ELSE 0 END) AS bo_60_90,
+        SUM(qty) AS bo_qty
       FROM latest_orders
       GROUP BY SKU
     `;
@@ -1116,7 +1123,7 @@ async function loadSalesDataFromBQ(){
       S.salesData[sku] = { ...(S.salesData[sku]||{}), adu, sea, trd, adj:sea*trd, days, linkedFrom };
     });
 
-    S.backorderData = boMap; // { SKU: { bo0_30, bo30_60, bo60_90, total } }
+    S.backorderData = boMap; // { SKU: { bo0_30, bo30_60, bo60_90, total } } // { SKU: { bo0_30, bo30_60, bo60_90, total } }
     S.bqReady = true;
 
     const skuCount = Object.keys(S.salesData).length;
