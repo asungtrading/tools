@@ -45,16 +45,16 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .col-btn{font-size:10px;padding:2px 7px;border-radius:3px;border:1px solid var(--border);background:var(--bg3);color:var(--text2);cursor:pointer;transition:all .15s;white-space:nowrap}
 .col-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 .col-btn:hover{border-color:var(--accent)}
-/* 컬럼 숨기기 CSS 클래스 */
-.hide-orderAdu [data-col-id="orderAdu"]{display:none!important}
-.hide-sea [data-col-id="sea"]{display:none!important}
-.hide-trd [data-col-id="trd"]{display:none!important}
-.hide-ss [data-col-id="ss"]{display:none!important}
-.hide-extOO [data-col-id="extOO"]{display:none!important}
-.hide-inTrans [data-col-id="inTrans"]{display:none!important}
-.hide-bo030 [data-col-id="bo030"]{display:none!important}
-.hide-bo3060 [data-col-id="bo3060"]{display:none!important}
-.hide-bo6090 [data-col-id="bo6090"]{display:none!important}
+/* 컬럼 숨기기 CSS 클래스 — body에 클래스 적용 */
+body.hide-orderAdu [data-col-id="orderAdu"]{display:none!important}
+body.hide-sea [data-col-id="sea"]{display:none!important}
+body.hide-trd [data-col-id="trd"]{display:none!important}
+body.hide-ss [data-col-id="ss"]{display:none!important}
+body.hide-extOO [data-col-id="extOO"]{display:none!important}
+body.hide-inTrans [data-col-id="inTrans"]{display:none!important}
+body.hide-bo030 [data-col-id="bo030"]{display:none!important}
+body.hide-bo3060 [data-col-id="bo3060"]{display:none!important}
+body.hide-bo6090 [data-col-id="bo6090"]{display:none!important}
 .sb-search{padding:8px 10px;border-bottom:1px solid var(--border);flex-shrink:0}
 .sb-search input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:var(--sans);font-size:11.5px;padding:5px 8px;outline:none}
 .sb-search input:focus{border-color:var(--accent)}
@@ -2533,13 +2533,13 @@ function toggleCol(colId, btn) {
 }
 
 function applyColVisibility() {
-  // 모든 테이블에 클래스 적용
-  document.querySelectorAll('table').forEach(tbl => {
-    hiddenCols.forEach(colId => tbl.classList.add('hide-' + colId));
-    // 보이는 컬럼 클래스 제거
-    ['orderAdu','sea','trd','ss','extOO','inTrans','bo030','bo3060','bo6090'].forEach(colId => {
-      if (!hiddenCols.has(colId)) tbl.classList.remove('hide-' + colId);
-    });
+  const allCols = ['orderAdu','sea','trd','ss','extOO','inTrans','bo030','bo3060','bo6090'];
+  allCols.forEach(colId => {
+    if (hiddenCols.has(colId)) {
+      document.body.classList.add('hide-' + colId);
+    } else {
+      document.body.classList.remove('hide-' + colId);
+    }
   });
 }
 
