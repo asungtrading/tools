@@ -48,6 +48,16 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .col-btn{font-size:10px;padding:2px 6px;border-radius:3px;border:1px solid var(--border);background:var(--bg3);color:var(--text2);cursor:pointer;transition:all .15s}
 .col-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 .col-btn:hover{border-color:var(--accent)}
+/* 컬럼 숨기기 — nth-child 기반으로 td/th 동시 숨김 */
+.hide-orderAdu th[data-col-id="orderAdu"], .hide-orderAdu td[data-col-id="orderAdu"]{display:none}
+.hide-sea th[data-col-id="sea"], .hide-sea td[data-col-id="sea"]{display:none}
+.hide-trd th[data-col-id="trd"], .hide-trd td[data-col-id="trd"]{display:none}
+.hide-ss th[data-col-id="ss"], .hide-ss td[data-col-id="ss"]{display:none}
+.hide-extOO th[data-col-id="extOO"], .hide-extOO td[data-col-id="extOO"]{display:none}
+.hide-inTrans th[data-col-id="inTrans"], .hide-inTrans td[data-col-id="inTrans"]{display:none}
+.hide-bo030 th[data-col-id="bo030"], .hide-bo030 td[data-col-id="bo030"]{display:none}
+.hide-bo3060 th[data-col-id="bo3060"], .hide-bo3060 td[data-col-id="bo3060"]{display:none}
+.hide-bo6090 th[data-col-id="bo6090"], .hide-bo6090 td[data-col-id="bo6090"]{display:none}
 .sb-search{padding:8px 10px;border-bottom:1px solid var(--border);flex-shrink:0}
 .sb-search input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:var(--sans);font-size:11.5px;padding:5px 8px;outline:none}
 .sb-search input:focus{border-color:var(--accent)}
@@ -1802,22 +1812,22 @@ function renderTable(){
         <td onmouseenter="showSparkline('${jse(r.sku)}','${jse(r.name)}',event)" onmouseleave="hideSparkline()" style="cursor:default">${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}" title="ABC 등급: A=상위20%(핵심제품) B=상위21~50%(중간) C=하위50%(저판매) | ADU 기준 자동분류">${r.abc}</span>`:''} ${(S.salesData[r.sku]?.linkedFrom||[]).length?`<span style="color:var(--yellow);font-size:9px" title="구 SKU 데이터 합산: ${(S.salesData[r.sku]?.linkedFrom||[]).join(', ')}">🔗</span>`:''}</td>
         <td style="max-width:var(--name-col-width,180px);overflow:hidden;text-overflow:ellipsis;cursor:default" title="${xe(r.name)}">${xe(r.name)}</td>
         <td class="${r.adu>0?'':'vz'}" title="${r.adu>0?'가중이동평균 ADU':'판매 데이터 없음'}">${r.adu>0?r.adu.toFixed(2):'—'}</td>
-        <td class="${r.orderAdu!==null&&r.orderAdu>0?'':'vz'}" title="${r.orderAduData?'주문ADU 기간별:\n전달말-3M: '+(r.orderAduData.adu_p1!==null?r.orderAduData.adu_p1.toFixed(2):'—')+'\n전달말-6M: '+(r.orderAduData.adu_p2!==null?r.orderAduData.adu_p2.toFixed(2):'—')+'\n전달말-1Y: '+(r.orderAduData.adu_p3!==null?r.orderAduData.adu_p3.toFixed(2):'—')+'\n오늘-3M: '+(r.orderAduData.adu_p4!==null?r.orderAduData.adu_p4.toFixed(2):'—'):'주문 데이터 없음'}">${r.orderAdu!==null?r.orderAdu.toFixed(2):'—'}</td>
-        <td class="${r.sea>1.1?'vp':r.sea<0.9?'vw':''}" onclick="editSkuOverride('${jse(r.sku)}','sea',${r.sea},event)" onmouseenter="showOvHistory('${jse(r.supplier)}','sea',event)" onmouseleave="hideOvHistory()" title="클릭해서 수동 수정 (BQ자동: ×${r.seaAuto})">${r.adu>0?`×${r.sea.toFixed(2)}${r.seaOv!==null?'<span style=\'color:var(--yellow);font-size:8px\'>✎</span>':''}`:'—'}</td>
-        <td class="${r.trd>1.05?'vp':r.trd<0.95?'vw':''}" onclick="editSkuOverride('${jse(r.sku)}','trd',${r.trd},event)" onmouseenter="showOvHistory('${jse(r.supplier)}','trd',event)" onmouseleave="hideOvHistory()" title="클릭해서 수동 수정 (BQ자동: ×${r.trdAuto})">${r.adu>0?`×${r.trd.toFixed(2)}${r.trdOv!==null?'<span style=\'color:var(--yellow);font-size:8px\'>✎</span>':''}`:'—'}</td>
+        <td data-col-id="orderAdu" class="${r.orderAdu!==null&&r.orderAdu>0?'':'vz'}" title="${r.orderAduData?'주문ADU 기간별:\n전달말-3M: '+(r.orderAduData.adu_p1!==null?r.orderAduData.adu_p1.toFixed(2):'—')+'\n전달말-6M: '+(r.orderAduData.adu_p2!==null?r.orderAduData.adu_p2.toFixed(2):'—')+'\n전달말-1Y: '+(r.orderAduData.adu_p3!==null?r.orderAduData.adu_p3.toFixed(2):'—')+'\n오늘-3M: '+(r.orderAduData.adu_p4!==null?r.orderAduData.adu_p4.toFixed(2):'—'):'주문 데이터 없음'}">${r.orderAdu!==null?r.orderAdu.toFixed(2):'—'}</td>
+        <td data-col-id="sea" class="${r.sea>1.1?'vp':r.sea<0.9?'vw':''}" onclick="editSkuOverride('${jse(r.sku)}','sea',${r.sea},event)" onmouseenter="showOvHistory('${jse(r.supplier)}','sea',event)" onmouseleave="hideOvHistory()" title="클릭해서 수동 수정 (BQ자동: ×${r.seaAuto})">${r.adu>0?`×${r.sea.toFixed(2)}${r.seaOv!==null?'<span style=\'color:var(--yellow);font-size:8px\'>✎</span>':''}`:'—'}</td>
+        <td data-col-id="trd" class="${r.trd>1.05?'vp':r.trd<0.95?'vw':''}" onclick="editSkuOverride('${jse(r.sku)}','trd',${r.trd},event)" onmouseenter="showOvHistory('${jse(r.supplier)}','trd',event)" onmouseleave="hideOvHistory()" title="클릭해서 수동 수정 (BQ자동: ×${r.trdAuto})">${r.adu>0?`×${r.trd.toFixed(2)}${r.trdOv!==null?'<span style=\'color:var(--yellow);font-size:8px\'>✎</span>':''}`:'—'}</td>
         <td class="sep ${cc}">${ct}</td>
         <td><span class="${r.avail<=0?'vn':r.avail<10?'vw':''}">${r.avail.toLocaleString()}</span></td>
-        <td title="${r.ss>0?`σ=${(r.ss/(1.65*Math.sqrt(r.lt||30))).toFixed(1)}/일`:'판매데이터 없음'}">${r.ss>0?`<span class="vw">${Math.round(r.ss)}</span>`:'<span class="vz">—</span>'}</td>
-        <td>${r.extOO>0?`<span class="vp">${r.extOO.toLocaleString()}</span>`:'<span class="vz">0</span>'}</td>
-        <td>${(()=>{
+        <td data-col-id="ss" title="${r.ss>0?`σ=${(r.ss/(1.65*Math.sqrt(r.lt||30))).toFixed(1)}/일`:'판매데이터 없음'}">${r.ss>0?`<span class="vw">${Math.round(r.ss)}</span>`:'<span class="vz">—</span>'}</td>
+        <td data-col-id="extOO">${r.extOO>0?`<span class="vp">${r.extOO.toLocaleString()}</span>`:'<span class="vz">0</span>'}</td>
+        <td data-col-id="inTrans">${(()=>{
           const t=r.inTrans, oo=r.extOO;
           if(t>0 && oo>0) return `<span style="color:var(--text2)">${oo}</span> + <span style="color:var(--purple)">${t}<span class="badge badge-tr" style="margin-left:2px">T</span></span>`;
           if(t>0) return `<span style="color:var(--purple)">${t}<span class="badge badge-tr" style="margin-left:2px">T</span></span>`;
           return '<span class="vz">—</span>';
         })()}</td>
-        <td>${r.bo>0?`<span class="vn">${r.bo}</span>`:'<span class="vz">—</span>'}</td>
-        <td>${(r.boData?.bo30_60||0)>0?`<span style="color:var(--yellow)">${r.boData.bo30_60}</span>`:'<span class="vz">—</span>'}</td>
-        <td>${(r.boData?.bo60_90||0)>0?`<span style="color:var(--text2)">${r.boData.bo60_90}</span>`:'<span class="vz">—</span>'}</td>
+        <td data-col-id="bo030">${r.bo>0?`<span class="vn">${r.bo}</span>`:'<span class="vz">—</span>'}</td>
+        <td data-col-id="bo3060">${(r.boData?.bo30_60||0)>0?`<span style="color:var(--yellow)">${r.boData.bo30_60}</span>`:'<span class="vz">—</span>'}</td>
+        <td data-col-id="bo6090">${(r.boData?.bo60_90||0)>0?`<span style="color:var(--text2)">${r.boData.bo60_90}</span>`:'<span class="vz">—</span>'}</td>
         <td class="sep ${rc}">${recTxt}</td>
         <td><input type="number" class="qov" value="${r._ov??''}" placeholder="${r.rec??'—'}"
           oninput="setOv('${jse(r.sku)}',this.value)"
@@ -2511,46 +2521,28 @@ function toggleSidebar() {
   btn.title = collapsed ? '사이드바 보이기' : '사이드바 숨기기';
 }
 
-// ── 컬럼 토글
+// ── 컬럼 토글 (CSS 클래스 방식 — td 밀림 없음)
 const hiddenCols = new Set();
 function toggleCol(colId, btn) {
-  const ths = document.querySelectorAll(`[data-col-id="${colId}"]`);
+  const table = document.querySelector('#tbl-wrap table');
+  if (!table) return;
   if (hiddenCols.has(colId)) {
     hiddenCols.delete(colId);
     btn.classList.add('active');
-    ths.forEach(th => th.style.display = '');
-    // td도 표시
-    updateColVisibility(colId, true);
+    table.classList.remove('hide-' + colId);
   } else {
     hiddenCols.add(colId);
     btn.classList.remove('active');
-    ths.forEach(th => th.style.display = 'none');
-    // td도 숨기기
-    updateColVisibility(colId, false);
+    table.classList.add('hide-' + colId);
   }
-}
-
-function updateColVisibility(colId, visible) {
-  // 컬럼 인덱스 찾기
-  const headers = document.querySelectorAll('thead th');
-  let colIdx = -1;
-  headers.forEach((th, i) => {
-    if (th.dataset.colId === colId) colIdx = i;
-  });
-  if (colIdx < 0) return;
-  // 모든 tbody tr의 해당 td 숨기기/보이기
-  document.querySelectorAll('tbody tr').forEach(tr => {
-    const td = tr.children[colIdx];
-    if (td) td.style.display = visible ? '' : 'none';
-  });
 }
 
 // 테이블 렌더링 후 숨김 상태 복원
 function restoreColVisibility() {
+  const table = document.querySelector('#tbl-wrap table');
+  if (!table) return;
   hiddenCols.forEach(colId => {
-    const ths = document.querySelectorAll(`[data-col-id="${colId}"]`);
-    ths.forEach(th => th.style.display = 'none');
-    updateColVisibility(colId, false);
+    table.classList.add('hide-' + colId);
   });
 }
 </script>
