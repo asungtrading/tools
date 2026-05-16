@@ -39,25 +39,22 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .btn:disabled{opacity:.4;cursor:default}
 #app{display:flex;position:fixed;top:52px;left:0;right:0;bottom:0}
 #sidebar{width:200px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden;transition:width .2s ease}
-#sidebar.collapsed{width:0;border-right:none}
-#sidebar-toggle{position:fixed;left:200px;top:60px;z-index:100;width:16px;height:40px;background:var(--bg2);border:1px solid var(--border);border-left:none;border-radius:0 4px 4px 0;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text2);font-size:10px;transition:left .2s ease;user-select:none}
+#sidebar.collapsed{width:0;border-right:none;overflow:hidden}
+#sidebar-toggle{position:fixed;left:200px;top:60px;z-index:200;width:16px;height:40px;background:var(--bg2);border:1px solid var(--border);border-left:none;border-radius:0 4px 4px 0;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text2);font-size:10px;transition:left .2s ease;user-select:none}
 #sidebar-toggle:hover{background:var(--bg3);color:var(--text)}
-#sidebar.collapsed ~ #sidebar-toggle, .collapsed-toggle{left:0}
-.col-toggle-bar{display:flex;align-items:center;gap:4px;padding:4px 8px;background:var(--bg2);border-bottom:1px solid var(--border);flex-wrap:wrap;justify-content:flex-end}
-.col-toggle-bar span{font-size:10px;color:var(--text3);margin-right:4px}
-.col-btn{font-size:10px;padding:2px 6px;border-radius:3px;border:1px solid var(--border);background:var(--bg3);color:var(--text2);cursor:pointer;transition:all .15s}
+.col-btn{font-size:10px;padding:2px 7px;border-radius:3px;border:1px solid var(--border);background:var(--bg3);color:var(--text2);cursor:pointer;transition:all .15s;white-space:nowrap}
 .col-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 .col-btn:hover{border-color:var(--accent)}
-/* 컬럼 숨기기 — nth-child 기반으로 td/th 동시 숨김 */
-.hide-orderAdu th[data-col-id="orderAdu"], .hide-orderAdu td[data-col-id="orderAdu"]{display:none}
-.hide-sea th[data-col-id="sea"], .hide-sea td[data-col-id="sea"]{display:none}
-.hide-trd th[data-col-id="trd"], .hide-trd td[data-col-id="trd"]{display:none}
-.hide-ss th[data-col-id="ss"], .hide-ss td[data-col-id="ss"]{display:none}
-.hide-extOO th[data-col-id="extOO"], .hide-extOO td[data-col-id="extOO"]{display:none}
-.hide-inTrans th[data-col-id="inTrans"], .hide-inTrans td[data-col-id="inTrans"]{display:none}
-.hide-bo030 th[data-col-id="bo030"], .hide-bo030 td[data-col-id="bo030"]{display:none}
-.hide-bo3060 th[data-col-id="bo3060"], .hide-bo3060 td[data-col-id="bo3060"]{display:none}
-.hide-bo6090 th[data-col-id="bo6090"], .hide-bo6090 td[data-col-id="bo6090"]{display:none}
+/* 컬럼 숨기기 CSS 클래스 */
+.hide-orderAdu [data-col-id="orderAdu"]{display:none!important}
+.hide-sea [data-col-id="sea"]{display:none!important}
+.hide-trd [data-col-id="trd"]{display:none!important}
+.hide-ss [data-col-id="ss"]{display:none!important}
+.hide-extOO [data-col-id="extOO"]{display:none!important}
+.hide-inTrans [data-col-id="inTrans"]{display:none!important}
+.hide-bo030 [data-col-id="bo030"]{display:none!important}
+.hide-bo3060 [data-col-id="bo3060"]{display:none!important}
+.hide-bo6090 [data-col-id="bo6090"]{display:none!important}
 .sb-search{padding:8px 10px;border-bottom:1px solid var(--border);flex-shrink:0}
 .sb-search input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:var(--sans);font-size:11.5px;padding:5px 8px;outline:none}
 .sb-search input:focus{border-color:var(--accent)}
@@ -84,7 +81,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .si:focus{border-color:var(--accent)}
 .su{font-family:var(--mono);font-size:10px;color:#94a3b8;white-space:nowrap}
 #main{flex:1;display:flex;flex-direction:column;overflow:hidden}
-#tab-bar{height:40px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:flex-end;padding:0 18px;flex-shrink:0}
+#tab-bar{height:40px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 18px;flex-shrink:0;justify-content:space-between}
 .mtab{background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);font-family:var(--sans);font-size:12.5px;font-weight:500;padding:9px 14px;cursor:pointer;transition:all .15s;margin-bottom:-1px}
 .mtab:hover{color:var(--text)}
 .mtab.active{color:var(--accent);border-bottom-color:var(--accent)}
@@ -328,22 +325,24 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
   </aside>
 
   <main id="main">
-    <div class="col-toggle-bar" id="col-toggle-bar">
-      <span>컬럼:</span>
-      <button class="col-btn active" data-col="orderAdu" onclick="toggleCol('orderAdu',this)">주문ADU</button>
-      <button class="col-btn active" data-col="sea" onclick="toggleCol('sea',this)">계절보정</button>
-      <button class="col-btn active" data-col="trd" onclick="toggleCol('trd',this)">트렌드</button>
-      <button class="col-btn active" data-col="ss" onclick="toggleCol('ss',this)">Safety Stock</button>
-      <button class="col-btn active" data-col="extOO" onclick="toggleCol('extOO',this)">Ordered</button>
-      <button class="col-btn active" data-col="inTrans" onclick="toggleCol('inTrans',this)">In Transit</button>
-      <button class="col-btn active" data-col="bo030" onclick="toggleCol('bo030',this)">BO 0-30</button>
-      <button class="col-btn active" data-col="bo3060" onclick="toggleCol('bo3060',this)">BO 30-60</button>
-      <button class="col-btn active" data-col="bo6090" onclick="toggleCol('bo6090',this)">BO 60-90</button>
-    </div>
     <div id="tab-bar">
-      <button class="mtab active" onclick="setTab('order',this)">발주 추천</button>
-      <button class="mtab" onclick="setTab('forecast',this)">Forecast</button>
-      <button class="mtab" onclick="setTab('deadstock',this)">데드 스톡</button>
+      <div style="display:flex;align-items:flex-end;gap:0">
+        <button class="mtab active" onclick="setTab('order',this)">발주 추천</button>
+        <button class="mtab" onclick="setTab('forecast',this)">Forecast</button>
+        <button class="mtab" onclick="setTab('deadstock',this)">데드 스톡</button>
+      </div>
+      <div id="col-toggle-bar" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+        <span style="font-size:10px;color:var(--text3);margin-right:2px">컬럼:</span>
+        <button class="col-btn active" data-col="orderAdu" onclick="toggleCol('orderAdu',this)">주문ADU</button>
+        <button class="col-btn active" data-col="sea" onclick="toggleCol('sea',this)">계절보정</button>
+        <button class="col-btn active" data-col="trd" onclick="toggleCol('trd',this)">트렌드</button>
+        <button class="col-btn active" data-col="ss" onclick="toggleCol('ss',this)">Safety Stock</button>
+        <button class="col-btn active" data-col="extOO" onclick="toggleCol('extOO',this)">Ordered</button>
+        <button class="col-btn active" data-col="inTrans" onclick="toggleCol('inTrans',this)">In Transit</button>
+        <button class="col-btn active" data-col="bo030" onclick="toggleCol('bo030',this)">BO 0-30</button>
+        <button class="col-btn active" data-col="bo3060" onclick="toggleCol('bo3060',this)">BO 30-60</button>
+        <button class="col-btn active" data-col="bo6090" onclick="toggleCol('bo6090',this)">BO 60-90</button>
+      </div>
     </div>
     <div id="content">
       <div id="order-view">
@@ -1770,9 +1769,9 @@ function renderTable(){
         <thead><tr>
           <th class="sh" onclick="sortBy('abc')" style="cursor:pointer;user-select:none">SKU<span class="sort-arrow" data-col="abc"></span></th><th style="cursor:col-resize;user-select:none;min-width:120px" onmousedown="startResize(event,'--name-col-width')">상품명 ↔</th>
           <th class="sep sh" onclick="sortBy('adu')" title="일 평균 판매량 (가중 이동평균, Stockout 보정)">일판매량(ADU)<span class="sort-arrow" data-col="adu"></span></th>
-          <th class="sh" onclick="sortBy('orderAdu')" data-col-id="orderAdu" title="주문기반 ADU = 전달말 기준 3개월/6개월/1년 + 오늘기준 3개월 인보이스 주문량 평균 ÷ 일수 | 호버시 기간별 상세">주문ADU<span class="sort-arrow" data-col="orderAdu"></span></th>
+          <th class="sh" data-col-id="orderAdu" onclick="sortBy('orderAdu')" title="주문기반 ADU = 전달말 기준 3개월/6개월/1년 + 오늘기준 3개월 인보이스 주문량 평균 ÷ 일수 | 호버시 기간별 상세">주문ADU<span class="sort-arrow" data-col="orderAdu"></span></th>
           <th class="sh" onclick="sortBy('sea')" title="계절보정 = 올해 90일 판매합 ÷ 작년 동기 90일 판매합 | 1.0=작년과 동일, 1.5=50% 증가, 0.7=30% 감소 | 범위: 0.3~3.0 | 셀 클릭시 수동 수정 가능">계절보정<span class="sort-arrow" data-col="sea"></span></th>
-          <th class="sh" data-col-id="trd" onclick="sortBy('trd')" title="트렌드 = 최근 90일 판매 추세(선형회귀) | 1.0=보합, 2.0=강한상승, 0.5=하락 | 범위: 0.5~2.0 | 셀 클릭시 수동 수정 가능">트렌드<span class="sort-arrow" data-col="trd"></span></th>
+          <th class="sh" onclick="sortBy('trd')" title="트렌드 = 최근 90일 판매 추세(선형회귀) | 1.0=보합, 2.0=강한상승, 0.5=하락 | 범위: 0.5~2.0 | 셀 클릭시 수동 수정 가능">트렌드<span class="sort-arrow" data-col="trd"></span></th>
           <th class="sh" onclick="sortBy('cov')" title="현재 가용재고로 버틸 수 있는 일수">재고일수<span class="sort-arrow" data-col="cov"></span></th>
           <th class="sep sh" onclick="sortBy('avail')" title="Available Stock = QOH - Allocated">Available Stock<span class="sort-arrow" data-col="avail"></span></th>
           <th class="sh" data-col-id="ss" onclick="sortBy('ss')" title="Safety Stock = 1.65 × 수요표준편차(σ) × √리드타임 | 수요 변동이 클수록 높음 | 95% 서비스레벨 기준 | 0이면 수요가 매우 안정적">Safety Stock<span class="sort-arrow" data-col="ss"></span></th>
@@ -1840,7 +1839,6 @@ function renderTable(){
     h+=`</tbody></table></div></div></div>`;
   });
   body.innerHTML=h;
-  restoreColVisibility();
 }
 
 // ── 스파크라인 툴팁
@@ -2521,29 +2519,32 @@ function toggleSidebar() {
   btn.title = collapsed ? '사이드바 보이기' : '사이드바 숨기기';
 }
 
-// ── 컬럼 토글 (CSS 클래스 방식 — td 밀림 없음)
+// ── 컬럼 토글 (CSS 클래스 방식)
 const hiddenCols = new Set();
 function toggleCol(colId, btn) {
-  const table = document.querySelector('#tbl-wrap table');
-  if (!table) return;
   if (hiddenCols.has(colId)) {
     hiddenCols.delete(colId);
     btn.classList.add('active');
-    table.classList.remove('hide-' + colId);
   } else {
     hiddenCols.add(colId);
     btn.classList.remove('active');
-    table.classList.add('hide-' + colId);
   }
+  applyColVisibility();
 }
 
-// 테이블 렌더링 후 숨김 상태 복원
-function restoreColVisibility() {
-  const table = document.querySelector('#tbl-wrap table');
-  if (!table) return;
-  hiddenCols.forEach(colId => {
-    table.classList.add('hide-' + colId);
+function applyColVisibility() {
+  // 모든 테이블에 클래스 적용
+  document.querySelectorAll('table').forEach(tbl => {
+    hiddenCols.forEach(colId => tbl.classList.add('hide-' + colId));
+    // 보이는 컬럼 클래스 제거
+    ['orderAdu','sea','trd','ss','extOO','inTrans','bo030','bo3060','bo6090'].forEach(colId => {
+      if (!hiddenCols.has(colId)) tbl.classList.remove('hide-' + colId);
+    });
   });
+}
+
+function restoreColVisibility() {
+  applyColVisibility();
 }
 </script>
 </body>
