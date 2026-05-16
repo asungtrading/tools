@@ -930,7 +930,7 @@ async function loadSalesDataFromBQ(){
           MAX(Quantity) AS qty,
           MAX(Order_Date) AS last_order_date
         FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_ORDERS}\`
-        WHERE Order_Progress NOT IN ('Invoiced','Voided','Void','Cancelled','2.Release to WMS','3.Finalized')
+        WHERE Order_Progress NOT IN ('Invoiced','Voided','Void','Cancelled')
           AND Invoice_Date IS NULL
           AND Order_Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
           AND Quantity > 0
@@ -1036,7 +1036,14 @@ async function loadSalesDataFromBQ(){
 
     // ── 백오더 맵
     const boMap = {};
-    boRows.forEach(r => { boMap[r.SKU] = parseFloat(r.bo_qty)||0; });
+    boRows.forEach(r => {
+      boMap[r.SKU] = {
+        bo0_30:  parseFloat(r.bo_0_30)  || 0,
+        bo30_60: parseFloat(r.bo_30_60) || 0,
+        bo60_90: parseFloat(r.bo_60_90) || 0,
+        total:   parseFloat(r.bo_qty)   || 0
+      };
+    });
 
     // ── 주문기반 ADU 맵
     const orderAduMap = {};
@@ -1109,7 +1116,7 @@ async function loadSalesDataFromBQ(){
       S.salesData[sku] = { ...(S.salesData[sku]||{}), adu, sea, trd, adj:sea*trd, days, linkedFrom };
     });
 
-    S.backorderData = boMap;
+    S.backorderData = boMap; // { SKU: { bo0_30, bo30_60, bo60_90, total } }
     S.bqReady = true;
 
     const skuCount = Object.keys(S.salesData).length;
@@ -1572,7 +1579,9 @@ function recompute(){
 
       // ── 백오더: Toronto 재고=0인 경우만, 중복 제거됨
       const torAvail=STOCK[sku]?.toronto?.avail??0;
-      const bo=(S.bqReady&&torAvail<=0)?(S.backorderData[sku]||0):0;
+      const boData=S.bqReady?(S.backorderData[sku]||{bo0_30:0,bo30_60:0,bo60_90:0,total:0}):{bo0_30:0,bo30_60:0,bo60_90:0,total:0};
+      // 추천발주에는 0~30일 백오더만 반영 (재고 차감 후)
+      const bo=S.bqReady?Math.max(0,(boData.bo0_30||0)-Math.max(0,torAvail)):0;
 
       // ── ABC 분류
       const abc = calcABC(sku);
@@ -1604,7 +1613,7 @@ function recompute(){
         sea:Math.round(finalSea*100)/100,trd:Math.round(finalTrd*100)/100,adj:Math.round(adj*100)/100,
         seaAuto:Math.round(sea*100)/100,trdAuto:Math.round(trd*100)/100,
         seaOv:skuSeaOv??supSeaOv??null, trdOv:skuTrdOv??supTrdOv??null,
-        ss,avail,qoh,alloc,onOrder,inTrans,extOO,bo,rec,rop,cov,lt,tg,abc,sufficient,_ov:null};
+        ss,avail,qoh,alloc,onOrder,inTrans,extOO,bo,boData,rec,rop,cov,lt,tg,abc,sufficient,_ov:null};
     });
   updateSummary();
 }
@@ -1736,7 +1745,9 @@ function renderTable(){
           <th class="sh" onclick="sortBy('ss')" title="Safety Stock = 1.65 × 수요표준편차(σ) × √리드타임 | 수요 변동이 클수록 높음 | 95% 서비스레벨 기준 | 0이면 수요가 매우 안정적">Safety Stock<span class="sort-arrow" data-col="ss"></span></th>
           <th class="sh" onclick="sortBy('extOO')" title="공급업체에 발주된 수량 (Transfer 제외)">Ordered<span class="sort-arrow" data-col="extOO"></span></th>
           <th class="sh" title="입고 예정 수량 | T=Edmonton Transfer">In Transit</th>
-          <th class="sh" onclick="sortBy('bo')" title="백오더: Toronto 재고=0 + 중복주문 제거">백오더<span class="sort-arrow" data-col="bo"></span></th>
+          <th class="sh" onclick="sortBy('bo')" title="백오더 0~30일: 최근 백오더 (추천발주에 자동 반영)">BO 0-30<span class="sort-arrow" data-col="bo"></span></th>
+          <th class="sh" title="백오더 30~60일: 참고용 (수동 반영)">BO 30-60</th>
+          <th class="sh" title="백오더 60~90일: 참고용 (거의 해소된 것으로 간주)">BO 60-90</th>
           <th class="sep sh" onclick="sortBy('rec')" title="추천발주 = ADU×목표×계절(max1.5) + SS - 가용 - Ordered + BO">추천발주<span class="sort-arrow" data-col="rec"></span></th>
           <th title="실제 발주할 수량 (추천발주 클릭시 자동 입력)">실발주량</th>
         </tr></thead><tbody>`;
@@ -1782,6 +1793,8 @@ function renderTable(){
           return '<span class="vz">—</span>';
         })()}</td>
         <td>${r.bo>0?`<span class="vn">${r.bo}</span>`:'<span class="vz">—</span>'}</td>
+        <td>${(r.boData?.bo30_60||0)>0?`<span style="color:var(--yellow)">${r.boData.bo30_60}</span>`:'<span class="vz">—</span>'}</td>
+        <td>${(r.boData?.bo60_90||0)>0?`<span style="color:var(--text2)">${r.boData.bo60_90}</span>`:'<span class="vz">—</span>'}</td>
         <td class="sep ${rc}">${recTxt}</td>
         <td><input type="number" class="qov" value="${r._ov??''}" placeholder="${r.rec??'—'}"
           oninput="setOv('${jse(r.sku)}',this.value)"
