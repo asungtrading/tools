@@ -439,7 +439,7 @@ body.hide-bo6090 [data-col-id="bo6090"]{display:none!important}
               <th style="color:#94a3b8;font-size:10px" title="실제 최근 60일 판매량">실제 60일</th>
               <th class="sh" onclick="sortFc('fc90')" title="ADU×90일×계절×트렌드">90일 예측<span class="sort-arrow" id="fc-sort-90"></span></th>
               <th style="color:#94a3b8;font-size:10px" title="실제 최근 90일 판매량">실제 90일</th>
-              <th class="sep sh" onclick="sortBy('avail')">Available<span class="sort-arrow"></span></th>
+              <th class="sep sh" data-col-id="avail" onclick="sortBy('avail')">Available<span class="sort-arrow"></span></th>
               <th class="sh" onclick="sortBy('cov')">재고일수<span class="sort-arrow"></span></th>
               <th class="sh" onclick="sortBy('rec')">추천발주<span class="sort-arrow"></span></th>
             </tr></thead>
@@ -1294,7 +1294,7 @@ function renderGlobalSearch(){
         <td style="text-align:left;color:#94a3b8;font-size:11px">${xe(r.brand)}</td>
         <td class="sep">${r.adu>0?r.adu.toFixed(2):'—'}</td>
         <td>${r.cov>=9999?'∞':r.cov}</td>
-        <td class="sep"><span class="${ac}">${r.avail.toLocaleString()}</span></td>
+        <td data-col-id="avail" class="sep"><span class="${ac}">${r.avail.toLocaleString()}</span></td>
       </tr>`;
     });
     h+=`</tbody></table></div></div></div>`;
@@ -1715,7 +1715,7 @@ function renderTable(){
         <th style="text-align:left">Brand</th>
         <th class="sep sh" onclick="sortBy('adu')">일판매량<span class="sort-arrow" data-col="adu"></span></th>
         <th class="sh" data-col-id="cov" onclick="sortBy('cov')">재고일수<span class="sort-arrow" data-col="cov"></span></th>
-        <th class="sep sh" onclick="sortBy('avail')">Available<span class="sort-arrow" data-col="avail"></span></th>
+        <th class="sep sh" data-col-id="avail" onclick="sortBy('avail')">Available<span class="sort-arrow" data-col="avail"></span></th>
         <th class="sh" onclick="sortBy('rec')">추천발주<span class="sort-arrow" data-col="rec"></span></th>
         <th>실발주량</th>
       </tr></thead><tbody>`;
@@ -1732,7 +1732,7 @@ function renderTable(){
         <td style="text-align:left;color:#94a3b8;font-size:11px">${xe(r.brand)}</td>
         <td class="sep">${r.adu>0?r.adu.toFixed(2):'—'}</td>
         <td class="${cc}">${ct}</td>
-        <td class="sep"><span class="${r.avail<=0?'vn':r.avail<10?'vw':''}">${r.avail.toLocaleString()}</span></td>
+        <td data-col-id="avail" class="sep"><span class="${r.avail<=0?'vn':r.avail<10?'vw':''}">${r.avail.toLocaleString()}</span></td>
         <td>${recTxt}</td>
         <td><input type="number" class="qov" value="${r._ov??''}" placeholder="${r.rec??'—'}"
           oninput="setOv('${jse(r.sku)}',this.value)"
@@ -1813,7 +1813,7 @@ function renderTable(){
         <td data-col-id="sea" class="${r.sea>1.1?'vp':r.sea<0.9?'vw':''}" onclick="editSkuOverride('${jse(r.sku)}','sea',${r.sea},event)" onmouseenter="showOvHistory('${jse(r.supplier)}','sea',event)" onmouseleave="hideOvHistory()" title="클릭해서 수동 수정 (BQ자동: ×${r.seaAuto})">${r.adu>0?`×${r.sea.toFixed(2)}${r.seaOv!==null?'<span style=\'color:var(--yellow);font-size:8px\'>✎</span>':''}`:'—'}</td>
         <td data-col-id="trd" class="${r.trd>1.05?'vp':r.trd<0.95?'vw':''}" onclick="editSkuOverride('${jse(r.sku)}','trd',${r.trd},event)" onmouseenter="showOvHistory('${jse(r.supplier)}','trd',event)" onmouseleave="hideOvHistory()" title="클릭해서 수동 수정 (BQ자동: ×${r.trdAuto})">${r.adu>0?`×${r.trd.toFixed(2)}${r.trdOv!==null?'<span style=\'color:var(--yellow);font-size:8px\'>✎</span>':''}`:'—'}</td>
         <td data-col-id="cov" class="sep ${cc}">${ct}</td>
-        <td><span class="${r.avail<=0?'vn':r.avail<10?'vw':''}">${r.avail.toLocaleString()}</span></td>
+        <td data-col-id="avail"><span class="${r.avail<=0?'vn':r.avail<10?'vw':''}">${r.avail.toLocaleString()}</span></td>
         <td data-col-id="ss" title="${r.ss>0?`σ=${(r.ss/(1.65*Math.sqrt(r.lt||30))).toFixed(1)}/일`:'판매데이터 없음'}">${r.ss>0?`<span class="vw">${Math.round(r.ss)}</span>`:'<span class="vz">—</span>'}</td>
         <td data-col-id="extOO">${r.extOO>0?`<span class="vp">${r.extOO.toLocaleString()}</span>`:'<span class="vz">0</span>'}</td>
         <td data-col-id="inTrans">${(()=>{
@@ -2123,7 +2123,7 @@ function renderForecast(){
       <td style="color:#94a3b8" title="실제 최근 ~60일 판매량">${n>0?act60:'—'}</td>
       <td>${fc90.toLocaleString()}</td>
       <td style="color:#94a3b8" title="실제 최근 90일 판매량 (판매있는 날 기준)">${n>0?act90:'—'}</td>
-      <td class="sep"><span class="${r.avail<=0?'vn':r.avail<10?'vw':''}">${r.avail.toLocaleString()}</span></td>
+      <td data-col-id="avail" class="sep"><span class="${r.avail<=0?'vn':r.avail<10?'vw':''}">${r.avail.toLocaleString()}</span></td>
       <td class="${covClass}">${r.cov>=9999?'∞':r.cov}</td>
       <td class="${recClass}">${r.rec!==null?(r.rec>0?'+':'')+r.rec.toLocaleString():'—'}</td>
     </tr>`;
