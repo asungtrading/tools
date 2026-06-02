@@ -627,16 +627,20 @@ async function saveToSheets(){
         companyPrefix:COMPANY_PREFIX, ref:r.ref5, format:r.format
       }))
     };
-    // Apps Script CORS 우회: text/plain + no-cors → doPost에서 파싱
-    const res=await fetch(APPS_SCRIPT_URL,{
-      method:'POST',
-      headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify(payload)
+    // Apps Script CORS 우회: GET + URLSearchParams
+    const params = new URLSearchParams({
+      action: 'saveRows',
+      data: JSON.stringify(payload.rows)
     });
-    // no-cors 모드에서는 응답을 읽을 수 없으므로 성공으로 간주
-    btn.textContent='✓ 저장됨';
-    btn.classList.add('saved');
-    showAlert(`✅ Google Sheets에 ${generatedRows.length}행 저장 완료`,'success');
+    const res = await fetch(APPS_SCRIPT_URL + '?' + params.toString());
+    const result = await res.json();
+    if(result.status === 'ok'){
+      btn.textContent='✓ 저장됨';
+      btn.classList.add('saved');
+      showAlert(`✅ Google Sheets에 ${generatedRows.length}행 저장 완료`,'success');
+    } else {
+      throw new Error(result.message || 'Unknown error');
+    }
   } catch(e){
     btn.textContent='💾 Google Sheets에 저장';
     btn.style.pointerEvents='auto';
