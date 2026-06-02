@@ -293,17 +293,17 @@ body.hide-bo6090 [data-col-id="bo6090"]{display:none!important}
       <div class="sb-sup-name" id="settings-sup-name" style="margin-bottom:6px">← Supplier 선택</div>
       <div class="sr">
         <span class="sl">Lead Time</span>
-        <input type="number" class="si" id="inp-lt" value="30" min="1" max="365" onchange="saveSetting('leadtime',this.value)">
+        <input type="number" class="si" id="inp-lt" value="30" min="1" max="365" oninput="saveSetting('leadtime',this.value)">
         <span class="su">일</span>
       </div>
       <div class="sr">
         <span class="sl">발주주기</span>
-        <input type="number" class="si" id="inp-cycle" value="30" min="1" max="365" onchange="saveSetting('cycle',this.value)">
+        <input type="number" class="si" id="inp-cycle" value="30" min="1" max="365" oninput="saveSetting('cycle',this.value)">
         <span class="su">일</span>
       </div>
       <div class="sr">
         <span class="sl">목표 재고</span>
-        <input type="number" class="si" id="inp-tg" value="60" min="1" max="365" onchange="saveSetting('target',this.value)">
+        <input type="number" class="si" id="inp-tg" value="60" min="1" max="365" oninput="saveSetting('target',this.value)">
         <span class="su">일</span>
       </div>
       <!-- 계절/트렌드 Supplier 전체 override -->
@@ -1648,9 +1648,11 @@ function recompute(){
       const abc = calcABC(sku);
 
       // ── 추천발주 공식 (최대재고 기반 정기발주)
-      // 최대재고 = ADU × (리드타임 + 발주주기) × adj + 안전재고
+      // 커버일수 = max(목표재고일수, 리드타임 + 발주주기)
+      // 최대재고 = ADU × 커버일수 × adj + 안전재고
       // 발주량   = 최대재고 - 가용재고 - 기발주 + 백오더
-      const maxStock = S.bqReady&&adu>0 ? Math.round(adu*(lt+cycle)*adj + ss) : null;
+      const coverDays = Math.max(tg, lt + cycle);
+      const maxStock = S.bqReady&&adu>0 ? Math.round(adu*coverDays*adj + ss) : null;
       const recRaw = maxStock !== null
         ? maxStock - avail - extOO + bo
         : null;
@@ -1659,7 +1661,7 @@ function recompute(){
       const sufficient = recRaw !== null && recRaw <= 0;
 
       // ── Reorder Point (발주 시점: 가용재고가 이 이하면 발주 필요)
-      const rop = adu>0 ? Math.round(adu*(lt+cycle) + ss) : null;
+      const rop = adu>0 ? Math.round(adu*coverDays + ss) : null;
 
       // cov: 영업일 기준 avail/adu를 달력일로 환산하여 표시
       const wdFrac = (S._workingDays90 || 64) / 90;
@@ -2093,7 +2095,8 @@ function renderForecast(){
           const adj=Math.min(1.5,finalSea*finalTrd);
           const rawDays=sd.days||[];
           const ss=rawDays.length>=7?calcSafetyStock(rawDays,lt,sd.adu):0;
-          const maxStock=Math.round(sd.adu*(lt+cycle)*adj+ss);
+          const coverDays=Math.max(tg,lt+cycle);
+          const maxStock=Math.round(sd.adu*coverDays*adj+ss);
           const recRaw=maxStock-avail-extOO;
           const rec=Math.max(0,recRaw);
           const cov=sd.adu>0?Math.round(avail/sd.adu):9999;
@@ -2433,7 +2436,8 @@ function dlCSV(mode){
       const sup=meta.supplier,lt=getSetting(sup,'leadtime'),tg=getSetting(sup,'target'),cycle=getSetting(sup,'cycle');
       const rawDays=sd?.days||[];
       const ss=S.bqReady?calcSafetyStock(rawDays,lt,adu):0;
-      const maxStock=S.bqReady&&adu>0?Math.round(adu*(lt+cycle)*adj+ss):null;
+      const coverDays2=Math.max(tg,lt+cycle);
+      const maxStock=S.bqReady&&adu>0?Math.round(adu*coverDays2*adj+ss):null;
       const recRaw=maxStock!==null?maxStock-avail-extOO+bo:null;
       const rec=recRaw!==null?Math.max(0,recRaw):null;
       const r=S.computed.find(r=>r.sku===sku);
@@ -2471,7 +2475,8 @@ function dlCSV(mode){
       const sup=meta.supplier,lt=getSetting(sup,'leadtime'),tg=getSetting(sup,'target'),cycle=getSetting(sup,'cycle');
       const rawDays2=sd?.days||[];
       const ss2=S.bqReady?calcSafetyStock(rawDays2,lt,adu):0;
-      const maxStock2=S.bqReady&&adu>0?Math.round(adu*(lt+cycle)*adj+ss2):null;
+      const coverDays3=Math.max(tg,lt+cycle);
+      const maxStock2=S.bqReady&&adu>0?Math.round(adu*coverDays3*adj+ss2):null;
       const recRaw2=maxStock2!==null?maxStock2-avail-extOO+bo:null;
       const rec=recRaw2!==null?Math.max(0,recRaw2):null;
       const r=S.computed.find(r=>r.sku===sku);
