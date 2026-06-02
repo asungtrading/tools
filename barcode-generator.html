@@ -73,6 +73,24 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
 .prefix-btn{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:11px;font-weight:600;padding:4px 8px;transition:all .15s;}
 .prefix-btn:hover{border-color:var(--accent);color:var(--accent);}
 .prefix-btn.active{border-color:var(--accent);background:rgba(99,102,241,.15);color:var(--accent2);}
+
+/* ── PRODUCT ROWS ── */
+.product-row{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;position:relative;}
+.product-row-header{display:flex;align-items:center;gap:8px;margin-bottom:12px;}
+.product-num{font-size:11px;font-weight:700;color:var(--muted);font-family:var(--mono);background:var(--surface);border-radius:4px;padding:2px 8px;}
+.product-row-grid{display:grid;grid-template-columns:160px 1fr;gap:10px;margin-bottom:10px;}
+.product-variations{display:flex;flex-direction:column;gap:6px;}
+.var-row{display:flex;gap:6px;align-items:center;}
+.var-row input{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:7px;color:var(--text);font-family:var(--sans);font-size:12px;padding:7px 10px;outline:none;}
+.var-row input:focus{border-color:var(--accent);}
+.remove-row-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0 4px;line-height:1;transition:color .15s;}
+.remove-row-btn:hover{color:var(--red);}
+.add-var-btn{background:none;border:1px dashed var(--border);border-radius:6px;color:var(--muted);cursor:pointer;font-size:11px;padding:5px 10px;transition:all .15s;margin-top:2px;text-align:left;}
+.add-var-btn:hover{border-color:var(--accent);color:var(--accent);}
+.remove-product-btn{position:absolute;top:12px;right:12px;background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;font-size:11px;padding:3px 8px;transition:all .15s;}
+.remove-product-btn:hover{border-color:var(--red);color:var(--red);}
+.add-product-btn{background:none;border:1px dashed var(--border);border-radius:10px;color:var(--muted);cursor:pointer;font-size:12px;font-weight:500;padding:12px;width:100%;transition:all .15s;margin-top:4px;}
+.add-product-btn:hover{border-color:var(--accent);color:var(--accent);}
 .add-btn:hover{border-color:var(--accent);color:var(--accent);}
 
 /* ── BUTTONS ── */
@@ -156,48 +174,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
 
 <div class="main">
 
-  <!-- 제품 정보 -->
+  <!-- 제품 목록 -->
   <div class="section">
-    <div class="sec-title">제품 정보</div>
-    <div class="card">
-      <div class="input-grid">
-        <div class="field">
-          <label>SKU 접두사 (AS 뒤에 붙는 영문)</label>
-          <input type="text" id="skuPrefixInput" placeholder="예: E, HA, HC ..." maxlength="5"
-            style="text-transform:uppercase;font-family:var(--mono);font-size:15px;font-weight:600;letter-spacing:1px;">
-          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;">
-            <button class="prefix-btn" onclick="setPrefix('E')">E</button>
-            <button class="prefix-btn" onclick="setPrefix('HA')">HA</button>
-            <button class="prefix-btn" onclick="setPrefix('HC')">HC</button>
-            <button class="prefix-btn" onclick="setPrefix('HB')">HB</button>
-            <button class="prefix-btn" onclick="setPrefix('B')">B</button>
-            <button class="prefix-btn" onclick="setPrefix('N')">N</button>
-            <button class="prefix-btn" onclick="setPrefix('R')">R</button>
-            <button class="prefix-btn" onclick="setPrefix('M')">M</button>
-            <button class="prefix-btn" onclick="setPrefix('W')">W</button>
-            <button class="prefix-btn" onclick="setPrefix('H')">H</button>
-            <button class="prefix-btn" onclick="setPrefix('G')">G</button>
-          </div>
-        </div>
-        <div class="field">
-          <label>제품명</label>
-          <input type="text" id="productName" placeholder="예: KIM & C Flower Clip">
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 베리에이션 -->
-  <div class="section">
-    <div class="sec-title">베리에이션 (색상 / 사이즈 등)</div>
-    <div class="card">
-      <div id="variationsContainer">
-        <div class="variation-row">
-          <input type="text" placeholder="비워두면 단품 1개 — 색상이나 사이즈 입력 가능" class="variation-input">
-        </div>
-      </div>
-      <button class="add-btn" onclick="addVariation()">+ 베리에이션 추가</button>
-    </div>
+    <div class="sec-title">제품 목록 — 여러 제품을 동시에 추가 가능</div>
+    <div id="productsContainer"></div>
+    <button class="add-product-btn" onclick="addProduct()">+ 제품 추가</button>
   </div>
 
   <!-- 패키지 타입 -->
@@ -356,32 +337,70 @@ function getNextRefs(count){
 
 // ── UI HELPERS ───────────────────────────────────────────
 // 이벤트 리스너는 앱이 완전히 표시된 후 초기화
+let productCount = 0;
+
 function initUIListeners(){
-  const inp = document.getElementById('skuPrefixInput');
-  if(!inp) return;
-  inp.addEventListener('input', function(){
-    this.value = this.value.toUpperCase().replace(/[^A-Z]/g,'');
-    // 일치하는 버튼 하이라이트
-    document.querySelectorAll('.prefix-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.textContent === this.value);
-    });
-  });
+  // 첫 제품 행 자동 추가
+  addProduct();
 }
-function setPrefix(val){
-  const inp = document.getElementById('skuPrefixInput');
-  inp.value = val;
-  document.querySelectorAll('.prefix-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.textContent === val);
-  });
+
+function addProduct(){
+  productCount++;
+  const id = productCount;
+  const container = document.getElementById('productsContainer');
+  const div = document.createElement('div');
+  div.className = 'product-row';
+  div.id = 'product-' + id;
+  div.innerHTML = `
+    <div class="product-row-header">
+      <span class="product-num">#${id}</span>
+      <span style="font-size:11px;color:var(--muted);">제품 ${id}</span>
+    </div>
+    ${id > 1 ? `<button class="remove-product-btn" onclick="removeProduct(${id})">✕ 삭제</button>` : ''}
+    <div class="product-row-grid">
+      <div class="field">
+        <label>SKU (AS 포함 전체)</label>
+        <input type="text" id="sku-${id}" placeholder="예: ASEHC"
+          style="font-family:var(--mono);font-size:14px;font-weight:600;letter-spacing:1px;text-transform:uppercase;"
+          oninput="this.value=this.value.toUpperCase()">
+      </div>
+      <div class="field">
+        <label>제품명</label>
+        <input type="text" id="name-${id}" placeholder="예: KIM & C Flower Clip">
+      </div>
+    </div>
+    <div class="field">
+      <label>베리에이션 (색상/사이즈 — 비워두면 단품)</label>
+      <div class="product-variations" id="vars-${id}">
+        <div class="var-row">
+          <input type="text" placeholder="예: Black (비워두면 단품 1개)">
+        </div>
+      </div>
+      <button class="add-var-btn" onclick="addVariation(${id})">+ 베리에이션 추가</button>
+    </div>
+  `;
+  container.appendChild(div);
+  // 포커스
+  setTimeout(() => document.getElementById('sku-' + id)?.focus(), 50);
 }
-function addVariation(){
-  const c=document.getElementById('variationsContainer');
-  const row=document.createElement('div');
-  row.className='variation-row';
-  row.innerHTML=`<input type="text" placeholder="예: Red / Large" class="variation-input">
-    <button class="remove-btn" onclick="this.parentElement.remove()">✕</button>`;
-  c.appendChild(row);
+
+function removeProduct(id){
+  const el = document.getElementById('product-' + id);
+  if(el) el.remove();
 }
+
+function addVariation(productId){
+  const container = document.getElementById('vars-' + productId);
+  const row = document.createElement('div');
+  row.className = 'var-row';
+  row.innerHTML = `
+    <input type="text" placeholder="예: Red / Large">
+    <button class="remove-row-btn" onclick="this.parentElement.remove()">×</button>
+  `;
+  container.appendChild(row);
+  row.querySelector('input').focus();
+}
+
 function showAlert(msg,type='error'){
   const b=document.getElementById('alertBox');
   b.className='alert alert-'+type;
@@ -435,44 +454,57 @@ function svgToPngDataURL(svg){
 let generatedRows = [];
 
 async function generateBarcodes(){
-  const prefix=document.getElementById('skuPrefixInput').value.trim().toUpperCase();
-  const name=document.getElementById('productName').value.trim();
-  if(!prefix){showAlert('접두사를 선택하거나 입력해주세요.');return;}
-  if(!name){showAlert('제품명을 입력해주세요.');return;}
+  // 모든 제품 행 수집
+  const productRows = document.querySelectorAll('.product-row');
+  if(!productRows.length){ showAlert('제품을 입력해주세요.'); return; }
 
-  const varInputs=document.querySelectorAll('.variation-input');
-  const variations=Array.from(varInputs).map(i=>i.value.trim());
-  const count=variations.length||1;
+  const products = [];
+  for(const row of productRows){
+    const id = row.id.replace('product-','');
+    const skuBase = (document.getElementById('sku-'+id)?.value||'').trim().toUpperCase();
+    const name    = (document.getElementById('name-'+id)?.value||'').trim();
+    if(!skuBase){ showAlert(`제품 #${id}: SKU를 입력해주세요. (예: ASEHC)`); return; }
+    if(!name)   { showAlert(`제품 #${id}: 제품명을 입력해주세요.`); return; }
+    const varInputs = row.querySelectorAll('.var-row input');
+    const variations = Array.from(varInputs).map(i=>i.value.trim()).filter(v=>v);
+    products.push({ id, skuBase, name, variations });
+  }
 
-  const refs=getNextRefs(count);
-  if(refs.length<count){showAlert('사용 가능한 번호가 부족합니다.');return;}
+  const totalUnits = products.reduce((s,p)=>s+(p.variations.length||1), 0);
+  const refs = getNextRefs(totalUnits);
+  if(refs.length < totalUnits){ showAlert('사용 가능한 번호가 부족합니다.'); return; }
 
-  generatedRows=[];
-  const date=new Date().toISOString().slice(0,10);
+  generatedRows = [];
+  const date = new Date().toISOString().slice(0,10);
+  let refIdx = 0;
 
-  for(let i=0;i<count;i++){
-    const ref=refs[i];
-    const ref5=String(ref).padStart(5,'0');
-    const gtin12=buildGTIN12(ref);
-    const sku='AS'+prefix+ref5;
-    const variation=variations[i]||'';
-    USED_REFS.add(ref);
+  for(const p of products){
+    const varList = p.variations.length ? p.variations : [''];
+    for(const variation of varList){
+      const ref  = refs[refIdx++];
+      const ref5 = String(ref).padStart(5,'0');
+      const gtin12 = buildGTIN12(ref);
+      const sku  = p.skuBase + ref5;
+      USED_REFS.add(ref);
 
-    generatedRows.push({type:'unit',sku,name,variation,barcode:gtin12,qty:1,ref5,gtinCls:'gtin12',format:'UPC',date});
+      generatedRows.push({type:'unit', sku, name:p.name, variation, barcode:gtin12, qty:1, ref5, gtinCls:'gtin12', format:'UPC', date});
 
-    for(const[packKey,cfg]of Object.entries(PACK_CONFIG)){
-      if(!activePacks.has(packKey)) continue;
-      const qty=parseInt(document.getElementById('qty-'+packKey).value)||0;
-      const gtin14=buildGTIN14(ref,cfg.indicator);
-      generatedRows.push({type:packKey,sku,name,variation,barcode:gtin14,qty,ref5,gtinCls:cfg.gtinCls,format:'ITF14',date,packLabel:cfg.label,packEmoji:cfg.emoji});
+      for(const[packKey,cfg] of Object.entries(PACK_CONFIG)){
+        if(!activePacks.has(packKey)) continue;
+        const qty = parseInt(document.getElementById('qty-'+packKey).value)||0;
+        const gtin14 = buildGTIN14(ref, cfg.indicator);
+        generatedRows.push({type:packKey, sku, name:p.name, variation, barcode:gtin14, qty, ref5, gtinCls:cfg.gtinCls, format:'ITF14', date, packLabel:cfg.label, packEmoji:cfg.emoji});
+      }
     }
   }
 
   await renderResults();
   document.getElementById('saveBtn').textContent='💾 Google Sheets에 저장';
   document.getElementById('saveBtn').classList.remove('saved');
-  showAlert(`✅ ${count}개 SKU × ${1+activePacks.size}종 바코드 생성 완료`,'success');
+  const totalSKU = generatedRows.filter(r=>r.type==='unit').length;
+  showAlert(`✅ ${products.length}개 제품 / ${totalSKU}개 SKU × ${1+activePacks.size}종 바코드 생성 완료`,'success');
 }
+
 
 async function renderResults(){
   const section=document.getElementById('resultsSection');
