@@ -1280,7 +1280,10 @@ function renderGlobalSearch(){
       const sd=S.salesData[sku];
       const adu=sd?.adu??0;
       const cov=adu>0?Math.round(avail/adu):9999;
-      return {...meta,sku,adu,avail,qoh,onOrder,inTrans,extOO,cov,
+      // S.computed에서 rec 가져오기 (BQ 연결 시)
+      const computed=S.computed.find(r=>r.sku===sku);
+      const rec=computed?.rec??null;
+      return {...meta,sku,adu,avail,qoh,onOrder,inTrans,extOO,cov,rec,
         sea:sd?.sea??1,trd:sd?.trd??1,adj:sd?.adj??1,abc:calcABC(sku)};
     });
   if(!results.length){body.innerHTML=`<div class="select-prompt"><div class="sp-icon" style="font-size:32px">🔍</div><div class="sp-title">검색 결과 없음</div></div>`;return;}
@@ -1298,9 +1301,10 @@ function renderGlobalSearch(){
       <div class="bg-rows"><div class="tscroll"><table class="sku-tbl">
         <thead><tr><th>SKU</th><th>상품명</th><th style="text-align:left">Brand</th>
         <th class="sep">일판매량</th><th>재고일수</th>
-        <th class="sep">Available</th></tr></thead><tbody>`;
+        <th class="sep">Available</th><th>추천발주</th></tr></thead><tbody>`;
     srows.forEach(r=>{
       const ac=r.avail<=0?'vn':r.avail<10?'vw':'';
+      const rc=r.rec>0?'vp':r.rec===0?'vz':'';
       h+=`<tr onclick="selectSupplier('${jse(r.supplier)}')" style="cursor:pointer">
         <td>${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}" title="ABC 등급">${r.abc}</span>`:''}</td>
         <td style="text-align:left">${xe(r.name)}</td>
@@ -1308,6 +1312,7 @@ function renderGlobalSearch(){
         <td class="sep">${r.adu>0?r.adu.toFixed(2):'—'}</td>
         <td>${r.cov>=9999?'∞':r.cov}</td>
         <td data-col-id="avail" class="sep"><span class="${ac}">${r.avail.toLocaleString()}</span></td>
+        <td class="${rc}">${r.rec!==null?(r.rec>0?'+':'')+r.rec:'—'}</td>
       </tr>`;
     });
     h+=`</tbody></table></div></div></div>`;
@@ -2403,9 +2408,9 @@ function dlCSV(mode){
     return;
   }
   if(mode==='supplier_all'){
-    // 현재 선택된 Supplier의 전체 제품 (발주량 무관)
+    // 현재 선택된 Supplier의 전체 제품 (발주량 무관, UI 필터 무시)
     if(!S.supplier){alert('Supplier를 먼저 선택해주세요.');return;}
-    const rows = getRows();
+    const rows = S.computed.length ? [...S.computed] : [];
     if(!rows.length){alert('데이터 없음');return;}
     const hdr=['Supplier','Brand','SKU','Name','일판매량(ADU)','계절보정','트렌드','Available Stock','Safety Stock','Ordered','백오더','추천발주','실발주량','Lead Time','발주주기','목표재고일수'];
     const toLine=r=>[csvQ(r.supplier),csvQ(r.brand),csvQ(r.sku),csvQ(r.name),
@@ -2466,26 +2471,31 @@ function dlCSV(mode){
       const sup=meta.supplier,lt=getSetting(sup,'leadtime'),tg=getSetting(sup,'target'),cycle=getSetting(sup,'cycle');
       const rawDays2=sd?.days||[];
       const ss2=S.bqReady?calcSafetyStock(rawDays2,lt,adu):0;
-      const maxStock2=S.bqReady&&adu>0?Math.round(adu*(lt+cycle)*adj-avail-extOO+bo+ss2):null;
-      const rec=maxStock2!==null?Math.max(0,maxStock2):null;
+      const maxStock2=S.bqReady&&adu>0?Math.round(adu*(lt+cycle)*adj+ss2):null;
+      const recRaw2=maxStock2!==null?maxStock2-avail-extOO+bo:null;
+      const rec=recRaw2!==null?Math.max(0,recRaw2):null;
       const r=S.computed.find(r=>r.sku===sku);
-      return {...meta,sku,adu,sea,trd,avail,qoh,alloc,onOrder,inTrans,extOO,bo,rec,lt,tg,cycle,_ov:r?._ov??null};
+      return {...meta,sku,adu,sea,trd,avail,qoh,alloc,onOrder,inTrans,extOO,bo,ss:Math.round(ss2),rec,lt,tg,cycle,_ov:r?._ov??null};
     });
   }
   if(!rows.length){alert('데이터 없음');return;}
-  const hdr=['SKU','Name','Brand','Supplier','ADU','Seasonality','Trend','Available','QOH','Allocated','OnOrder_Total','InTransit','OnOrder_Supplier','Backorder','Recommended','Override','LeadTime','TargetDays'];
+  const hdr=['SKU','Name','Brand','Supplier','ADU','Seasonality','Trend','Available','QOH','Allocated','OnOrder_Total','InTransit','OnOrder_Supplier','Backorder','SafetyStock','Recommended','Override','LeadTime','Cycle','TargetDays'];
   const toLine=r=>[csvQ(r.sku),csvQ(r.name),csvQ(r.brand),csvQ(r.supplier),
     r.adu?.toFixed(2)??'',r.sea?.toFixed(2)??'',r.trd?.toFixed(2)??'',
     r.avail,r.qoh,r.alloc,r.onOrder,r.inTrans,r.extOO,r.bo,
-    r.rec??'',r._ov??'',r.lt,r.tg].join(',');
+    Math.round(r.ss||0),r.rec??'',r._ov??'',r.lt,r.cycle??30,r.tg].join(',');
   if(mode==='supplier'&&S.supplier){
     dl([hdr.join(','),...rows.map(toLine)].join('\n'),`PO_${S.supplier.replace(/\s+/g,'_')}_${STOCK_DATE}.csv`);
   } else {
+    // 전체 제품: Supplier별 구분선 포함 단일 파일로 다운로드
     const bySup={};
     rows.forEach(r=>{if(!bySup[r.supplier])bySup[r.supplier]=[];bySup[r.supplier].push(r);});
-    Object.entries(bySup).forEach(([sup,srows])=>{
-      dl([hdr.join(','),...srows.map(toLine)].join('\n'),`PO_${sup.replace(/\s+/g,'_')}_${STOCK_DATE}.csv`);
+    const lines=[hdr.join(',')];
+    Object.entries(bySup).sort().forEach(([sup,srows])=>{
+      lines.push(`"== ${sup} (${srows.length}개) =="`);
+      srows.forEach(r=>lines.push(toLine(r)));
     });
+    dl(lines.join('\n'),`ALL_Products_${STOCK_DATE}.csv`);
   }
 }
 function dl(content,name){
