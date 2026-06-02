@@ -1474,17 +1474,28 @@ function calcWMA(days) {
   return wTot>0 ? wSum/wTot : 0;
 }
 
-// ── Safety Stock: Z × σ_demand × √LT
-// Z=1.65 (서비스 레벨 95%)
-function calcSafetyStock(days, lt) {
+// ── Safety Stock (CV 기반 자동 전환)
+// 스테디 제품 (CV <= 0.8): (maxDay - avgDay) x LT
+// 들쑥날쑥 제품 (CV > 0.8): SS를 ADU x LT x 1.0 으로 캡 적용
+function calcSafetyStock(days, lt, adu) {
   if(!days||days.length<7) return 0;
-  // 동료 제안 방식: (최대일판매 - 평균일판매) × 리드타임
-  // 극단값 제외: 상위 10% winsorize 후 최댓값 사용
+  // 극단값 제외: 상위 10% winsorize 후 최댓값/평균 산출
   const winsorized = winsorize(days, 0.90);
   const maxDay = Math.max(...winsorized);
   const avgDay = winsorized.reduce((a,b)=>a+b,0) / winsorized.length;
-  const ss = Math.max(0, (maxDay - avgDay) * lt);
-  return Math.round(ss);
+  const ss_raw = Math.max(0, (maxDay - avgDay) * lt);
+
+  // CV(변동계수) 계산: 원본 데이터 기준
+  const mean = days.reduce((a,b)=>a+b,0) / days.length;
+  if(mean <= 0) return 0;
+  const sigma = Math.sqrt(days.reduce((a,b)=>a+(b-mean)**2,0) / days.length);
+  const cv = sigma / mean;
+
+  // 들쑥날쑥 제품 (CV > 0.8): ADU x LT x 1.0 으로 상한 캡
+  const effectiveAdu = (adu && adu > 0) ? adu : avgDay;
+  const ss_cap = cv > 0.8 ? effectiveAdu * lt * 1.0 : Infinity;
+
+  return Math.round(Math.min(ss_raw, ss_cap));
 }
 
 // ── 캐나다 영업일 계산 (주말 + 연방공휴일 AB/ON 제외)
@@ -1620,7 +1631,7 @@ function recompute(){
       const adj = Math.min(1.5, finalSea * finalTrd);
 
       // ── Safety Stock
-      const ss = S.bqReady ? calcSafetyStock(rawDays, lt) : 0;
+      const ss = S.bqReady ? calcSafetyStock(rawDays, lt, adu) : 0;
 
       // ── 백오더: Toronto 재고=0인 경우만, 중복 제거됨
       const torAvail=STOCK[sku]?.toronto?.avail??0;
@@ -2076,7 +2087,7 @@ function renderForecast(){
           const finalTrd=skuTrdOv??supTrdOv??sd.trd;
           const adj=Math.min(1.5,finalSea*finalTrd);
           const rawDays=sd.days||[];
-          const ss=rawDays.length>=7?calcSafetyStock(rawDays,lt):0;
+          const ss=rawDays.length>=7?calcSafetyStock(rawDays,lt,sd.adu):0;
           const maxStock=Math.round(sd.adu*(lt+cycle)*adj+ss);
           const recRaw=maxStock-avail-extOO;
           const rec=Math.max(0,recRaw);
@@ -2416,7 +2427,7 @@ function dlCSV(mode){
       const bo=(S.bqReady&&(STOCK[sku]?.toronto?.avail??0)<=0)?(S.backorderData[sku]||0):0;
       const sup=meta.supplier,lt=getSetting(sup,'leadtime'),tg=getSetting(sup,'target'),cycle=getSetting(sup,'cycle');
       const rawDays=sd?.days||[];
-      const ss=S.bqReady?calcSafetyStock(rawDays,lt):0;
+      const ss=S.bqReady?calcSafetyStock(rawDays,lt,adu):0;
       const maxStock=S.bqReady&&adu>0?Math.round(adu*(lt+cycle)*adj+ss):null;
       const recRaw=maxStock!==null?maxStock-avail-extOO+bo:null;
       const rec=recRaw!==null?Math.max(0,recRaw):null;
@@ -2454,7 +2465,7 @@ function dlCSV(mode){
       const bo=(S.bqReady&&(STOCK[sku]?.toronto?.avail??0)<=0)?(S.backorderData[sku]||0):0;
       const sup=meta.supplier,lt=getSetting(sup,'leadtime'),tg=getSetting(sup,'target'),cycle=getSetting(sup,'cycle');
       const rawDays2=sd?.days||[];
-      const ss2=S.bqReady?calcSafetyStock(rawDays2,lt):0;
+      const ss2=S.bqReady?calcSafetyStock(rawDays2,lt,adu):0;
       const maxStock2=S.bqReady&&adu>0?Math.round(adu*(lt+cycle)*adj-avail-extOO+bo+ss2):null;
       const rec=maxStock2!==null?Math.max(0,maxStock2):null;
       const r=S.computed.find(r=>r.sku===sku);
