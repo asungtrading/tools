@@ -297,6 +297,11 @@ body.hide-bo6090 [data-col-id="bo6090"]{display:none!important}
         <span class="su">일</span>
       </div>
       <div class="sr">
+        <span class="sl">발주주기</span>
+        <input type="number" class="si" id="inp-cycle" value="30" min="1" max="365" onchange="saveSetting('cycle',this.value)">
+        <span class="su">일</span>
+      </div>
+      <div class="sr">
         <span class="sl">목표 재고</span>
         <input type="number" class="si" id="inp-tg" value="60" min="1" max="365" onchange="saveSetting('target',this.value)">
         <span class="su">일</span>
@@ -565,11 +570,11 @@ const S = { brandFilter:'', abcFilter:'', skuOverrides:{}, sortCol:null, sortDir
 // ═══════════════════════════════════════════════════════
 function loadSettings(){ try{const s=localStorage.getItem('asung_po_v5');if(s)S.settings=JSON.parse(s);}catch(e){} }
 function saveSettings(){ localStorage.setItem('asung_po_v5',JSON.stringify(S.settings)); }
-function getSetting(sup,key){ return S.settings?.[sup]?.[key] ?? {leadtime:30,target:60}[key]; }
+function getSetting(sup,key){ return S.settings?.[sup]?.[key] ?? {leadtime:30,target:60,cycle:30}[key]; }
 function saveSetting(key,val){
   if(!S.supplier){ alert('먼저 Supplier를 선택하세요.'); return; }
   if(!S.settings[S.supplier])S.settings[S.supplier]={};
-  S.settings[S.supplier][key]=parseInt(val)||{leadtime:30,target:60}[key];
+  S.settings[S.supplier][key]=parseInt(val)||{leadtime:30,target:60,cycle:30}[key];
   saveSettings(); updateSettingsDisplay(); recompute(); renderTable();
 }
 function saveWMA(key,val){
@@ -655,16 +660,17 @@ function clearOverrides(){
 }
 function updateSettingsDisplay(){
   const sup=S.supplier||'';
-  const lt=getSetting(sup,'leadtime'), tg=getSetting(sup,'target');
+  const lt=getSetting(sup,'leadtime'), tg=getSetting(sup,'target'), cycle=getSetting(sup,'cycle');
   document.getElementById('inp-lt').value=lt;
+  document.getElementById('inp-cycle').value=cycle;
   document.getElementById('inp-tg').value=tg;
-  document.getElementById('sv-tg').textContent=`목표: ${tg}일 / Lead: ${lt}일 / SL: 95%`;
+  document.getElementById('sv-tg').textContent=`목표: ${tg}일 / Lead: ${lt}일 / 주기: ${cycle}일`;
   document.getElementById('settings-sup-name').textContent=sup||'← Supplier 선택';
-  // BQ 배너 우측에 LT/목표 표시
+  // BQ 배너 우측에 LT/주기/목표 표시
   const bs=document.getElementById('banner-settings');
   if(bs && sup){
     bs.style.display='flex';
-    bs.innerHTML=`<span style="color:var(--text2)">Lead: <b style="color:var(--text)">${lt}일</b></span><span style="color:var(--text2)">목표: <b style="color:var(--text)">${tg}일</b></span>`;
+    bs.innerHTML=`<span style="color:var(--text2)">Lead: <b style="color:var(--text)">${lt}일</b></span><span style="color:var(--text2)">주기: <b style="color:var(--text)">${cycle}일</b></span><span style="color:var(--text2)">목표: <b style="color:var(--text)">${tg}일</b></span>`;
   }
   // override 값 반영
   const seaOv=S.settings[sup]?._seaOv, trdOv=S.settings[sup]?._trdOv;
@@ -1472,11 +1478,13 @@ function calcWMA(days) {
 // Z=1.65 (서비스 레벨 95%)
 function calcSafetyStock(days, lt) {
   if(!days||days.length<7) return 0;
-  const mean = days.reduce((a,b)=>a+b,0)/days.length;
-  const variance = days.reduce((a,b)=>a+(b-mean)**2,0)/days.length;
-  const sigma = Math.sqrt(variance);
-  const Z = 1.65; // 95% service level
-  return Z * sigma * Math.sqrt(lt);
+  // 동료 제안 방식: (최대일판매 - 평균일판매) × 리드타임
+  // 극단값 제외: 상위 10% winsorize 후 최댓값 사용
+  const winsorized = winsorize(days, 0.90);
+  const maxDay = Math.max(...winsorized);
+  const avgDay = winsorized.reduce((a,b)=>a+b,0) / winsorized.length;
+  const ss = Math.max(0, (maxDay - avgDay) * lt);
+  return Math.round(ss);
 }
 
 // ── 캐나다 영업일 계산 (주말 + 연방공휴일 AB/ON 제외)
@@ -1557,7 +1565,7 @@ function buildABCThresholds() {
 
 function recompute(){
   if(!S.supplier){ S.computed=[]; updateSummary(); return; }
-  const lt=getSetting(S.supplier,'leadtime'), tg=getSetting(S.supplier,'target');
+  const lt=getSetting(S.supplier,'leadtime'), tg=getSetting(S.supplier,'target'), cycle=getSetting(S.supplier,'cycle');
   if(S.bqReady) buildABCThresholds();
   // 영업일수 캐시 (주말·캐나다 공휴일 제외한 90일 내 실 영업일수)
   if(!S._workingDays90) S._workingDays90 = countWorkingDays(90);
@@ -1623,19 +1631,19 @@ function recompute(){
       // ── ABC 분류
       const abc = calcABC(sku);
 
-      // ── 추천발주 공식
-      // ADU는 영업일 기준, tg/lt는 달력일 기준 — 도매 특성상 활성 제품에 자연스러운 보정 효과
-      // = ADU × 목표재고일수 × (계절×트렌드, max 1.5) + 안전재고 - 가용재고 - 기발주 + 백오더
-      // 가용재고 충분하면 0 (음수 방지)
-      const recRaw = S.bqReady&&adu>0
-        ? Math.round(adu*tg*adj + ss - avail - extOO + bo)
+      // ── 추천발주 공식 (최대재고 기반 정기발주)
+      // 최대재고 = ADU × (리드타임 + 발주주기) × adj + 안전재고
+      // 발주량   = 최대재고 - 가용재고 - 기발주 + 백오더
+      const maxStock = S.bqReady&&adu>0 ? Math.round(adu*(lt+cycle)*adj + ss) : null;
+      const recRaw = maxStock !== null
+        ? maxStock - avail - extOO + bo
         : null;
       const rec = recRaw !== null ? Math.max(0, recRaw) : null;
       // 발주 불필요 여부 (재고 충분)
       const sufficient = recRaw !== null && recRaw <= 0;
 
       // ── Reorder Point (발주 시점: 가용재고가 이 이하면 발주 필요)
-      const rop = adu>0 ? Math.round(adu*lt + ss) : null;
+      const rop = adu>0 ? Math.round(adu*(lt+cycle) + ss) : null;
 
       // cov: 영업일 기준 avail/adu를 달력일로 환산하여 표시
       const wdFrac = (S._workingDays90 || 64) / 90;
@@ -1650,7 +1658,7 @@ function recompute(){
         sea:Math.round(finalSea*100)/100,trd:Math.round(finalTrd*100)/100,adj:Math.round(adj*100)/100,
         seaAuto:Math.round(sea*100)/100,trdAuto:Math.round(trd*100)/100,
         seaOv:skuSeaOv??supSeaOv??null, trdOv:skuTrdOv??supTrdOv??null,
-        ss,avail,qoh,alloc,onOrder,inTrans,extOO,bo,boData,rec,rop,cov,lt,tg,abc,sufficient,_ov:null};
+        ss,avail,qoh,alloc,onOrder,inTrans,extOO,bo,boData,rec,rop,cov,lt,tg,cycle,abc,sufficient,_ov:null};
     });
   updateSummary();
 }
@@ -2061,18 +2069,21 @@ function renderForecast(){
         .map(([sku,meta])=>{
           const sd=S.salesData[sku];
           const avail=bv(sku,'avail'),onOrder=bv(sku,'oo'),inTrans=bv(sku,'it'),extOO=Math.max(0,onOrder-inTrans);
-          const sup=meta.supplier,lt=getSetting(sup,'leadtime'),tg=getSetting(sup,'target');
+          const sup=meta.supplier,lt=getSetting(sup,'leadtime'),tg=getSetting(sup,'target'),cycle=getSetting(sup,'cycle');
           const supSeaOv=S.settings[sup]?._seaOv, supTrdOv=S.settings[sup]?._trdOv;
           const skuSeaOv=S.skuOverrides?.[sku]?.sea, skuTrdOv=S.skuOverrides?.[sku]?.trd;
           const finalSea=skuSeaOv??supSeaOv??sd.sea;
           const finalTrd=skuTrdOv??supTrdOv??sd.trd;
           const adj=Math.min(1.5,finalSea*finalTrd);
-          const recRaw=Math.round(sd.adu*tg*adj-avail-extOO);
+          const rawDays=sd.days||[];
+          const ss=rawDays.length>=7?calcSafetyStock(rawDays,lt):0;
+          const maxStock=Math.round(sd.adu*(lt+cycle)*adj+ss);
+          const recRaw=maxStock-avail-extOO;
           const rec=Math.max(0,recRaw);
           const cov=sd.adu>0?Math.round(avail/sd.adu):9999;
           return {...meta,sku,adu:sd.adu,sea:Math.round(finalSea*100)/100,trd:Math.round(finalTrd*100)/100,
             seaAuto:sd.sea,trdAuto:sd.trd,seaOv:skuSeaOv??supSeaOv??null,trdOv:skuTrdOv??supTrdOv??null,
-            adj,avail,extOO,rec,cov,lt,tg,abc:calcABC(sku)};
+            adj,avail,extOO,rec,cov,lt,tg,cycle,abc:calcABC(sku)};
         });
 
   if(q) rows=rows.filter(r=>r.sku.toLowerCase().includes(q)||r.name.toLowerCase().includes(q));
@@ -2373,10 +2384,10 @@ function dlCSV(mode){
       return finalQty > 0;
     });
     if(!rows.length){alert('발주할 항목이 없습니다.');return;}
-    const hdr=['Supplier','Brand','SKU','Name','일판매량(ADU)','계절보정','트렌드','Available Stock','Safety Stock','Ordered','백오더','추천발주','실발주량','Lead Time','목표재고일수'];
+    const hdr=['Supplier','Brand','SKU','Name','일판매량(ADU)','계절보정','트렌드','Available Stock','Safety Stock','Ordered','백오더','추천발주','실발주량','Lead Time','발주주기','목표재고일수'];
     const toLine=r=>[csvQ(r.supplier),csvQ(r.brand),csvQ(r.sku),csvQ(r.name),
       r.adu?.toFixed(2)??'',r.sea?.toFixed(2)??'',r.trd?.toFixed(2)??'',
-      r.avail,Math.round(r.ss||0),r.extOO,r.bo,r.rec??'',r._ov??r.rec??'',r.lt,r.tg].join(',');
+      r.avail,Math.round(r.ss||0),r.extOO,r.bo,r.rec??'',r._ov??r.rec??'',r.lt,r.cycle??30,r.tg].join(',');
     dl([hdr.join(','),...rows.map(toLine)].join('\n'),`PO_${S.supplier.replace(/[^a-zA-Z0-9]/g,'_')}_${STOCK_DATE}.csv`);
     return;
   }
@@ -2385,10 +2396,10 @@ function dlCSV(mode){
     if(!S.supplier){alert('Supplier를 먼저 선택해주세요.');return;}
     const rows = getRows();
     if(!rows.length){alert('데이터 없음');return;}
-    const hdr=['Supplier','Brand','SKU','Name','일판매량(ADU)','계절보정','트렌드','Available Stock','Safety Stock','Ordered','백오더','추천발주','실발주량','Lead Time','목표재고일수'];
+    const hdr=['Supplier','Brand','SKU','Name','일판매량(ADU)','계절보정','트렌드','Available Stock','Safety Stock','Ordered','백오더','추천발주','실발주량','Lead Time','발주주기','목표재고일수'];
     const toLine=r=>[csvQ(r.supplier),csvQ(r.brand),csvQ(r.sku),csvQ(r.name),
       r.adu?.toFixed(2)??'',r.sea?.toFixed(2)??'',r.trd?.toFixed(2)??'',
-      r.avail,Math.round(r.ss||0),r.extOO,r.bo,r.rec??'',r._ov??r.rec??'',r.lt,r.tg].join(',');
+      r.avail,Math.round(r.ss||0),r.extOO,r.bo,r.rec??'',r._ov??r.rec??'',r.lt,r.cycle??30,r.tg].join(',');
     dl([hdr.join(','),...rows.map(toLine)].join('\n'),`ALL_${S.supplier.replace(/[^a-zA-Z0-9]/g,'_')}_${STOCK_DATE}.csv`);
     return;
   }
@@ -2403,21 +2414,22 @@ function dlCSV(mode){
       const sd=S.salesData[sku];
       const adu=sd?.adu??0,sea=sd?.sea??1,trd=sd?.trd??1,adj=Math.min(1.5,sea*trd);
       const bo=(S.bqReady&&(STOCK[sku]?.toronto?.avail??0)<=0)?(S.backorderData[sku]||0):0;
-      const sup=meta.supplier,lt=getSetting(sup,'leadtime'),tg=getSetting(sup,'target');
+      const sup=meta.supplier,lt=getSetting(sup,'leadtime'),tg=getSetting(sup,'target'),cycle=getSetting(sup,'cycle');
       const rawDays=sd?.days||[];
       const ss=S.bqReady?calcSafetyStock(rawDays,lt):0;
-      const recRaw=S.bqReady&&adu>0?Math.round(adu*tg*adj+ss-avail-extOO+bo):null;
+      const maxStock=S.bqReady&&adu>0?Math.round(adu*(lt+cycle)*adj+ss):null;
+      const recRaw=maxStock!==null?maxStock-avail-extOO+bo:null;
       const rec=recRaw!==null?Math.max(0,recRaw):null;
       const r=S.computed.find(r=>r.sku===sku);
       const finalQty = r?._ov ?? rec;
-      return {...meta,sku,adu,sea,trd,avail,qoh,alloc,onOrder,inTrans,extOO,bo,ss:Math.round(ss),rec,finalQty,lt,tg};
+      return {...meta,sku,adu,sea,trd,avail,qoh,alloc,onOrder,inTrans,extOO,bo,ss:Math.round(ss),rec,finalQty,lt,tg,cycle};
     }).filter(r=>r.finalQty>0);  // 발주량 있는 것만
     rows = allRows;
     if(!rows.length){alert('발주할 항목이 없습니다.');return;}
-    const hdr=['Supplier','Brand','SKU','Name','일판매량(ADU)','계절보정','트렌드','가용재고','안전재고','기발주','백오더','추천발주','실발주량','Lead Time','목표재고일수'];
+    const hdr=['Supplier','Brand','SKU','Name','일판매량(ADU)','계절보정','트렌드','가용재고','안전재고','기발주','백오더','추천발주','실발주량','Lead Time','발주주기','목표재고일수'];
     const toLine=r=>[csvQ(r.supplier),csvQ(r.brand),csvQ(r.sku),csvQ(r.name),
       r.adu?.toFixed(2)??'',r.sea?.toFixed(2)??'',r.trd?.toFixed(2)??'',
-      r.avail,r.ss,r.extOO,r.bo,r.rec??'',r.finalQty,r.lt,r.tg].join(',');
+      r.avail,r.ss,r.extOO,r.bo,r.rec??'',r.finalQty,r.lt,r.cycle??30,r.tg].join(',');
     // Supplier별로 시트 구분해서 하나의 CSV로 (구분선 추가)
     const bySup={};
     rows.forEach(r=>{if(!bySup[r.supplier])bySup[r.supplier]=[];bySup[r.supplier].push(r);});
@@ -2440,10 +2452,13 @@ function dlCSV(mode){
       const sd=S.salesData[sku];
       const adu=sd?.adu??0,sea=sd?.sea??1,trd=sd?.trd??1,adj=sd?.adj??1;
       const bo=(S.bqReady&&(STOCK[sku]?.toronto?.avail??0)<=0)?(S.backorderData[sku]||0):0;
-      const sup=meta.supplier,lt=getSetting(sup,'leadtime'),tg=getSetting(sup,'target');
-      const rec=S.bqReady&&adu>0?Math.round(adu*tg*adj-avail-extOO+bo):null;
+      const sup=meta.supplier,lt=getSetting(sup,'leadtime'),tg=getSetting(sup,'target'),cycle=getSetting(sup,'cycle');
+      const rawDays2=sd?.days||[];
+      const ss2=S.bqReady?calcSafetyStock(rawDays2,lt):0;
+      const maxStock2=S.bqReady&&adu>0?Math.round(adu*(lt+cycle)*adj-avail-extOO+bo+ss2):null;
+      const rec=maxStock2!==null?Math.max(0,maxStock2):null;
       const r=S.computed.find(r=>r.sku===sku);
-      return {...meta,sku,adu,sea,trd,avail,qoh,alloc,onOrder,inTrans,extOO,bo,rec,lt,tg,_ov:r?._ov??null};
+      return {...meta,sku,adu,sea,trd,avail,qoh,alloc,onOrder,inTrans,extOO,bo,rec,lt,tg,cycle,_ov:r?._ov??null};
     });
   }
   if(!rows.length){alert('데이터 없음');return;}
