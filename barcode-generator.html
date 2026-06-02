@@ -70,6 +70,9 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
 .remove-btn{background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;padding:7px 11px;font-size:11px;transition:all .15s;}
 .remove-btn:hover{border-color:var(--red);color:var(--red);}
 .add-btn{background:none;border:1px dashed var(--border);border-radius:8px;color:var(--muted);cursor:pointer;padding:9px;font-size:11px;width:100%;transition:all .15s;margin-top:3px;}
+.prefix-btn{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;font-family:var(--mono);font-size:11px;font-weight:600;padding:4px 8px;transition:all .15s;}
+.prefix-btn:hover{border-color:var(--accent);color:var(--accent);}
+.prefix-btn.active{border-color:var(--accent);background:rgba(99,102,241,.15);color:var(--accent2);}
 .add-btn:hover{border-color:var(--accent);color:var(--accent);}
 
 /* ── BUTTONS ── */
@@ -159,31 +162,27 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
     <div class="card">
       <div class="input-grid">
         <div class="field">
-          <label>SKU 접두사</label>
-          <select id="skuPrefix">
-            <option value="E">E — Earrings</option>
-            <option value="HA">HA — Hair Accessory</option>
-            <option value="HC">HC — Hair Clip</option>
-            <option value="HB">HB — Headband</option>
-            <option value="B">B — Bracelet</option>
-            <option value="BR">BR — Brooch</option>
-            <option value="N">N — Necklace</option>
-            <option value="R">R — Ring</option>
-            <option value="M">M — Mask</option>
-            <option value="W">W — Wig/Weave</option>
-            <option value="H">H — Hat</option>
-            <option value="G">G — General</option>
-            <option value="custom">✏️ 직접 입력...</option>
-          </select>
+          <label>SKU 접두사 (AS 뒤에 붙는 영문)</label>
+          <input type="text" id="skuPrefixInput" placeholder="예: E, HA, HC ..." maxlength="5"
+            style="text-transform:uppercase;font-family:var(--mono);font-size:15px;font-weight:600;letter-spacing:1px;">
+          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;">
+            <button class="prefix-btn" onclick="setPrefix('E')">E</button>
+            <button class="prefix-btn" onclick="setPrefix('HA')">HA</button>
+            <button class="prefix-btn" onclick="setPrefix('HC')">HC</button>
+            <button class="prefix-btn" onclick="setPrefix('HB')">HB</button>
+            <button class="prefix-btn" onclick="setPrefix('B')">B</button>
+            <button class="prefix-btn" onclick="setPrefix('N')">N</button>
+            <button class="prefix-btn" onclick="setPrefix('R')">R</button>
+            <button class="prefix-btn" onclick="setPrefix('M')">M</button>
+            <button class="prefix-btn" onclick="setPrefix('W')">W</button>
+            <button class="prefix-btn" onclick="setPrefix('H')">H</button>
+            <button class="prefix-btn" onclick="setPrefix('G')">G</button>
+          </div>
         </div>
         <div class="field">
           <label>제품명</label>
           <input type="text" id="productName" placeholder="예: KIM & C Flower Clip">
         </div>
-      </div>
-      <div id="customPrefixField" class="field" style="display:none;margin-bottom:12px;">
-        <label>직접 입력 접두사</label>
-        <input type="text" id="customPrefix" placeholder="예: DP" maxlength="5" style="width:140px;text-transform:uppercase;">
       </div>
     </div>
   </div>
@@ -358,16 +357,21 @@ function getNextRefs(count){
 // ── UI HELPERS ───────────────────────────────────────────
 // 이벤트 리스너는 앱이 완전히 표시된 후 초기화
 function initUIListeners(){
-  const skuPrefixEl = document.getElementById('skuPrefix');
-  const customFieldEl = document.getElementById('customPrefixField');
-  const customPrefixEl = document.getElementById('customPrefix');
-  if(!skuPrefixEl) return;
-  skuPrefixEl.addEventListener('change',function(){
-    customFieldEl.style.display = this.value==='custom' ? 'block' : 'none';
-    if(this.value==='custom') customPrefixEl.focus();
+  const inp = document.getElementById('skuPrefixInput');
+  if(!inp) return;
+  inp.addEventListener('input', function(){
+    this.value = this.value.toUpperCase().replace(/[^A-Z]/g,'');
+    // 일치하는 버튼 하이라이트
+    document.querySelectorAll('.prefix-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.textContent === this.value);
+    });
   });
-  customPrefixEl.addEventListener('input',function(){
-    this.value=this.value.toUpperCase().replace(/[^A-Z]/g,'');
+}
+function setPrefix(val){
+  const inp = document.getElementById('skuPrefixInput');
+  inp.value = val;
+  document.querySelectorAll('.prefix-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.textContent === val);
   });
 }
 function addVariation(){
@@ -431,10 +435,7 @@ function svgToPngDataURL(svg){
 let generatedRows = [];
 
 async function generateBarcodes(){
-  const prefixSel=document.getElementById('skuPrefix').value;
-  const prefix=prefixSel==='custom'
-    ?document.getElementById('customPrefix').value.trim().toUpperCase()
-    :prefixSel;
+  const prefix=document.getElementById('skuPrefixInput').value.trim().toUpperCase();
   const name=document.getElementById('productName').value.trim();
   if(!prefix){showAlert('접두사를 선택하거나 입력해주세요.');return;}
   if(!name){showAlert('제품명을 입력해주세요.');return;}
