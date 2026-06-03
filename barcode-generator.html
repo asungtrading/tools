@@ -114,7 +114,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
 
 .type-badge{font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;}
 .type-unit  {background:rgba(99,102,241,.15);color:var(--accent2);}
-.type-dozen {background:rgba(34,197,94,.12);color:var(--green);}
+.type-pack {background:rgba(34,197,94,.12);color:var(--green);}
 .type-box   {background:rgba(245,158,11,.12);color:var(--yellow);}
 .type-case  {background:rgba(56,189,248,.12);color:var(--blue);}
 .type-pallet{background:rgba(167,139,250,.12);color:var(--purple);}
@@ -181,48 +181,16 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
     <button class="add-product-btn" onclick="addProduct()">+ 제품 추가</button>
   </div>
 
-  <!-- 패키지 타입 -->
+  <!-- 패키지 타입 안내 -->
   <div class="section">
     <div class="sec-title">박스 / 패키지 바코드 (GTIN-14)</div>
-    <div class="card">
-      <p style="font-size:11px;color:var(--muted);margin-bottom:12px;">선택한 타입의 GTIN-14를 자동 계산합니다. 여러 개 선택 가능.</p>
-      <div class="pack-grid">
-        <div class="pack-card" id="card-dozen" onclick="togglePack('dozen')">
-          <div class="pack-label">📦 Dozen</div>
-          <div class="pack-sub">12개입 박스</div>
-          <div class="pack-indicator">Indicator: 1</div>
-          <div class="pack-qty-row">
-            <label>수량</label>
-            <input type="number" id="qty-dozen" value="12" min="1" onclick="event.stopPropagation()">
-          </div>
-        </div>
-        <div class="pack-card" id="card-box" onclick="togglePack('box')">
-          <div class="pack-label">🗃️ Box</div>
-          <div class="pack-sub">박스 단위</div>
-          <div class="pack-indicator">Indicator: 2</div>
-          <div class="pack-qty-row">
-            <label>수량</label>
-            <input type="number" id="qty-box" value="24" min="1" onclick="event.stopPropagation()">
-          </div>
-        </div>
-        <div class="pack-card" id="card-case" onclick="togglePack('case')">
-          <div class="pack-label">📫 Case</div>
-          <div class="pack-sub">케이스 단위</div>
-          <div class="pack-indicator">Indicator: 3</div>
-          <div class="pack-qty-row">
-            <label>수량</label>
-            <input type="number" id="qty-case" value="48" min="1" onclick="event.stopPropagation()">
-          </div>
-        </div>
-        <div class="pack-card" id="card-pallet" onclick="togglePack('pallet')">
-          <div class="pack-label">🚛 Pallet</div>
-          <div class="pack-sub">팔렛 단위</div>
-          <div class="pack-indicator">Indicator: 8</div>
-          <div class="pack-qty-row">
-            <label>수량</label>
-            <input type="number" id="qty-pallet" value="144" min="1" onclick="event.stopPropagation()">
-          </div>
-        </div>
+    <div class="card" style="padding:12px 16px;">
+      <p style="font-size:11px;color:var(--muted);margin:0;">📦 각 제품마다 포장 단위를 개별 입력하세요. 빈칸은 해당 타입 바코드를 생성하지 않습니다.</p>
+      <div style="display:flex;gap:16px;margin-top:8px;font-size:11px;color:var(--muted);">
+        <span>Pack (Indicator 1) — 소박스</span>
+        <span>Box (Indicator 2) — 중박스</span>
+        <span>Case (Indicator 3) — 케이스</span>
+        <span>Pallet (Indicator 8) — 팔렛</span>
       </div>
     </div>
   </div>
@@ -305,7 +273,7 @@ function checkPw(){
 
 // ── PACK CONFIG ──────────────────────────────────────────
 const PACK_CONFIG = {
-  dozen:  {indicator:1, label:'Dozen',  emoji:'📦', cls:'type-dozen',  gtinCls:'gtin14'},
+  pack:   {indicator:1, label:'Pack',   emoji:'📦', cls:'type-pack',   gtinCls:'gtin14'},
   box:    {indicator:2, label:'Box',    emoji:'🗃️', cls:'type-box',   gtinCls:'gtin14'},
   case:   {indicator:3, label:'Case',   emoji:'📫', cls:'type-case',  gtinCls:'gtin14-case'},
   pallet: {indicator:8, label:'Pallet', emoji:'🚛', cls:'type-pallet',gtinCls:'gtin14-pallet'},
@@ -387,6 +355,31 @@ function addProduct(){
         </div>
       </div>
       <button class="add-var-btn" onclick="addVariation(${id})">+ 베리에이션 추가</button>
+    </div>
+    <div class="field" style="margin-top:10px;">
+      <label style="margin-bottom:6px;display:block;">포장 단위 — 빈칸은 해당 바코드 미생성</label>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+        <div style="background:var(--card2);border-radius:8px;padding:8px 10px;">
+          <div style="font-size:10px;color:var(--muted);margin-bottom:4px;">📦 Pack <span style="opacity:.6;">(Ind.1)</span></div>
+          <input type="number" id="pack-${id}" placeholder="예: 6" min="1"
+            style="width:100%;background:transparent;border:none;border-bottom:1px solid var(--border);color:var(--fg);font-size:13px;padding:2px 0;">
+        </div>
+        <div style="background:var(--card2);border-radius:8px;padding:8px 10px;">
+          <div style="font-size:10px;color:var(--muted);margin-bottom:4px;">🗃️ Box <span style="opacity:.6;">(Ind.2)</span></div>
+          <input type="number" id="box-${id}" placeholder="예: 24" min="1"
+            style="width:100%;background:transparent;border:none;border-bottom:1px solid var(--border);color:var(--fg);font-size:13px;padding:2px 0;">
+        </div>
+        <div style="background:var(--card2);border-radius:8px;padding:8px 10px;">
+          <div style="font-size:10px;color:var(--muted);margin-bottom:4px;">📫 Case <span style="opacity:.6;">(Ind.3)</span></div>
+          <input type="number" id="case-${id}" placeholder="예: 48" min="1"
+            style="width:100%;background:transparent;border:none;border-bottom:1px solid var(--border);color:var(--fg);font-size:13px;padding:2px 0;">
+        </div>
+        <div style="background:var(--card2);border-radius:8px;padding:8px 10px;">
+          <div style="font-size:10px;color:var(--muted);margin-bottom:4px;">🚛 Pallet <span style="opacity:.6;">(Ind.8)</span></div>
+          <input type="number" id="pallet-${id}" placeholder="예: 144" min="1"
+            style="width:100%;background:transparent;border:none;border-bottom:1px solid var(--border);color:var(--fg);font-size:13px;padding:2px 0;">
+        </div>
+      </div>
     </div>
   `;
   container.appendChild(div);
@@ -477,7 +470,14 @@ async function generateBarcodes(){
     if(!name)   { showAlert(`제품 #${id}: 제품명을 입력해주세요.`); return; }
     const varInputs = row.querySelectorAll('.var-row input');
     const variations = Array.from(varInputs).map(i=>i.value.trim()).filter(v=>v);
-    products.push({ id, skuBase, name, variations });
+    // 제품별 포장단위 읽기 (빈칸=미생성)
+    const packQtys = {
+      pack  : parseInt(document.getElementById('pack-'  +id)?.value)||0,
+      box   : parseInt(document.getElementById('box-'   +id)?.value)||0,
+      case  : parseInt(document.getElementById('case-'  +id)?.value)||0,
+      pallet: parseInt(document.getElementById('pallet-'+id)?.value)||0,
+    };
+    products.push({ id, skuBase, name, variations, packQtys });
   }
 
   const totalUnits = products.reduce((s,p)=>s+(p.variations.length||1), 0);
@@ -499,9 +499,11 @@ async function generateBarcodes(){
 
       generatedRows.push({type:'unit', sku, displaySku:sku, name:p.name, variation, barcode:gtin12, qty:1, ref5, gtinCls:'gtin12', format:'UPC', date});
 
+      // 제품별 포장단위로 GTIN-14 생성
+      const packMap = { pack:'pack', box:'box', case:'case', pallet:'pallet' };
       for(const[packKey,cfg] of Object.entries(PACK_CONFIG)){
-        if(!activePacks.has(packKey)) continue;
-        const qty = parseInt(document.getElementById('qty-'+packKey).value)||0;
+        const qty = p.packQtys[packKey] || 0;
+        if(!qty) continue; // 빈칸이면 미생성
         const gtin14 = buildGTIN14(ref, cfg.indicator);
         generatedRows.push({type:packKey, sku, displaySku:sku+'-'+qty, name:p.name, variation, barcode:gtin14, qty, ref5, gtinCls:cfg.gtinCls, format:'ITF14', date, packLabel:cfg.label, packEmoji:cfg.emoji});
       }
@@ -512,7 +514,8 @@ async function generateBarcodes(){
   document.getElementById('saveBtn').textContent='💾 Google Sheets에 저장';
   document.getElementById('saveBtn').classList.remove('saved');
   const totalSKU = generatedRows.filter(r=>r.type==='unit').length;
-  showAlert(`✅ ${products.length}개 제품 / ${totalSKU}개 SKU × ${1+activePacks.size}종 바코드 생성 완료`,'success');
+  const totalTypes = generatedRows.length > 0 ? new Set(generatedRows.map(r=>r.type)).size : 1;
+  showAlert(`✅ ${products.length}개 제품 / ${totalSKU}개 SKU × ${totalTypes}종 바코드 생성 완료`,'success');
 }
 
 
