@@ -636,8 +636,10 @@ async function loadFromCSV(event) {
     name      : headers.indexOf('Product Name'),
     variation : headers.indexOf('Variation'),
     barcode   : headers.indexOf('Barcode'),
-    qty       : headers.indexOf('Qty'),
+    qty       : headers.indexOf('Qty/Pack'),
     ref       : headers.indexOf('Item Ref'),
+    format    : headers.indexOf('Format'),
+    date      : headers.indexOf('Date'),
   };
 
   generatedRows = [];
@@ -655,6 +657,9 @@ async function loadFromCSV(event) {
       barcode   : get(idx.barcode),
       qty       : parseInt(get(idx.qty)) || 1,
       ref       : get(idx.ref),
+      ref5      : get(idx.ref),
+      format    : get(idx.format) || (get(idx.type).toLowerCase() === 'unit' ? 'UPC' : 'ITF14'),
+      date      : get(idx.date),
     });
   }
 
