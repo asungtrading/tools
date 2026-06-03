@@ -558,33 +558,61 @@ function initUIListeners(){
   syncFromBarcodeLogger();
 }
 
-// BarcodeLogger에서 기존 refs + SKU 동기화 (중복 방지)
+// 중복 체크 데이터 동기화
+// 소스 1: BarcodeLogger (AS-prefix SKU + itemRef)
+// 소스 2: master.json (제조사 바코드 포함 전체 바코드)
+let existingBarcodes = new Set(); // 모든 소스의 바코드 번호
+
 async function syncFromBarcodeLogger() {
   syncStatus = 'loading';
   updateSyncBadge('⏳ 중복 체크 데이터 로딩 중...');
-  try {
-    const res  = await fetch(APPS_SCRIPT_URL + '?action=search&q=');
-    const data = await res.json();
-    if (data.status === 'ok' && data.results) {
-      data.results.forEach(r => {
-        if (r.itemRef) USED_REFS.add(parseInt(r.itemRef));
-        if (r.sku)     existingSkus.add(r.sku.toUpperCase());
-      });
-    }
-    // master.json에서도 SKU 동기화
-    try {
-      const mRes  = await fetch('https://asungtrading.github.io/tools/master.json');
-      const mData = await mRes.json();
-      Object.keys(mData).forEach(sku => existingSkus.add(sku.toUpperCase()));
-    } catch(e) {}
 
-    const maxRef = USED_REFS.size ? Math.max(...USED_REFS) : 0;
-    syncStatus = 'done';
-    updateSyncBadge(`✅ 중복 체크 완료 — 마지막 Ref: ${maxRef.toLocaleString()}, 기존 SKU: ${existingSkus.size.toLocaleString()}개`);
+  let loggerCount = 0, masterBarcodeCount = 0;
+
+  // ── 소스 1: BarcodeLogger ─────────────────────────────
+  try {
+    const res  = await fetch(APPS_SCRIPT_URL + '?action=getDuplicateCheckData');
+    const data = await res.json();
+    if (data.status === 'ok') {
+      (data.refs || []).forEach(ref => {
+        if (!isNaN(ref) && ref > 0) USED_REFS.add(ref);
+      });
+      (data.skus || []).forEach(sku => {
+        if (sku) existingSkus.add(sku.toUpperCase());
+      });
+      // BarcodeLogger의 GTIN-12도 existingBarcodes에 추가
+      (data.barcodes || []).forEach(bc => {
+        if (bc) existingBarcodes.add(String(bc).trim());
+      });
+      loggerCount = (data.skus || []).length;
+    }
   } catch(e) {
-    syncStatus = 'error';
-    updateSyncBadge('⚠️ 동기화 실패 — 로컬 데이터로만 체크');
+    console.error('[sync] BarcodeLogger 실패:', e);
   }
+
+  // ── 소스 2: master.json 바코드 ───────────────────────
+  try {
+    const mRes  = await fetch('https://asungtrading.github.io/tools/master.json');
+    const mData = await mRes.json();
+    Object.values(mData).forEach(item => {
+      const bc = String(item.barcode || '').trim();
+      if (bc) {
+        existingBarcodes.add(bc);
+        masterBarcodeCount++;
+      }
+    });
+  } catch(e) {
+    console.error('[sync] master.json 실패:', e);
+  }
+
+  const maxRef = USED_REFS.size ? Math.max(...USED_REFS) : 0;
+  syncStatus = 'done';
+  updateSyncBadge(
+    `✅ 중복 체크 완료 — 마지막 Ref: ${maxRef.toLocaleString()} | ` +
+    `BarcodeLogger SKU: ${loggerCount.toLocaleString()}개 | ` +
+    `바코드 DB: ${existingBarcodes.size.toLocaleString()}개`
+  );
+  console.log('[sync] maxRef:', maxRef, '| loggerSkus:', loggerCount, '| barcodeDB:', existingBarcodes.size);
 }
 
 function updateSyncBadge(msg) {
@@ -753,22 +781,10 @@ async function generateBarcodes(){
   }
 
   // ── 중복 체크 ────────────────────────────────────────────
-  // SKU 베이스가 기존 SKU와 충돌하는지 확인 (예: ASEHC → AS85139 패턴)
-  const duplicateSkus = [];
-  for (const p of products) {
-    // SKU 베이스 자체가 기존에 있는지 (단품 SKU로 등록된 경우)
-    if (existingSkus.has(p.skuBase.toUpperCase())) {
-      duplicateSkus.push(p.skuBase);
-    }
-  }
-  if (duplicateSkus.length > 0) {
-    const proceed = confirm(
-      `⚠️ 다음 SKU가 이미 존재합니다:
-${duplicateSkus.join(', ')}
-
-계속 진행하면 새 바코드가 추가로 생성됩니다. 계속하시겠습니까?`
-    );
-    if (!proceed) return;
+  // 동기화 아직 진행 중이면 대기 요청
+  if (syncStatus === 'loading') {
+    showAlert('⏳ 중복 체크 데이터 로딩 중입니다. 잠시 후 다시 시도해주세요.', 'error');
+    return;
   }
 
   const totalUnits = products.reduce((s,p)=>s+(p.variations.length||1), 0);
@@ -787,13 +803,19 @@ ${duplicateSkus.join(', ')}
       const gtin12 = buildGTIN12(ref);
       const sku  = p.skuBase + ref5;
 
-      // 생성될 SKU가 기존에 있으면 경고 (ref 자체 중복도 방지)
+      // ① SKU 중복 체크
       if (existingSkus.has(sku.toUpperCase())) {
         showAlert(`❌ SKU 중복: ${sku} 이미 존재합니다. 생성을 중단합니다.`, 'error');
         return;
       }
+      // ② 바코드 번호 중복 체크 (master.json 바코드 포함)
+      if (existingBarcodes.has(gtin12)) {
+        showAlert(`❌ 바코드 중복: ${gtin12} (${sku}) 이미 존재합니다. 생성을 중단합니다.`, 'error');
+        return;
+      }
       USED_REFS.add(ref);
-      existingSkus.add(sku.toUpperCase()); // 이번 세션 생성분도 즉시 등록
+      existingSkus.add(sku.toUpperCase());    // 이번 세션 생성분도 즉시 등록
+      existingBarcodes.add(gtin12);           // 바코드도 즉시 등록
 
       generatedRows.push({type:'unit', sku, displaySku:sku, name:p.name, variation, barcode:gtin12, qty:1, ref5, gtinCls:'gtin12', format:'UPC', date});
 
