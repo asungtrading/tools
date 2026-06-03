@@ -917,10 +917,10 @@ async function loadPrintProducts() {
       mergeProduct({
         sku,
         name      : item.name     || '',
-        variation : '',                        // master.json에 variation 없음
-        brand     : item.brand    || extractBrand(sku),  // brand 필드 우선, 없으면 SKU에서 추출
+        variation : '',
+        brand     : item.brand    || extractBrand(sku),
         supplier  : item.supplier || '',
-        gtin12    : '',                        // 바코드는 BarcodeLogger에서 병합
+        gtin12    : item.barcode  || '',       // ★ master.json barcode 필드
         source    : 'master'
       });
       loaded++;
