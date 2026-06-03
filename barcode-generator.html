@@ -664,6 +664,7 @@ async function loadFromCSV(event) {
 
     const rowType = get(idx.type).toLowerCase();
     const packCfg = PACK_CONFIG[rowType] || {};
+    const todayStr = new Date().toISOString().slice(0,10);
     generatedRows.push({
       type      : rowType,
       sku       : get(idx.sku),
@@ -674,7 +675,7 @@ async function loadFromCSV(event) {
       ref       : get(idx.ref),
       ref5      : get(idx.ref),
       format    : get(idx.format) || (rowType === 'unit' ? 'UPC' : 'ITF14'),
-      date      : get(idx.date),
+      date      : todayStr,
       packLabel : packCfg.label || '',
       packEmoji : packCfg.emoji || '',
       gtinCls   : rowType === 'unit' ? 'gtin12' : (packCfg.gtinCls || 'gtin14'),
@@ -710,7 +711,7 @@ async function saveToSheets(){
       }))
     };
     // Apps Script GET 요청 + 배치 처리 (URL 길이 제한 대응)
-    const BATCH_SIZE = 20;
+    const BATCH_SIZE = 10; // Apps Script 타임아웃 방지
     const allRows = payload.rows;
     const totalBatches = Math.ceil(allRows.length / BATCH_SIZE);
     let totalSaved = 0;
@@ -741,6 +742,8 @@ async function saveToSheets(){
         throw new Error(`배치 ${b+1} 오류: ${result?.message || 'Unknown error'}`);
       }
       totalSaved += result.saved || chunk.length;
+      // 배치 간 1초 딜레이 (Apps Script 과부하 방지)
+      if(b < totalBatches - 1) await new Promise(r => setTimeout(r, 1000));
     }
 
     btn.textContent='✓ 저장됨';
