@@ -1300,60 +1300,108 @@ async function loadFromCSV(event) {
   const file = event.target.files[0];
   if (!file) return;
 
-  const text = await file.text();
-  const lines = text.trim().split('\n');
-  const headers = lines[0].split(',').map(h => h.replace(/"/g,'').trim());
+  // BOM 제거 + 인코딩 대응
+  const buffer = await file.arrayBuffer();
+  const bytes  = new Uint8Array(buffer);
+  // UTF-8 BOM (EF BB BF) 또는 UTF-16 BOM 제거
+  const hasBOM = bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF;
+  const text   = new TextDecoder('utf-8').decode(hasBOM ? bytes.slice(3) : bytes);
 
-  // 헤더 인덱스
-  const idx = {
-    type      : headers.indexOf('Type'),
-    sku       : headers.indexOf('SKU'),
-    name      : headers.indexOf('Product Name'),
-    variation : headers.indexOf('Variation'),
-    barcode   : headers.indexOf('Barcode'),
-    qty       : headers.indexOf('Qty/Pack'),
-    ref       : headers.indexOf('Item Ref'),
-    format    : headers.indexOf('Format'),
-    date      : headers.indexOf('Date'),
-  };
+  // \r\n / \r / \n 모두 대응
+  const lines = text.trim().split(/\r\n|\r|\n/);
+  if (lines.length < 2) { showAlert('❌ CSV 파일이 비어있습니다.', 'error'); return; }
 
-  // CSV 파싱 함수 (빈 셀 정확히 처리)
+  // CSV 파싱 함수 (따옴표 / 쉼표 포함 셀 처리)
   function parseCSVLine(line) {
     const result = [];
     let cur = '', inQuote = false;
     for (let c = 0; c < line.length; c++) {
       const ch = line[c];
-      if (ch === '"') { inQuote = !inQuote; }
-      else if (ch === ',' && !inQuote) { result.push(cur); cur = ''; }
-      else { cur += ch; }
+      if (ch === '"') {
+        // 연속 따옴표("") → 리터럴 "
+        if (inQuote && line[c+1] === '"') { cur += '"'; c++; }
+        else { inQuote = !inQuote; }
+      } else if (ch === ',' && !inQuote) {
+        result.push(cur); cur = '';
+      } else {
+        cur += ch;
+      }
     }
-    result.push(cur.replace(/\r/,''));
+    result.push(cur);
     return result;
+  }
+
+  // 헤더 파싱 — 대소문자 무관, 공백/따옴표 제거
+  const rawHeaders = parseCSVLine(lines[0]).map(h => h.replace(/"/g,'').trim());
+
+  // 헤더명 유연하게 매칭 (엑셀이 대소문자 바꾸는 케이스 대응)
+  function findCol(candidates) {
+    for (const c of candidates) {
+      const i = rawHeaders.findIndex(h => h.toLowerCase() === c.toLowerCase());
+      if (i > -1) return i;
+    }
+    return -1;
+  }
+
+  const idx = {
+    type      : findCol(['Type']),
+    sku       : findCol(['SKU']),
+    name      : findCol(['Product Name', 'Name']),
+    variation : findCol(['Variation']),
+    barcode   : findCol(['Barcode']),
+    qty       : findCol(['Qty/Pack', 'Qty', 'Quantity']),
+    ref       : findCol(['Item Ref', 'ItemRef']),
+    format    : findCol(['Format']),
+    date      : findCol(['Date']),
+  };
+
+  // 필수 컬럼 확인
+  const missing = Object.entries(idx)
+    .filter(([k,v]) => v === -1 && ['type','sku','barcode'].includes(k))
+    .map(([k]) => k);
+  if (missing.length > 0) {
+    showAlert(`❌ 필수 컬럼을 찾을 수 없습니다: ${missing.join(', ')}\n헤더: ${rawHeaders.join(' | ')}`, 'error');
+    return;
   }
 
   generatedRows = [];
   for (let i = 1; i < lines.length; i++) {
     if (!lines[i].trim()) continue;
     const cols = parseCSVLine(lines[i]);
-    const get = (j) => (j >= 0 && j < cols.length ? cols[j] : '').replace(/"/g,'').trim();
+    // 따옴표 제거 + 앞뒤 공백 제거
+    const get = (j) => (j >= 0 && j < cols.length ? cols[j] : '').replace(/^"|"$/g,'').trim();
 
     const rowType = get(idx.type).toLowerCase();
+    if (!rowType) continue; // 빈 행 스킵
     const packCfg = PACK_CONFIG[rowType] || {};
     const todayStr = new Date().toISOString().slice(0,10);
     const csvSku   = get(idx.sku);
+    if (!csvSku) continue; // SKU 없는 행 스킵
+
     const csvQty   = parseInt(get(idx.qty)) || 1;
     const dispSku  = rowType === 'unit' ? csvSku : csvSku + '-' + csvQty;
+
+    // Item Ref: 숫자로 저장된 경우 5자리로 패딩
+    const rawRef = get(idx.ref);
+    const ref5   = rawRef ? String(parseInt(rawRef) || rawRef).padStart(5, '0') : '';
+
+    // Barcode: 숫자로 저장된 경우 앞 0 복원 (GTIN-12=12자리, GTIN-14=14자리)
+    const rawBarcode = get(idx.barcode);
+    const fmt        = get(idx.format) || (rowType === 'unit' ? 'UPC' : 'ITF14');
+    const expectedLen = fmt === 'UPC' ? 12 : 14;
+    const barcode    = rawBarcode ? rawBarcode.padStart(expectedLen, '0') : '';
+
     generatedRows.push({
       type       : rowType,
       sku        : csvSku,
       displaySku : dispSku,
       name       : get(idx.name),
       variation  : get(idx.variation),
-      barcode    : get(idx.barcode),
+      barcode,
       qty        : csvQty,
-      ref        : get(idx.ref),
-      ref5       : get(idx.ref),
-      format     : get(idx.format) || (rowType === 'unit' ? 'UPC' : 'ITF14'),
+      ref        : ref5,
+      ref5,
+      format     : fmt,
       date       : todayStr,
       packLabel  : packCfg.label || '',
       packEmoji  : packCfg.emoji || '',
@@ -1362,13 +1410,13 @@ async function loadFromCSV(event) {
   }
 
   if (generatedRows.length === 0) {
-    showAlert('❌ CSV에서 데이터를 읽지 못했습니다.', 'error');
+    showAlert('❌ CSV에서 데이터를 읽지 못했습니다. 헤더: ' + rawHeaders.join(' | '), 'error');
     return;
   }
 
   renderResults();
   showAlert(`✅ CSV에서 ${generatedRows.length}행 복원 완료 — Google Sheets에 저장 버튼을 눌러주세요.`, 'success');
-  event.target.value = ''; // 같은 파일 재선택 가능하게
+  event.target.value = '';
 }
 
 async function saveToSheets(){
