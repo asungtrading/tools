@@ -497,13 +497,13 @@ async function generateBarcodes(){
       const sku  = p.skuBase + ref5;
       USED_REFS.add(ref);
 
-      generatedRows.push({type:'unit', sku, name:p.name, variation, barcode:gtin12, qty:1, ref5, gtinCls:'gtin12', format:'UPC', date});
+      generatedRows.push({type:'unit', sku, displaySku:sku, name:p.name, variation, barcode:gtin12, qty:1, ref5, gtinCls:'gtin12', format:'UPC', date});
 
       for(const[packKey,cfg] of Object.entries(PACK_CONFIG)){
         if(!activePacks.has(packKey)) continue;
         const qty = parseInt(document.getElementById('qty-'+packKey).value)||0;
         const gtin14 = buildGTIN14(ref, cfg.indicator);
-        generatedRows.push({type:packKey, sku, name:p.name, variation, barcode:gtin14, qty, ref5, gtinCls:cfg.gtinCls, format:'ITF14', date, packLabel:cfg.label, packEmoji:cfg.emoji});
+        generatedRows.push({type:packKey, sku, displaySku:sku+'-'+qty, name:p.name, variation, barcode:gtin14, qty, ref5, gtinCls:cfg.gtinCls, format:'ITF14', date, packLabel:cfg.label, packEmoji:cfg.emoji});
       }
     }
   }
@@ -548,7 +548,7 @@ async function renderResults(){
       const svgId=`svg_${r.barcode}`;
       html+=`<tr>
         <td><span class="type-badge ${typeCls}">${typeLabel}</span></td>
-        <td><span class="tag-sku">${r.sku}</span></td>
+        <td><span class="tag-sku">${r.displaySku||r.sku}</span></td>
         <td style="font-size:11px;color:var(--muted)">${r.name}</td>
         <td style="font-size:11px;color:var(--muted);font-style:italic">${r.variation||'—'}</td>
         <td><span class="tag-gtin ${r.gtinCls}">${r.barcode}</span></td>
@@ -608,7 +608,7 @@ function downloadCSV(){
   if(!generatedRows.length){showAlert('먼저 바코드를 생성하세요.');return;}
   const header='Date,Type,SKU,Product Name,Variation,Barcode,Qty/Pack,Company Prefix,Item Ref,Format\n';
   const rows=generatedRows.map(r=>
-    `${r.date},${r.type},${r.sku},"${r.name}","${r.variation}",${r.barcode},${r.type==='unit'?1:r.qty},${COMPANY_PREFIX},${r.ref5},${r.format}`
+    `${r.date},${r.type},${r.displaySku||r.sku},"${r.name}","${r.variation}",${r.barcode},${r.type==='unit'?1:r.qty},${COMPANY_PREFIX},${r.ref5},${r.format}`
   ).join('\n');
   const blob=new Blob(['\uFEFF'+header+rows],{type:'text/csv;charset=utf-8;'});
   const a=document.createElement('a');
@@ -665,20 +665,24 @@ async function loadFromCSV(event) {
     const rowType = get(idx.type).toLowerCase();
     const packCfg = PACK_CONFIG[rowType] || {};
     const todayStr = new Date().toISOString().slice(0,10);
+    const csvSku   = get(idx.sku);
+    const csvQty   = parseInt(get(idx.qty)) || 1;
+    const dispSku  = rowType === 'unit' ? csvSku : csvSku + '-' + csvQty;
     generatedRows.push({
-      type      : rowType,
-      sku       : get(idx.sku),
-      name      : get(idx.name),
-      variation : get(idx.variation),
-      barcode   : get(idx.barcode),
-      qty       : parseInt(get(idx.qty)) || 1,
-      ref       : get(idx.ref),
-      ref5      : get(idx.ref),
-      format    : get(idx.format) || (rowType === 'unit' ? 'UPC' : 'ITF14'),
-      date      : todayStr,
-      packLabel : packCfg.label || '',
-      packEmoji : packCfg.emoji || '',
-      gtinCls   : rowType === 'unit' ? 'gtin12' : (packCfg.gtinCls || 'gtin14'),
+      type       : rowType,
+      sku        : csvSku,
+      displaySku : dispSku,
+      name       : get(idx.name),
+      variation  : get(idx.variation),
+      barcode    : get(idx.barcode),
+      qty        : csvQty,
+      ref        : get(idx.ref),
+      ref5       : get(idx.ref),
+      format     : get(idx.format) || (rowType === 'unit' ? 'UPC' : 'ITF14'),
+      date       : todayStr,
+      packLabel  : packCfg.label || '',
+      packEmoji  : packCfg.emoji || '',
+      gtinCls    : rowType === 'unit' ? 'gtin12' : (packCfg.gtinCls || 'gtin14'),
     });
   }
 
@@ -704,7 +708,7 @@ async function saveToSheets(){
   try{
     const payload={
       rows: generatedRows.map(r=>({
-        date:r.date, type:r.type, sku:r.sku,
+        date:r.date, type:r.type, sku:r.displaySku||r.sku,
         name:r.name, variation:r.variation,
         barcode:r.barcode, qty:r.type==='unit'?1:r.qty,
         companyPrefix:COMPANY_PREFIX, ref:r.ref5, format:r.format
