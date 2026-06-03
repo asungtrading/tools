@@ -133,6 +133,80 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
 .dl-btn{background:none;border:1px solid var(--border);border-radius:5px;color:var(--muted);cursor:pointer;padding:3px 8px;font-size:10px;transition:all .15s;white-space:nowrap;display:block;margin-top:4px;width:100%;}
 .dl-btn:hover{border-color:var(--accent);color:var(--accent);}
 
+/* ── TABS ── */
+.tab-nav{display:flex;gap:4px;padding:0 28px;background:var(--surface);border-bottom:1px solid var(--border);}
+.tab-btn{background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);cursor:pointer;font-family:var(--sans);font-size:13px;font-weight:500;padding:12px 16px;transition:all .15s;margin-bottom:-1px;}
+.tab-btn:hover{color:var(--text);}
+.tab-btn.active{border-bottom-color:var(--accent);color:var(--accent);}
+.tab-pane{display:none;}
+.tab-pane.active{display:block;}
+
+/* ── PRINT TAB ── */
+.print-layout{display:grid;grid-template-columns:320px 1fr;gap:20px;align-items:start;}
+.search-box{position:relative;}
+.search-box input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:13px;padding:10px 14px 10px 36px;outline:none;transition:border-color .15s;}
+.search-box input:focus{border-color:var(--accent);}
+.search-icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;pointer-events:none;}
+.search-results{background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-top:6px;max-height:280px;overflow-y:auto;display:none;}
+.search-result-item{padding:10px 12px;cursor:pointer;border-bottom:1px solid rgba(42,42,58,.5);transition:background .1s;}
+.search-result-item:last-child{border-bottom:none;}
+.search-result-item:hover{background:rgba(99,102,241,.08);}
+.search-result-item .res-sku{font-family:var(--mono);font-size:11px;color:var(--accent2);font-weight:600;}
+.search-result-item .res-name{font-size:12px;color:var(--text);margin-top:2px;}
+.search-result-item .res-meta{font-size:10px;color:var(--muted);margin-top:1px;}
+
+.brand-select-wrap{margin-top:12px;}
+.brand-select-wrap select{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:13px;padding:9px 12px;outline:none;}
+.brand-select-wrap select:focus{border-color:var(--accent);}
+
+.print-queue{background:var(--surface2);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+.print-queue-header{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;}
+.queue-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(42,42,58,.4);transition:background .1s;}
+.queue-item:last-child{border-bottom:none;}
+.queue-item:hover{background:rgba(99,102,241,.04);}
+.queue-bc-preview{background:#fff;border-radius:4px;padding:3px;flex-shrink:0;width:90px;height:46px;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+.queue-info{flex:1;min-width:0;}
+.queue-sku{font-family:var(--mono);font-size:11px;color:var(--accent2);font-weight:600;}
+.queue-name{font-size:11px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.queue-var{font-size:10px;color:var(--muted);font-style:italic;}
+.queue-qty-wrap{display:flex;align-items:center;gap:5px;flex-shrink:0;}
+.qty-btn{background:var(--surface);border:1px solid var(--border);border-radius:5px;color:var(--text);cursor:pointer;font-size:13px;font-weight:600;width:24px;height:24px;display:flex;align-items:center;justify-content:center;transition:all .15s;}
+.qty-btn:hover{border-color:var(--accent);color:var(--accent);}
+.qty-display{font-family:var(--mono);font-size:13px;font-weight:600;min-width:24px;text-align:center;}
+.remove-queue-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0 2px;transition:color .15s;flex-shrink:0;}
+.remove-queue-btn:hover{color:var(--red);}
+
+.label-settings{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;}
+.settings-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
+.settings-row.three{grid-template-columns:1fr 1fr 1fr;}
+.preset-btns{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;}
+.preset-btn{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;font-size:11px;font-weight:500;padding:5px 10px;transition:all .15s;white-space:nowrap;}
+.preset-btn:hover{border-color:var(--accent);color:var(--accent);}
+.preset-btn.active{border-color:var(--accent);background:rgba(99,102,241,.15);color:var(--accent2);}
+
+.field-checks{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;}
+.field-check{display:flex;align-items:center;gap:5px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:12px;transition:all .15s;user-select:none;}
+.field-check input[type=checkbox]{accent-color:var(--accent);width:13px;height:13px;}
+.field-check:hover{border-color:var(--accent);}
+
+.print-preview-wrap{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-top:16px;}
+.preview-label-demo{background:#fff;border:1px solid #ccc;border-radius:4px;padding:8px 10px;display:inline-flex;flex-direction:column;align-items:center;gap:4px;min-width:150px;}
+.preview-label-demo .pl-brand{font-size:9px;font-weight:700;color:#333;text-transform:uppercase;letter-spacing:.5px;}
+.preview-label-demo .pl-name{font-size:10px;color:#222;text-align:center;font-weight:500;}
+.preview-label-demo .pl-var{font-size:9px;color:#666;font-style:italic;}
+.preview-label-demo .pl-sku{font-family:monospace;font-size:9px;color:#444;}
+.preview-label-demo .pl-price{font-size:11px;font-weight:700;color:#000;}
+
+.print-btn-main{background:var(--accent);border:none;border-radius:8px;color:#fff;cursor:pointer;font-family:var(--sans);font-size:14px;font-weight:600;padding:12px 28px;transition:all .15s;display:flex;align-items:center;gap:8px;}
+.print-btn-main:hover{background:var(--accent2);transform:translateY(-1px);}
+.print-btn-main:disabled{opacity:.4;cursor:not-allowed;transform:none;}
+
+/* ── PRINT STYLESHEET ── */
+@media print {
+  body > *{display:none!important;}
+  #printFrame{display:block!important;position:fixed;inset:0;}
+}
+
 /* ── MISC ── */
 .stats-bar{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:14px;padding:10px 14px;background:var(--surface2);border-radius:8px;font-size:11px;}
 .stat-item{display:flex;align-items:center;gap:5px;}
@@ -144,10 +218,14 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
 .alert-error  {background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#fca5a5;}
 .alert-success{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:#86efac;}
 
+@media(max-width:900px){
+  .print-layout{grid-template-columns:1fr;}
+}
 @media(max-width:640px){
   .input-grid{grid-template-columns:1fr;}
   .pack-grid{grid-template-columns:repeat(2,1fr);}
   .main{padding:16px 12px;}
+  .settings-row,.settings-row.three{grid-template-columns:1fr;}
 }
 </style>
 </head>
@@ -172,7 +250,15 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
   <h1>Barcode Generator <span>— Asung Trading Inc.</span></h1>
 </div>
 
+<div class="tab-nav">
+  <button class="tab-btn active" onclick="switchTab('generate',this)">🔢 바코드 생성</button>
+  <button class="tab-btn" onclick="switchTab('print',this)">🖨️ 바코드 프린트</button>
+</div>
+
 <div class="main">
+
+<!-- ══ TAB: GENERATE ══════════════════════════════════════ -->
+<div id="tab-generate" class="tab-pane active">
 
   <!-- 제품 목록 -->
   <div class="section">
@@ -237,7 +323,155 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
     </div>
   </div>
 
+</div><!-- /main inner generate -->
+</div><!-- /tab-generate -->
+
+<!-- ══ TAB: PRINT ════════════════════════════════════════ -->
+<div id="tab-print" class="tab-pane">
+<div class="main">
+
+  <!-- 검색 + 큐 + 설정 -->
+  <div class="print-layout">
+
+    <!-- 왼쪽: 검색 패널 -->
+    <div>
+      <div class="section">
+        <div class="sec-title">제품 검색</div>
+        <div class="card" style="padding:14px;">
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="printSearch" placeholder="SKU 또는 제품명 입력..." oninput="onPrintSearch(this.value)" autocomplete="off">
+          </div>
+          <div id="printSearchResults" class="search-results"></div>
+
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
+            <div class="sec-title" style="margin-bottom:8px;">브랜드별 전체 선택</div>
+            <div class="brand-select-wrap">
+              <select id="brandSelect" onchange="">
+                <option value="">— 브랜드 선택 —</option>
+              </select>
+            </div>
+            <button class="act-btn" style="width:100%;margin-top:8px;justify-content:center;" onclick="addBrandToQueue()">+ 브랜드 전체 추가</button>
+          </div>
+
+          <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+            <div class="sec-title" style="margin-bottom:8px;">데이터 소스</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <span id="srcStatus" style="font-size:11px;color:var(--muted);">⏳ 로딩 중...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 프린트 큐 -->
+      <div class="section">
+        <div class="sec-title">프린트 목록 <span id="queueCount" style="color:var(--accent);"></span></div>
+        <div class="print-queue">
+          <div class="print-queue-header">
+            <span>제품</span>
+            <button style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px;" onclick="clearQueue()">전체 삭제</button>
+          </div>
+          <div id="printQueue">
+            <div style="padding:24px;text-align:center;font-size:12px;color:var(--muted);">검색해서 제품을 추가하세요</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 오른쪽: 레이블 설정 + 미리보기 -->
+    <div>
+      <div class="section">
+        <div class="sec-title">레이블 설정</div>
+        <div class="label-settings">
+
+          <!-- 레이블 사이즈 프리셋 -->
+          <div class="field" style="margin-bottom:12px;">
+            <label>레이블 사이즈 프리셋</label>
+            <div class="preset-btns" style="margin-top:8px;">
+              <button class="preset-btn" onclick="applyPreset(this,'101.6','50.8','레이블 4×2&quot;')">📦 4"×2"</button>
+              <button class="preset-btn" onclick="applyPreset(this,'101.6','76.2','레이블 4×3&quot;')">📦 4"×3"</button>
+              <button class="preset-btn" onclick="applyPreset(this,'101.6','152.4','배송 4×6&quot;')">🚚 4"×6"</button>
+              <button class="preset-btn" onclick="applyPreset(this,'57.15','31.75','Dymo 소형')">🏷️ Dymo 2.25"×1.25"</button>
+              <button class="preset-btn" onclick="applyPreset(this,'63.5','29.6','Brother 소형')">🏷️ Brother 2.5"×1.25"</button>
+              <button class="preset-btn active" onclick="applyPreset(this,'215.9','279.4','Letter 8.5×11&quot;','letter')">📄 Letter</button>
+            </div>
+          </div>
+
+          <!-- 커스텀 사이즈 -->
+          <div class="settings-row three" style="margin-bottom:12px;">
+            <div class="field">
+              <label>너비 (mm)</label>
+              <input type="number" id="lblW" value="215.9" min="10" max="300" step="0.1" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:13px;padding:9px 12px;outline:none;" oninput="updatePreview()">
+            </div>
+            <div class="field">
+              <label>높이 (mm)</label>
+              <input type="number" id="lblH" value="279.4" min="10" max="400" step="0.1" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:13px;padding:9px 12px;outline:none;" oninput="updatePreview()">
+            </div>
+            <div class="field">
+              <label>레이블당 여백 (mm)</label>
+              <input type="number" id="lblPad" value="4" min="0" max="20" step="1" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:13px;padding:9px 12px;outline:none;" oninput="updatePreview()">
+            </div>
+          </div>
+
+          <!-- Letter 모드: 열 수 설정 -->
+          <div id="letterCols" class="field" style="margin-bottom:12px;">
+            <label>열 수 (Letter 모드)</label>
+            <div style="display:flex;gap:6px;margin-top:6px;">
+              <button class="preset-btn active" id="col1btn" onclick="setLetterCols(1,this)">1열</button>
+              <button class="preset-btn" id="col2btn" onclick="setLetterCols(2,this)">2열</button>
+              <button class="preset-btn" id="col3btn" onclick="setLetterCols(3,this)">3열</button>
+            </div>
+          </div>
+
+          <!-- 레이블 내용 선택 -->
+          <div class="field" style="margin-bottom:14px;">
+            <label>레이블 내용 선택</label>
+            <div class="field-checks" style="margin-top:8px;">
+              <label class="field-check"><input type="checkbox" id="fld-brand" checked onchange="updatePreview()"> 브랜드</label>
+              <label class="field-check"><input type="checkbox" id="fld-sku" checked onchange="updatePreview()"> SKU</label>
+              <label class="field-check"><input type="checkbox" id="fld-name" checked onchange="updatePreview()"> 제품명</label>
+              <label class="field-check"><input type="checkbox" id="fld-var" checked onchange="updatePreview()"> 옵션</label>
+              <label class="field-check"><input type="checkbox" id="fld-barcode" checked onchange="updatePreview()"> 바코드</label>
+              <label class="field-check"><input type="checkbox" id="fld-price" onchange="updatePreview()"> 가격</label>
+              <label class="field-check"><input type="checkbox" id="fld-gtin" onchange="updatePreview()"> GTIN 번호</label>
+            </div>
+          </div>
+
+          <!-- 바코드 타입 -->
+          <div class="field" style="margin-bottom:14px;">
+            <label>바코드 타입</label>
+            <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+              <button class="preset-btn active" id="bc-unit" onclick="setBarcodeType('unit',this)">🏷️ 낱개 (GTIN-12)</button>
+              <button class="preset-btn" id="bc-pack" onclick="setBarcodeType('pack',this)">📦 Pack (GTIN-14)</button>
+              <button class="preset-btn" id="bc-box" onclick="setBarcodeType('box',this)">🗃️ Box (GTIN-14)</button>
+              <button class="preset-btn" id="bc-case" onclick="setBarcodeType('case',this)">📫 Case (GTIN-14)</button>
+            </div>
+          </div>
+
+          <!-- 미리보기 -->
+          <div class="print-preview-wrap">
+            <div class="sec-title" style="margin-bottom:10px;">레이블 미리보기</div>
+            <div id="labelPreviewDemo" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;"></div>
+          </div>
+
+          <!-- 프린트 버튼 -->
+          <div style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <button class="print-btn-main" onclick="doPrint()" id="doPrintBtn" disabled>
+              🖨️ 프린트 (<span id="printTotalCount">0</span>장)
+            </button>
+            <span style="font-size:11px;color:var(--muted);">브라우저 인쇄 대화상자에서 용지 크기를 레이블과 맞춰주세요</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div><!-- /main -->
+</div><!-- /tab-print -->
+
+<!-- hidden print frame -->
+<div id="printFrame" style="display:none;"></div>
+
 </div><!-- /app -->
 
 <script>
@@ -619,6 +853,438 @@ function downloadCSV(){
   a.download=`asung_barcodes_${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
   showAlert('✅ CSV 다운로드 완료','success');
+}
+
+// ── TAB SWITCH ───────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'print') initPrintTab();
+}
+
+// ══════════════════════════════════════════════════════════
+//  PRINT TAB
+// ══════════════════════════════════════════════════════════
+
+let printProducts = [];   // 로드된 전체 제품 목록
+let printQueue    = [];   // { product, qty }
+let currentBcType = 'unit';
+let letterCols    = 1;
+let isLetterMode  = true;
+let printTabInited = false;
+
+// ── 데이터 로드 ───────────────────────────────────────────
+async function initPrintTab() {
+  if (printTabInited) return;
+  printTabInited = true;
+  await loadPrintProducts();
+}
+
+async function loadPrintProducts() {
+  const status = document.getElementById('srcStatus');
+  status.textContent = '⏳ 데이터 로딩 중...';
+
+  let loaded = 0;
+
+  // 1) BarcodeLogger Apps Script 에서 로드
+  try {
+    const url = APPS_SCRIPT_URL + '?action=search&q=';
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.status === 'ok' && data.results) {
+      for (const r of data.results) {
+        if (r.sku) mergeProduct({
+          sku: r.sku, name: r.name || '', variation: r.variation || '',
+          brand: extractBrand(r.sku), gtin12: r.gtin12 || '',
+          gtin14_pack: r.gtin14_dozen || '', gtin14_box: r.gtin14_box || '',
+          gtin14_case: r.gtin14_case || '', source: 'logger'
+        });
+      }
+      loaded += data.results.length;
+    }
+  } catch(e) { /* 실패해도 계속 */ }
+
+  // 2) master.json (GitHub Pages) 에서 로드
+  try {
+    const masterUrl = 'https://asungtrading.github.io/tools/master.json';
+    const res = await fetch(masterUrl);
+    const data = await res.json();
+    const items = Array.isArray(data) ? data : (data.products || data.items || Object.values(data));
+    for (const item of items) {
+      const sku  = item.sku || item.SKU || item.ProductCode || item['Item Number'] || '';
+      const name = item.name || item.Name || item.ProductName || item['Item Name'] || '';
+      if (!sku) continue;
+      mergeProduct({
+        sku, name, variation: item.variation || item.Color || item.Option || '',
+        brand: extractBrand(sku),
+        gtin12: item.gtin12 || item.GTIN12 || item['GTIN-12'] || '',
+        source: 'master'
+      });
+      loaded++;
+    }
+  } catch(e) { /* 실패해도 계속 */ }
+
+  // 3) 현재 세션에서 생성된 바코드도 추가
+  for (const r of generatedRows.filter(x => x.type === 'unit')) {
+    mergeProduct({
+      sku: r.sku, name: r.name, variation: r.variation || '',
+      brand: extractBrand(r.sku), gtin12: r.barcode,
+      ref5: r.ref5, source: 'session'
+    });
+    loaded++;
+  }
+
+  status.innerHTML = `✅ <strong>${printProducts.length}</strong>개 제품 로드됨`;
+  buildBrandDropdown();
+  updatePreview();
+}
+
+function mergeProduct(p) {
+  const existing = printProducts.find(x => x.sku === p.sku && x.variation === p.variation);
+  if (existing) {
+    // 데이터 보강 (기존에 없는 필드만 채움)
+    if (!existing.gtin12 && p.gtin12) existing.gtin12 = p.gtin12;
+    if (!existing.name   && p.name)   existing.name   = p.name;
+  } else {
+    printProducts.push({ ...p });
+  }
+}
+
+function extractBrand(sku) {
+  // SKU에서 브랜드 추출: AS 제거 후 앞 2~4 영문자
+  const s = sku.replace(/^AS/i, '');
+  const m = s.match(/^([A-Z]{2,5})/i);
+  return m ? m[1].toUpperCase() : 'OTHER';
+}
+
+function buildBrandDropdown() {
+  const brands = [...new Set(printProducts.map(p => p.brand))].sort();
+  const sel = document.getElementById('brandSelect');
+  sel.innerHTML = '<option value="">— 브랜드 선택 —</option>';
+  brands.forEach(b => {
+    const cnt = printProducts.filter(p => p.brand === b).length;
+    sel.innerHTML += `<option value="${b}">${b} (${cnt}개)</option>`;
+  });
+}
+
+// ── 검색 ─────────────────────────────────────────────────
+let searchTimer = null;
+function onPrintSearch(q) {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => doSearch(q), 200);
+}
+
+function doSearch(q) {
+  const box = document.getElementById('printSearchResults');
+  if (!q || q.length < 1) { box.style.display = 'none'; return; }
+  const lq = q.toLowerCase();
+  const matches = printProducts.filter(p =>
+    p.sku.toLowerCase().includes(lq) ||
+    p.name.toLowerCase().includes(lq) ||
+    (p.variation || '').toLowerCase().includes(lq)
+  ).slice(0, 30);
+
+  if (!matches.length) {
+    box.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--muted);text-align:center;">검색 결과 없음</div>';
+    box.style.display = 'block';
+    return;
+  }
+  box.innerHTML = matches.map((p, i) => `
+    <div class="search-result-item" onclick="addToQueue(${printProducts.indexOf(p)})">
+      <div class="res-sku">${p.sku}</div>
+      <div class="res-name">${p.name || '—'}</div>
+      <div class="res-meta">${p.variation ? '옵션: ' + p.variation : ''} ${p.gtin12 ? '· ' + p.gtin12 : ''}</div>
+    </div>`).join('');
+  box.style.display = 'block';
+}
+
+// 검색창 바깥 클릭 시 닫기
+document.addEventListener('click', e => {
+  if (!e.target.closest('.search-box') && !e.target.closest('.search-results')) {
+    const box = document.getElementById('printSearchResults');
+    if (box) box.style.display = 'none';
+  }
+});
+
+// ── 큐 관리 ──────────────────────────────────────────────
+function addToQueue(idx) {
+  const p = printProducts[idx];
+  if (!p) return;
+  const existing = printQueue.find(q => q.product.sku === p.sku && q.product.variation === p.variation);
+  if (existing) { existing.qty++; }
+  else { printQueue.push({ product: p, qty: 1 }); }
+  document.getElementById('printSearch').value = '';
+  document.getElementById('printSearchResults').style.display = 'none';
+  renderQueue();
+  updatePreview();
+}
+
+function addBrandToQueue() {
+  const brand = document.getElementById('brandSelect').value;
+  if (!brand) return;
+  const brandProds = printProducts.filter(p => p.brand === brand);
+  for (const p of brandProds) {
+    const existing = printQueue.find(q => q.product.sku === p.sku && q.product.variation === p.variation);
+    if (!existing) printQueue.push({ product: p, qty: 1 });
+  }
+  renderQueue();
+  updatePreview();
+  showAlert(`✅ ${brand} 브랜드 ${brandProds.length}개 제품 추가됨`, 'success');
+}
+
+function changeQty(idx, delta) {
+  printQueue[idx].qty = Math.max(1, printQueue[idx].qty + delta);
+  renderQueue();
+  updatePreview();
+}
+
+function removeFromQueue(idx) {
+  printQueue.splice(idx, 1);
+  renderQueue();
+  updatePreview();
+}
+
+function clearQueue() {
+  printQueue = [];
+  renderQueue();
+  updatePreview();
+}
+
+function renderQueue() {
+  const container = document.getElementById('printQueue');
+  const countEl   = document.getElementById('queueCount');
+  const totalLabels = printQueue.reduce((s, q) => s + q.qty, 0);
+  countEl.textContent = printQueue.length ? `(${printQueue.length}종 / ${totalLabels}장)` : '';
+  document.getElementById('printTotalCount').textContent = totalLabels;
+  document.getElementById('doPrintBtn').disabled = !printQueue.length;
+
+  if (!printQueue.length) {
+    container.innerHTML = '<div style="padding:24px;text-align:center;font-size:12px;color:var(--muted);">검색해서 제품을 추가하세요</div>';
+    return;
+  }
+
+  container.innerHTML = printQueue.map((q, i) => {
+    const p = q.product;
+    const barcode = getBarcodeForType(p);
+    const svgId = `qsvg_${i}`;
+    return `
+      <div class="queue-item">
+        <div class="queue-bc-preview" id="${svgId}"></div>
+        <div class="queue-info">
+          <div class="queue-sku">${p.sku}</div>
+          <div class="queue-name">${p.name || '—'}</div>
+          ${p.variation ? `<div class="queue-var">${p.variation}</div>` : ''}
+        </div>
+        <div class="queue-qty-wrap">
+          <button class="qty-btn" onclick="changeQty(${i},-1)">−</button>
+          <span class="qty-display">${q.qty}</span>
+          <button class="qty-btn" onclick="changeQty(${i},+1)">+</button>
+        </div>
+        <button class="remove-queue-btn" onclick="removeFromQueue(${i})">×</button>
+      </div>`;
+  }).join('');
+
+  // 미리보기 바코드 렌더
+  printQueue.forEach((q, i) => {
+    const el  = document.getElementById(`qsvg_${i}`);
+    const bc  = getBarcodeForType(q.product);
+    const fmt = currentBcType === 'unit' ? 'UPC' : 'ITF14';
+    if (el && bc) {
+      el.innerHTML = '';
+      const svg = renderBarcodeSVG(bc, fmt);
+      svg.setAttribute('width', '84');
+      svg.setAttribute('height', '40');
+      el.appendChild(svg);
+    } else if (el) {
+      el.innerHTML = '<span style="font-size:9px;color:#aaa;">바코드 없음</span>';
+    }
+  });
+}
+
+function getBarcodeForType(product) {
+  switch(currentBcType) {
+    case 'pack':  return product.gtin14_pack  || product.gtin12 || '';
+    case 'box':   return product.gtin14_box   || product.gtin12 || '';
+    case 'case':  return product.gtin14_case  || product.gtin12 || '';
+    default:      return product.gtin12 || '';
+  }
+}
+
+// ── 프리셋 & 설정 ─────────────────────────────────────────
+function applyPreset(btn, w, h, label, mode) {
+  document.querySelectorAll('.preset-btn').forEach(b => {
+    if (b.closest('.label-settings') && !b.closest('#letterCols')) b.classList.remove('active');
+  });
+  btn.classList.add('active');
+  document.getElementById('lblW').value = w;
+  document.getElementById('lblH').value = h;
+  isLetterMode = (mode === 'letter');
+  document.getElementById('letterCols').style.display = isLetterMode ? '' : 'none';
+  updatePreview();
+}
+
+function setLetterCols(n, btn) {
+  letterCols = n;
+  document.querySelectorAll('#letterCols .preset-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  updatePreview();
+}
+
+function setBarcodeType(type, btn) {
+  currentBcType = type;
+  document.querySelectorAll('[id^="bc-"]').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderQueue();
+  updatePreview();
+}
+
+// ── 레이블 미리보기 ───────────────────────────────────────
+function updatePreview() {
+  const demo = document.getElementById('labelPreviewDemo');
+  if (!demo) return;
+  const totalLabels = printQueue.reduce((s, q) => s + q.qty, 0);
+  document.getElementById('printTotalCount').textContent = totalLabels;
+  document.getElementById('doPrintBtn').disabled = !printQueue.length;
+
+  const showBrand   = document.getElementById('fld-brand')?.checked;
+  const showSku     = document.getElementById('fld-sku')?.checked;
+  const showName    = document.getElementById('fld-name')?.checked;
+  const showVar     = document.getElementById('fld-var')?.checked;
+  const showBarcode = document.getElementById('fld-barcode')?.checked;
+  const showPrice   = document.getElementById('fld-price')?.checked;
+  const showGtin    = document.getElementById('fld-gtin')?.checked;
+
+  // 샘플 데이터 (큐에서 첫 번째 또는 더미)
+  const sample = printQueue[0]?.product || {
+    sku: 'ASEHC01234', name: 'Sample Product', variation: 'Black', brand: 'EHC', gtin12: '829534012347'
+  };
+  const bc = getBarcodeForType(sample) || '829534012347';
+  const fmt = currentBcType === 'unit' ? 'UPC' : 'ITF14';
+
+  const w = parseFloat(document.getElementById('lblW')?.value) || 101.6;
+  const h = parseFloat(document.getElementById('lblH')?.value) || 50.8;
+  const ratio = Math.min(220/w, 130/h);
+  const pw = Math.round(w * ratio);
+  const ph = Math.round(h * ratio);
+
+  const svgEl = document.createElementNS('http://www.w3.org/2000/svg','svg');
+  try {
+    JsBarcode(svgEl, bc, { format: fmt, width: 1.2, height: 30, fontSize: 8, margin: 2, background:'#fff', lineColor:'#000', displayValue: showGtin });
+  } catch(e) {}
+
+  demo.innerHTML = `
+    <div style="background:#fff;border:1px solid #bbb;border-radius:3px;padding:5px 8px;width:${pw}px;min-height:${ph}px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-family:sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.08);">
+      ${showBrand   ? `<div style="font-size:${Math.max(7,pw/16)}px;font-weight:700;color:#333;text-transform:uppercase;letter-spacing:.5px;">${sample.brand}</div>` : ''}
+      ${showName    ? `<div style="font-size:${Math.max(7,pw/18)}px;color:#222;text-align:center;font-weight:500;line-height:1.2;">${sample.name}</div>` : ''}
+      ${showVar && sample.variation ? `<div style="font-size:${Math.max(6,pw/20)}px;color:#666;font-style:italic;">${sample.variation}</div>` : ''}
+      ${showBarcode ? `<div id="previewBcWrap" style="margin:2px 0;"></div>` : ''}
+      ${showSku     ? `<div style="font-family:monospace;font-size:${Math.max(6,pw/20)}px;color:#444;">${sample.sku}</div>` : ''}
+      ${showPrice   ? `<div style="font-size:${Math.max(8,pw/16)}px;font-weight:700;color:#000;">$0.00</div>` : ''}
+    </div>`;
+
+  if (showBarcode) {
+    const wrap = document.getElementById('previewBcWrap');
+    if (wrap) wrap.appendChild(svgEl);
+  }
+}
+
+// ── 프린트 실행 ───────────────────────────────────────────
+async function doPrint() {
+  if (!printQueue.length) return;
+  const btn = document.getElementById('doPrintBtn');
+  btn.textContent = '⏳ 준비 중...';
+  btn.disabled = true;
+
+  const w      = parseFloat(document.getElementById('lblW').value) || 101.6;
+  const h      = parseFloat(document.getElementById('lblH').value) || 50.8;
+  const pad    = parseFloat(document.getElementById('lblPad').value) || 4;
+  const cols   = isLetterMode ? letterCols : 1;
+
+  const showBrand   = document.getElementById('fld-brand').checked;
+  const showSku     = document.getElementById('fld-sku').checked;
+  const showName    = document.getElementById('fld-name').checked;
+  const showVar     = document.getElementById('fld-var').checked;
+  const showBarcode = document.getElementById('fld-barcode').checked;
+  const showPrice   = document.getElementById('fld-price').checked;
+  const showGtin    = document.getElementById('fld-gtin').checked;
+  const fmt         = currentBcType === 'unit' ? 'UPC' : 'ITF14';
+
+  // 레이블 목록 생성 (qty만큼 반복)
+  const labels = [];
+  for (const qi of printQueue) {
+    for (let n = 0; n < qi.qty; n++) labels.push(qi.product);
+  }
+
+  // 바코드 SVG → PNG 변환
+  const bcImages = {};
+  for (const p of [...new Set(labels)]) {
+    const bc = getBarcodeForType(p);
+    if (bc && showBarcode) {
+      const svg = renderBarcodeSVG(bc, fmt);
+      try { bcImages[p.sku + p.variation] = await svgToPngDataURL(svg); } catch(e) {}
+    }
+  }
+
+  // HTML 생성
+  const labelHTML = labels.map(p => {
+    const key = p.sku + p.variation;
+    const bcImg = bcImages[key] ? `<img src="${bcImages[key]}" style="max-width:100%;height:auto;display:block;margin:2px auto;">` : '';
+    const bc = getBarcodeForType(p);
+    return `
+      <div class="lbl" style="width:${w}mm;height:${h}mm;padding:${pad}mm;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.5px;font-family:Arial,sans-serif;page-break-inside:avoid;overflow:hidden;">
+        ${showBrand   ? `<div style="font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#222;">${p.brand||''}</div>` : ''}
+        ${showName    ? `<div style="font-size:7pt;font-weight:600;text-align:center;color:#111;line-height:1.2;">${p.name||''}</div>` : ''}
+        ${showVar && p.variation ? `<div style="font-size:6pt;color:#555;font-style:italic;">${p.variation}</div>` : ''}
+        ${showBarcode ? bcImg : ''}
+        ${showGtin && bc ? `<div style="font-family:monospace;font-size:6pt;color:#333;">${bc}</div>` : ''}
+        ${showSku     ? `<div style="font-family:monospace;font-size:6pt;color:#444;">${p.sku||''}</div>` : ''}
+        ${showPrice   ? `<div style="font-size:8pt;font-weight:700;color:#000;">$0.00</div>` : ''}
+      </div>`;
+  }).join('');
+
+  const gridStyle = isLetterMode
+    ? `display:grid;grid-template-columns:repeat(${cols},${w}mm);gap:0;`
+    : `display:block;`;
+
+  const pageStyle = isLetterMode
+    ? `size: letter; margin: 10mm;`
+    : `size: ${w}mm ${h}mm; margin: 0;`;
+
+  const printHTML = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <style>
+      @page { ${pageStyle} }
+      * { box-sizing: border-box; margin:0; padding:0; }
+      body { background:#fff; }
+      .grid { ${gridStyle} }
+      .lbl { border: 0.2pt solid #ddd; }
+      @media print { .lbl { border: none; } }
+    </style>
+    </head><body>
+    <div class="grid">${labelHTML}</div>
+    </body></html>`;
+
+  const frame = document.getElementById('printFrame');
+  frame.style.display = 'block';
+  frame.innerHTML = '';
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;border:none;';
+  frame.appendChild(iframe);
+  iframe.contentDocument.open();
+  iframe.contentDocument.write(printHTML);
+  iframe.contentDocument.close();
+
+  setTimeout(() => {
+    iframe.contentWindow.focus();
+    iframe.contentWindow.print();
+    setTimeout(() => {
+      frame.style.display = 'none';
+      frame.innerHTML = '';
+      btn.innerHTML = '🖨️ 프린트 (<span id="printTotalCount">' + labels.length + '</span>장)';
+      btn.disabled = false;
+    }, 1000);
+  }, 600);
 }
 
 // ── SAVE TO GOOGLE SHEETS ─────────────────────────────────
