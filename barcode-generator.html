@@ -228,6 +228,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
   </div>
 
   <div id="alertBox" class="alert"></div>
+  <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+    <label class="act-btn" style="cursor:pointer;font-size:13px;padding:7px 14px;" title="이전에 다운로드한 CSV로 결과 복원">
+      📂 CSV로 이전 작업 복원
+      <input type="file" accept=".csv" style="display:none;" onchange="loadFromCSV(event)">
+    </label>
+  </div>
   <button class="generate-btn" onclick="generateBarcodes()">🔢 바코드 생성</button>
 
   <!-- 결과 -->
