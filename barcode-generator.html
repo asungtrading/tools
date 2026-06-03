@@ -649,8 +649,10 @@ async function loadFromCSV(event) {
     const cols = lines[i].match(/(".*?"|[^,]+)(?=,|$)/g) || [];
     const get = (j) => (cols[j] || '').replace(/"/g,'').trim();
 
+    const rowType = get(idx.type).toLowerCase();
+    const packCfg = PACK_CONFIG[rowType] || {};
     generatedRows.push({
-      type      : get(idx.type),
+      type      : rowType,
       sku       : get(idx.sku),
       name      : get(idx.name),
       variation : get(idx.variation),
@@ -658,8 +660,11 @@ async function loadFromCSV(event) {
       qty       : parseInt(get(idx.qty)) || 1,
       ref       : get(idx.ref),
       ref5      : get(idx.ref),
-      format    : get(idx.format) || (get(idx.type).toLowerCase() === 'unit' ? 'UPC' : 'ITF14'),
+      format    : get(idx.format) || (rowType === 'unit' ? 'UPC' : 'ITF14'),
       date      : get(idx.date),
+      packLabel : packCfg.label || '',
+      packEmoji : packCfg.emoji || '',
+      gtinCls   : rowType === 'unit' ? 'gtin12' : (packCfg.gtinCls || 'gtin14'),
     });
   }
 
