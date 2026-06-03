@@ -484,21 +484,28 @@ const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw1VrWjl2dystaW
 const COMPANY_PREFIX = '829534';
 
 // ── PASSWORD GATE ────────────────────────────────────────
-(function(){
-  if(sessionStorage.getItem('asung_bc_auth')==='1'){
-    document.getElementById('gate').style.display='none';
-    document.getElementById('app').style.display='block';
+// DOM 완전히 로드된 후 실행 (함수 정의 완료 보장)
+function showApp() {
+  document.getElementById('gate').style.display='none';
+  document.getElementById('app').style.display='block';
+  // DOM 렌더링 완료 후 초기화 (syncBadge 등 요소 접근 보장)
+  requestAnimationFrame(() => {
     initUIListeners();
+  });
+}
+
+// 세션 자동 로그인
+window.addEventListener('DOMContentLoaded', function() {
+  if(sessionStorage.getItem('asung_bc_auth')==='1'){
+    showApp();
   }
-})();
+});
 
 function checkPw(){
   const v = document.getElementById('pwInput').value;
   if(v === PASSWORD_HASH){
     sessionStorage.setItem('asung_bc_auth','1');
-    document.getElementById('gate').style.display='none';
-    document.getElementById('app').style.display='block';
-    initUIListeners();
+    showApp();
   } else {
     document.getElementById('pwErr').style.display='block';
     document.getElementById('pwInput').value='';
