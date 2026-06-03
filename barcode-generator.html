@@ -288,6 +288,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
       <input type="file" accept=".csv" style="display:none;" onchange="loadFromCSV(event)">
     </label>
   </div>
+  <div id="syncBadge" style="font-size:11px;color:var(--muted);margin-bottom:8px;padding:6px 10px;background:var(--surface2);border-radius:6px;">⏳ 중복 체크 데이터 로딩 중...</div>
   <button class="generate-btn" onclick="generateBarcodes()">🔢 바코드 생성</button>
 
   <!-- 결과 -->
@@ -548,12 +549,49 @@ function getNextRefs(count){
 }
 
 // ── UI HELPERS ───────────────────────────────────────────
-// 이벤트 리스너는 앱이 완전히 표시된 후 초기화
-let productCount = 0;
+let productCount  = 0;
+let existingSkus  = new Set(); // BarcodeLogger + master.json 기존 SKU
+let syncStatus    = 'pending'; // pending | loading | done | error
 
 function initUIListeners(){
-  // 첫 제품 행 자동 추가
   addProduct();
+  syncFromBarcodeLogger();
+}
+
+// BarcodeLogger에서 기존 refs + SKU 동기화 (중복 방지)
+async function syncFromBarcodeLogger() {
+  syncStatus = 'loading';
+  updateSyncBadge('⏳ 중복 체크 데이터 로딩 중...');
+  try {
+    const res  = await fetch(APPS_SCRIPT_URL + '?action=search&q=');
+    const data = await res.json();
+    if (data.status === 'ok' && data.results) {
+      data.results.forEach(r => {
+        if (r.itemRef) USED_REFS.add(parseInt(r.itemRef));
+        if (r.sku)     existingSkus.add(r.sku.toUpperCase());
+      });
+    }
+    // master.json에서도 SKU 동기화
+    try {
+      const mRes  = await fetch('https://asungtrading.github.io/tools/master.json');
+      const mData = await mRes.json();
+      Object.keys(mData).forEach(sku => existingSkus.add(sku.toUpperCase()));
+    } catch(e) {}
+
+    const maxRef = USED_REFS.size ? Math.max(...USED_REFS) : 0;
+    syncStatus = 'done';
+    updateSyncBadge(`✅ 중복 체크 완료 — 마지막 Ref: ${maxRef.toLocaleString()}, 기존 SKU: ${existingSkus.size.toLocaleString()}개`);
+  } catch(e) {
+    syncStatus = 'error';
+    updateSyncBadge('⚠️ 동기화 실패 — 로컬 데이터로만 체크');
+  }
+}
+
+function updateSyncBadge(msg) {
+  const badge = document.getElementById('syncBadge');
+  if (!badge) return;
+  if (msg) badge.textContent = msg;
+  badge.style.color = syncStatus === 'done' ? 'var(--green)' : syncStatus === 'error' ? 'var(--yellow)' : 'var(--muted)';
 }
 
 function addProduct(){
@@ -714,6 +752,25 @@ async function generateBarcodes(){
     products.push({ id, skuBase, name, variations, packQtys });
   }
 
+  // ── 중복 체크 ────────────────────────────────────────────
+  // SKU 베이스가 기존 SKU와 충돌하는지 확인 (예: ASEHC → AS85139 패턴)
+  const duplicateSkus = [];
+  for (const p of products) {
+    // SKU 베이스 자체가 기존에 있는지 (단품 SKU로 등록된 경우)
+    if (existingSkus.has(p.skuBase.toUpperCase())) {
+      duplicateSkus.push(p.skuBase);
+    }
+  }
+  if (duplicateSkus.length > 0) {
+    const proceed = confirm(
+      `⚠️ 다음 SKU가 이미 존재합니다:
+${duplicateSkus.join(', ')}
+
+계속 진행하면 새 바코드가 추가로 생성됩니다. 계속하시겠습니까?`
+    );
+    if (!proceed) return;
+  }
+
   const totalUnits = products.reduce((s,p)=>s+(p.variations.length||1), 0);
   const refs = getNextRefs(totalUnits);
   if(refs.length < totalUnits){ showAlert('사용 가능한 번호가 부족합니다.'); return; }
@@ -729,7 +786,14 @@ async function generateBarcodes(){
       const ref5 = String(ref).padStart(5,'0');
       const gtin12 = buildGTIN12(ref);
       const sku  = p.skuBase + ref5;
+
+      // 생성될 SKU가 기존에 있으면 경고 (ref 자체 중복도 방지)
+      if (existingSkus.has(sku.toUpperCase())) {
+        showAlert(`❌ SKU 중복: ${sku} 이미 존재합니다. 생성을 중단합니다.`, 'error');
+        return;
+      }
       USED_REFS.add(ref);
+      existingSkus.add(sku.toUpperCase()); // 이번 세션 생성분도 즉시 등록
 
       generatedRows.push({type:'unit', sku, displaySku:sku, name:p.name, variation, barcode:gtin12, qty:1, ref5, gtinCls:'gtin12', format:'UPC', date});
 
