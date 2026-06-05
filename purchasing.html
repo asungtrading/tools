@@ -296,6 +296,11 @@ body.hide-bo6090 [data-col-id="bo6090"]{display:none!important}
         <input type="number" class="si" id="inp-lt" value="30" min="1" max="365" oninput="saveSetting('leadtime',this.value)">
         <span class="su">일</span>
       </div>
+      <div class="sr" title="LT 표준편차: 납기 지연 불규칙성. 0=지연 없음, 7=±1주 변동">
+        <span class="sl" style="font-size:11px">LT 변동(σ)</span>
+        <input type="number" class="si" id="inp-lt-sigma" value="0" min="0" max="60" step="1" oninput="saveSetting('lt_sigma',this.value)" placeholder="0">
+        <span class="su">일</span>
+      </div>
       <div class="sr">
         <span class="sl">발주주기</span>
         <input type="number" class="si" id="inp-cycle" value="30" min="1" max="365" oninput="saveSetting('cycle',this.value)">
@@ -570,7 +575,7 @@ const S = { brandFilter:'', abcFilter:'', skuOverrides:{}, sortCol:null, sortDir
 // ═══════════════════════════════════════════════════════
 function loadSettings(){ try{const s=localStorage.getItem('asung_po_v5');if(s)S.settings=JSON.parse(s);}catch(e){} }
 function saveSettings(){ localStorage.setItem('asung_po_v5',JSON.stringify(S.settings)); }
-function getSetting(sup,key){ return S.settings?.[sup]?.[key] ?? {leadtime:30,target:60,cycle:30}[key]; }
+function getSetting(sup,key){ return S.settings?.[sup]?.[key] ?? {leadtime:30,target:60,cycle:30,lt_sigma:0}[key]; }
 function saveSetting(key,val){
   if(!S.supplier){ alert('먼저 Supplier를 선택하세요.'); return; }
   if(!S.settings[S.supplier])S.settings[S.supplier]={};
@@ -661,16 +666,18 @@ function clearOverrides(){
 function updateSettingsDisplay(){
   const sup=S.supplier||'';
   const lt=getSetting(sup,'leadtime'), tg=getSetting(sup,'target'), cycle=getSetting(sup,'cycle');
+  const ltSigma=getSetting(sup,'lt_sigma')||0;
   document.getElementById('inp-lt').value=lt;
+  document.getElementById('inp-lt-sigma').value=ltSigma;
   document.getElementById('inp-cycle').value=cycle;
   document.getElementById('inp-tg').value=tg;
-  document.getElementById('sv-tg').textContent=`목표: ${tg}일 / Lead: ${lt}일 / 주기: ${cycle}일`;
+  document.getElementById('sv-tg').textContent=`목표: ${tg}일 / Lead: ${lt}일 / 주기: ${cycle}일${ltSigma>0?' / LTσ:'+ltSigma+'일':''}`;
   document.getElementById('settings-sup-name').textContent=sup||'← Supplier 선택';
   // BQ 배너 우측에 LT/주기/목표 표시
   const bs=document.getElementById('banner-settings');
   if(bs && sup){
     bs.style.display='flex';
-    bs.innerHTML=`<span style="color:var(--text2)">Lead: <b style="color:var(--text)">${lt}일</b></span><span style="color:var(--text2)">주기: <b style="color:var(--text)">${cycle}일</b></span><span style="color:var(--text2)">목표: <b style="color:var(--text)">${tg}일</b></span>`;
+    bs.innerHTML=`<span style="color:var(--text2)">Lead: <b style="color:var(--text)">${lt}일</b></span><span style="color:var(--text2)">주기: <b style="color:var(--text)">${cycle}일</b></span><span style="color:var(--text2)">목표: <b style="color:var(--text)">${tg}일</b></span>${ltSigma>0?`<span style="color:var(--yellow)">LTσ: <b>${ltSigma}일</b></span>`:''}`;
   }
   // override 값 반영
   const seaOv=S.settings[sup]?._seaOv, trdOv=S.settings[sup]?._trdOv;
@@ -874,14 +881,22 @@ async function loadSalesDataFromBQ(){
       ORDER BY SKU, Date
     `;
 
-    // ── 계절성 쿼리: 작년 동기 90일 판매량
+    // ── 계절성 쿼리 [개선 A]: 미래 기준점 (발주 도착일 기준 향후 90일)
+    // 오늘 발주 → LT일 후 입고 → 그 시점부터 90일이 실제 판매 시즌
+    // 따라서 작년의 "입고예정일 ~ 입고예정일+90일" 구간과 비교
+    // DEFAULT_LT=30 사용 (BQ 쿼리 시점에 Supplier LT 미확정이므로 보수적 기본값)
+    const SEA_LT = getSetting(S.supplier, 'leadtime') || 30;
     const seaSQL = `
       SELECT
         SKU,
         SUM(Quantity) AS qty_ly
       FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_SALES}\`
-      WHERE Date >= DATE_SUB(DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR), INTERVAL 90 DAY)
-        AND Date < DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR)
+      WHERE Date >= DATE_SUB(
+              DATE_ADD(CURRENT_DATE(), INTERVAL ${SEA_LT} DAY),
+              INTERVAL 1 YEAR)
+        AND Date < DATE_SUB(
+              DATE_ADD(DATE_ADD(CURRENT_DATE(), INTERVAL ${SEA_LT} DAY), INTERVAL 90 DAY),
+              INTERVAL 1 YEAR)
         AND Quantity > 0
       GROUP BY SKU
     `;
@@ -1479,16 +1494,35 @@ function calcWMA(days) {
   return wTot>0 ? wSum/wTot : 0;
 }
 
-// ── Safety Stock (CV 기반 자동 전환)
-// 스테디 제품 (CV <= 0.8): (maxDay - avgDay) x LT
-// 들쑥날쑥 제품 (CV > 0.5): SS를 ADU x LT x 0.7 으로 캡 적용
-function calcSafetyStock(days, lt, adu) {
+// 5b. [개선 C 대체] 가중 이동평균 — 명시적 가중치 전달 버전
+// ABC 등급별 자동 조정된 w1/w2/w3를 받아서 계산
+function calcWMAWeighted(days, w1, w2, w3) {
+  if(!days||!days.length) return 0;
+  const n = days.length;
+  const seg = Math.floor(n/3)||1;
+  let wSum=0, wTot=0;
+  days.forEach((v,i)=>{
+    const w = i >= n-seg ? w1 : i >= n-seg*2 ? w2 : w3;
+    wSum += v*w; wTot += w;
+  });
+  return wTot>0 ? wSum/wTot : 0;
+}
+
+// ── Safety Stock (CV 기반 자동 전환 + LT 변동성 반영)
+// 전통 공식: SS = Z × sqrt(LT × σ_d² + ADU² × σ_lt²)
+//   σ_d  = 일별 수요 표준편차
+//   σ_lt = LT 표준편차 (납기 지연 변동성)
+//   Z    = 1.65 (95% 서비스 레벨)
+// 도매 특성상 수요 분포가 정규분포를 따르지 않으므로,
+// 수요 항은 기존 (maxDay-avgDay)×LT 방식을 유지하고
+// LT 변동성 항을 별도로 가산합니다.
+function calcSafetyStock(days, lt, adu, ltSigma=0) {
   if(!days||days.length<7) return 0;
   // 극단값 제외: 상위 10% winsorize 후 최댓값/평균 산출
   const winsorized = winsorize(days, 0.90);
   const maxDay = Math.max(...winsorized);
   const avgDay = winsorized.reduce((a,b)=>a+b,0) / winsorized.length;
-  const ss_raw = Math.max(0, (maxDay - avgDay) * lt);
+  const ss_demand = Math.max(0, (maxDay - avgDay) * lt);
 
   // CV(변동계수) 계산: 원본 데이터 기준
   const mean = days.reduce((a,b)=>a+b,0) / days.length;
@@ -1496,11 +1530,19 @@ function calcSafetyStock(days, lt, adu) {
   const sigma = Math.sqrt(days.reduce((a,b)=>a+(b-mean)**2,0) / days.length);
   const cv = sigma / mean;
 
-  // 들쑥날쑥 제품 (CV > 0.7): ADU x LT x 0.7 으로 상한 캡
+  // 들쑥날쑥 제품 (CV > 0.7): ADU × LT × 0.7 으로 상한 캡
   const effectiveAdu = (adu && adu > 0) ? adu : avgDay;
   const ss_cap = cv > 0.5 ? effectiveAdu * lt * 0.7 : Infinity;
+  const ss_base = Math.min(ss_demand, ss_cap);
 
-  return Math.round(Math.min(ss_raw, ss_cap));
+  // LT 변동성 항: Z × ADU × σ_lt  (σ_lt > 0인 경우만 가산)
+  // 수요가 일정해도 납기가 불규칙하면 ADU × σ_lt 만큼 추가 버퍼 필요
+  const Z = 1.65; // 95% 서비스 레벨
+  const ss_lt = (ltSigma > 0 && effectiveAdu > 0)
+    ? Z * effectiveAdu * ltSigma
+    : 0;
+
+  return Math.round(ss_base + ss_lt);
 }
 
 // ── 캐나다 영업일 계산 (주말 + 연방공휴일 AB/ON 제외)
@@ -1582,6 +1624,7 @@ function buildABCThresholds() {
 function recompute(){
   if(!S.supplier){ S.computed=[]; updateSummary(); return; }
   const lt=getSetting(S.supplier,'leadtime'), tg=getSetting(S.supplier,'target'), cycle=getSetting(S.supplier,'cycle');
+  const ltSigma=getSetting(S.supplier,'lt_sigma')||0;  // [개선 B] LT 변동성
   if(S.bqReady) buildABCThresholds();
   // 영업일수 캐시 (주말·캐나다 공휴일 제외한 90일 내 실 영업일수)
   if(!S._workingDays90) S._workingDays90 = countWorkingDays(90);
@@ -1607,18 +1650,23 @@ function recompute(){
       else                             extOO = torOO + edmSupOO;
       const sd=S.salesData[sku];
 
-      // ── ADU: 도매 기준 수요 예측 (총 판매량 / 90일)
-      // 도매 특성: 이따금 대량주문, 많은 zero-day → 활성비율 플로어 제거
+      // ── ADU: 도매 기준 수요 예측
+      // [개선 C 대체] ABC 등급별 WMA 가중치 자동 조정
+      // A등급: 최근 트렌드에 민감하게 → w1 높임 / C등급: 노이즈 감소 → 균등 가중치
       const rawDays = sd?.days || [];
+      const abcForWMA = calcABC(sku); // 이전 사이클 ABC 사용 (닭-달걀 문제 방지)
+      let wmaW1=S.wmaW1||3, wmaW2=S.wmaW2||2, wmaW3=S.wmaW3||1;
+      if(abcForWMA==='A'){
+        wmaW1=Math.min(10,(S.wmaW1||3)*2); wmaW2=S.wmaW2||2; wmaW3=1;
+      } else if(abcForWMA==='C'){
+        wmaW1=S.wmaW1||3; wmaW2=S.wmaW2||2; wmaW3=Math.max(wmaW2, S.wmaW3||1);
+      }
       let adu = 0;
       if(rawDays.length > 0){
-        // 윈저라이징: 상위 5% 극단값 제한 (대량주문은 유지 — 도매에서 실수요)
         const winsorized = winsorize(rawDays, 0.95);
-        // Huber + WMA 혼합 (판매일 기준 평균)
         const huberADU = calcHuberADU(winsorized);
-        const wmaADU   = calcWMA(winsorized);
+        const wmaADU   = calcWMAWeighted(winsorized, wmaW1, wmaW2, wmaW3);
         const baseADU = huberADU * 0.7 + wmaADU * 0.3;
-        // 활성비율 = 판매일수/영업일수 (주말·공휴일 제외) → ADU ≈ 총판매량/영업일수
         const activeFraction = Math.min(1, rawDays.length / (S._workingDays90 || 64));
         adu = baseADU * activeFraction;
       }
@@ -1632,11 +1680,11 @@ function recompute(){
       // SKU별 > Supplier 전체 > BQ 자동계산 순으로 우선순위
       const finalSea = skuSeaOv ?? supSeaOv ?? sea;
       const finalTrd = skuTrdOv ?? supTrdOv ?? trd;
-      // 계절×트렌드 합산 상한 1.5배 (도매 특성: 단건 주문으로 과도한 보정 방지)
+      // 계절×트렌드 합산 상한 1.2배 (도매 특성: 단건 주문으로 과도한 보정 방지)
       const adj = Math.min(1.2, finalSea * finalTrd);
 
-      // ── Safety Stock
-      const ss = S.bqReady ? calcSafetyStock(rawDays, lt, adu) : 0;
+      // ── Safety Stock [개선 B]: LT 변동성(ltSigma) 포함
+      const ss = S.bqReady ? calcSafetyStock(rawDays, lt, adu, ltSigma) : 0;
 
       // ── 백오더: Toronto 재고=0인 경우만, 중복 제거됨
       const torAvail=STOCK[sku]?.toronto?.avail??0;
@@ -1676,7 +1724,8 @@ function recompute(){
         sea:Math.round(finalSea*100)/100,trd:Math.round(finalTrd*100)/100,adj:Math.round(adj*100)/100,
         seaAuto:Math.round(sea*100)/100,trdAuto:Math.round(trd*100)/100,
         seaOv:skuSeaOv??supSeaOv??null, trdOv:skuTrdOv??supTrdOv??null,
-        ss,avail,qoh,alloc,onOrder,inTrans,extOO,bo,boData,rec,rop,cov,lt,tg,cycle,abc,sufficient,_ov:null};
+        ss,avail,qoh,alloc,onOrder,inTrans,extOO,bo,boData,rec,rop,cov,lt,tg,cycle,ltSigma,abc,sufficient,
+        wmaWeights:{w1:wmaW1,w2:wmaW2,w3:wmaW3},_ov:null};
     });
   updateSummary();
 }
@@ -1841,13 +1890,13 @@ function renderTable(){
       h+=`<tr${trStyle}>
         <td onmouseenter="showSparkline('${jse(r.sku)}','${jse(r.name)}',event)" onmouseleave="hideSparkline()" style="cursor:default">${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}" title="ABC 등급: A=상위20%(핵심제품) B=상위21~50%(중간) C=하위50%(저판매) | ADU 기준 자동분류">${r.abc}</span>`:''} ${(S.salesData[r.sku]?.linkedFrom||[]).length?`<span style="color:var(--yellow);font-size:9px" title="구 SKU 데이터 합산: ${(S.salesData[r.sku]?.linkedFrom||[]).join(', ')}">🔗</span>`:''}</td>
         <td style="max-width:var(--name-col-width,180px);overflow:hidden;text-overflow:ellipsis;cursor:default" title="${xe(r.name)}">${xe(r.name)}</td>
-        <td class="${r.adu>0?'':'vz'}" title="${r.adu>0?'가중이동평균 ADU':'판매 데이터 없음'}">${r.adu>0?r.adu.toFixed(2):'—'}</td>
+        <td class="${r.adu>0?'':'vz'}" title="${r.adu>0?`가중이동평균 ADU (WMA ${r.wmaWeights?.w1||3}/${r.wmaWeights?.w2||2}/${r.wmaWeights?.w3||1} · ABC-${r.abc||'?'} 자동조정)`:'판매 데이터 없음'}">${r.adu>0?r.adu.toFixed(2):'—'}</td>
         <td data-col-id="orderAdu" class="${r.orderAdu!==null&&r.orderAdu>0?'':'vz'}" title="${r.orderAduData?'주문ADU 기간별:\n전달말-3M: '+(r.orderAduData.adu_p1!==null?r.orderAduData.adu_p1.toFixed(2):'—')+'\n전달말-6M: '+(r.orderAduData.adu_p2!==null?r.orderAduData.adu_p2.toFixed(2):'—')+'\n전달말-1Y: '+(r.orderAduData.adu_p3!==null?r.orderAduData.adu_p3.toFixed(2):'—')+'\n오늘-3M: '+(r.orderAduData.adu_p4!==null?r.orderAduData.adu_p4.toFixed(2):'—'):'주문 데이터 없음'}">${r.orderAdu!==null?r.orderAdu.toFixed(2):'—'}</td>
         <td data-col-id="sea" class="${r.sea>1.1?'vp':r.sea<0.9?'vw':''}" onclick="editSkuOverride('${jse(r.sku)}','sea',${r.sea},event)" onmouseenter="showOvHistory('${jse(r.supplier)}','sea',event)" onmouseleave="hideOvHistory()" title="클릭해서 수동 수정 (BQ자동: ×${r.seaAuto})">${r.adu>0?`×${r.sea.toFixed(2)}${r.seaOv!==null?'<span style=\'color:var(--yellow);font-size:8px\'>✎</span>':''}`:'—'}</td>
         <td data-col-id="trd" class="${r.trd>1.05?'vp':r.trd<0.95?'vw':''}" onclick="editSkuOverride('${jse(r.sku)}','trd',${r.trd},event)" onmouseenter="showOvHistory('${jse(r.supplier)}','trd',event)" onmouseleave="hideOvHistory()" title="클릭해서 수동 수정 (BQ자동: ×${r.trdAuto})">${r.adu>0?`×${r.trd.toFixed(2)}${r.trdOv!==null?'<span style=\'color:var(--yellow);font-size:8px\'>✎</span>':''}`:'—'}</td>
         <td data-col-id="cov" class="sep ${cc}">${ct}</td>
         <td data-col-id="avail"><span class="${r.avail<=0?'vn':r.avail<10?'vw':''}">${r.avail.toLocaleString()}</span></td>
-        <td data-col-id="ss" title="${r.ss>0?`σ=${(r.ss/(1.65*Math.sqrt(r.lt||30))).toFixed(1)}/일`:'판매데이터 없음'}">${r.ss>0?`<span class="vw">${Math.round(r.ss)}</span>`:'<span class="vz">—</span>'}</td>
+        <td data-col-id="ss" title="${r.ss>0?`SS = 수요변동분 + LT변동분${r.ltSigma>0?' (LTσ='+r.ltSigma+'일 반영)':''} | σ≈${(r.ss/(1.65*Math.sqrt(r.lt||30))).toFixed(1)}/일`:'판매데이터 없음'}">${r.ss>0?`<span class="vw">${Math.round(r.ss)}</span>`:'<span class="vz">—</span>'}</td>
         <td data-col-id="extOO">${r.extOO>0?`<span class="vp">${r.extOO.toLocaleString()}</span>`:'<span class="vz">0</span>'}</td>
         <td data-col-id="inTrans">${(()=>{
           const t=r.inTrans, oo=r.extOO;
