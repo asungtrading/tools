@@ -2570,7 +2570,7 @@ async function loadSupplierIntelligence(supplier){
         COUNT(DISTINCT sku) AS sku_count,
         SUM(quantity)       AS total_qty,
         SUM(line_total)     AS total_amount,
-        BOOL_AND(po_complete) AS is_complete
+        COUNTIF(po_complete = true) > 0 AS is_complete
       FROM \`${BQ_PROJECT}.${BQ_PUR_DATASET}.${BQ_PURCHASE}\`
       WHERE supplier_name = '${supEsc}'
         AND status != 'VOIDED'
