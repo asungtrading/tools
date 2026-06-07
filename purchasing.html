@@ -560,7 +560,7 @@ body.hide-bo6090 [data-col-id="bo6090"]{display:none!important}
           <!-- 섹션 3: 월별 계절성 히트맵 -->
           <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px">
             <div style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px">🌡 월별 발주 계절성</div>
-            <div style="font-size:11px;color:var(--text3);margin-bottom:10px">각 월의 평균 발주 횟수와 금액 (어두울수록 많음)</div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:10px">각 월의 평균 발주 횟수와 금액 (밝을수록 발주 빈도 높음)</div>
             <div id="si-heatmap"></div>
           </div>
 
@@ -2654,16 +2654,71 @@ async function loadSupplierIntelligence(supplier){
       FROM purchase p
       LEFT JOIN sales s USING(sku)
       ORDER BY p.total_amount DESC
-      LIMIT 200
+    `;
+
+    // ── 쿼리 5: SKU별 월별 발주 vs 판매 추이 (호버 차트용)
+    const skuMonthlySQL = `
+      WITH
+      pur AS (
+        SELECT
+          sku,
+          FORMAT_DATE('%Y-%m', order_date) AS ym,
+          SUM(quantity)   AS ordered_qty,
+          SUM(line_total) AS ordered_amt
+        FROM \`${BQ_PROJECT}.${BQ_PUR_DATASET}.${BQ_PURCHASE}\`
+        WHERE supplier_name = '${supEsc}'
+          AND status != 'VOIDED'
+          AND order_date IS NOT NULL
+        GROUP BY sku, ym
+      ),
+      sal AS (
+        SELECT
+          SKU AS sku,
+          FORMAT_DATE('%Y-%m', Date) AS ym,
+          SUM(Quantity) AS sold_qty
+        FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_SALES}\`
+        WHERE Quantity > 0
+        GROUP BY sku, ym
+      ),
+      combined AS (
+        SELECT
+          COALESCE(p.sku, s.sku)         AS sku,
+          COALESCE(p.ym,  s.ym)          AS ym,
+          COALESCE(p.ordered_qty, 0)     AS ordered_qty,
+          COALESCE(s.sold_qty, 0)        AS sold_qty
+        FROM pur p
+        FULL OUTER JOIN sal s USING(sku, ym)
+      )
+      SELECT sku, ym, ordered_qty, sold_qty
+      FROM combined
+      WHERE sku IN (
+        SELECT DISTINCT sku
+        FROM \`${BQ_PROJECT}.${BQ_PUR_DATASET}.${BQ_PURCHASE}\`
+        WHERE supplier_name = '${supEsc}'
+          AND status != 'VOIDED'
+      )
+      ORDER BY sku, ym
     `;
 
     // 병렬 실행
-    const [poRows, yearlyRows, monthlyRows, skuRows] = await Promise.all([
+    const [poRows, yearlyRows, monthlyRows, skuRows, skuMonthlyRows] = await Promise.all([
       runBQQuery(poSummarySQL),
       runBQQuery(yearlySQL),
       runBQQuery(monthlySQL),
       runBQQuery(skuCompareSQL),
+      runBQQuery(skuMonthlySQL),
     ]);
+
+    // SKU별 월별 데이터 맵 생성
+    S.siSkuMonthly = {};
+    skuMonthlyRows.forEach(r => {
+      if (!S.siSkuMonthly[r.sku]) S.siSkuMonthly[r.sku] = [];
+      S.siSkuMonthly[r.sku].push({
+        ym:      r.ym,
+        ordered: parseFloat(r.ordered_qty) || 0,
+        sold:    parseFloat(r.sold_qty)    || 0
+      });
+    });
 
     S.siData = { poRows, yearlyRows, monthlyRows, skuRows, supplier };
     renderSupplierIntelligence();
@@ -2777,57 +2832,110 @@ function renderSupplierIntelligence(){
     }).join('');
     document.getElementById('si-heatmap').innerHTML =
       `<div style="display:flex;gap:4px;flex-wrap:nowrap">${heatCells}</div>
-       <div style="margin-top:8px;font-family:var(--mono);font-size:10px;color:var(--text3)">색상 = 월별 평균 발주 빈도 (${years[0]} ~ ${years[years.length-1]})</div>`;
+       <div style="margin-top:8px;font-family:var(--mono);font-size:10px;color:var(--text3)">색상 = 월별 평균 발주 빈도 (${years[0]} ~ ${years[years.length-1]}) — 밝을수록 발주 빈도 높음</div>`;
   }
 
-  // ── 재고 적정성 (SKU별 발주량 vs 판매량 TOP 20)
+  // ── 재고 적정성 (페이지네이션 + 정렬 + 호버 툴팁)
   if(skuRows.length){
-    const top = skuRows.slice(0,20);
-    const maxQty = Math.max(...top.map(r=>Math.max(parseFloat(r.total_ordered||0), parseFloat(r.total_sold||0))), 1);
-    const rows = top.map(r=>{
-      const ordered = parseFloat(r.total_ordered||0);
-      const sold    = parseFloat(r.total_sold||0);
-      const ratio   = sold>0 ? ordered/sold : null;
-      const ratioTxt = ratio===null?'—':ratio.toFixed(2)+'×';
-      const ratioColor = ratio===null?'var(--text3)':ratio>2?'var(--red)':ratio<0.8?'var(--yellow)':'var(--green)';
-      const barW = 180;
-      const oW = maxQty>0?Math.round((ordered/maxQty)*barW):0;
-      const sW = maxQty>0?Math.round((sold/maxQty)*barW):0;
-      return `<tr style="border-bottom:1px solid var(--border)">
-        <td style="padding:6px 8px;color:var(--accent);font-size:11px;white-space:nowrap">${xe(r.sku)}</td>
-        <td style="padding:6px 8px;font-family:var(--sans);font-size:11px;color:var(--text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${xe(r.product_name||'')}">${xe(r.product_name||'')}</td>
-        <td style="padding:6px 8px;text-align:right;color:var(--accent)">${fmt0(ordered)}</td>
-        <td style="padding:6px 8px">
-          <div style="height:6px;background:rgba(79,142,247,.3);border-radius:2px;margin-bottom:2px">
-            <div style="height:6px;width:${oW}px;background:rgba(79,142,247,.8);border-radius:2px"></div>
+    S.siSkuPage    = 0;
+    S.siSkuSort    = { col:'total_ordered', dir:-1 };
+    S.siSkuPageSize = 20;
+
+    function renderSkuTable(){
+      const { col, dir } = S.siSkuSort;
+      const sorted = [...skuRows].sort((a,b)=>{
+        const av = parseFloat(a[col])||0;
+        const bv = parseFloat(b[col])||0;
+        if(col==='sku'||col==='product_name'){
+          return (a[col]||'').localeCompare(b[col]||'') * dir;
+        }
+        return (av - bv) * dir;
+      });
+
+      const totalPages = Math.ceil(sorted.length / S.siSkuPageSize);
+      S.siSkuPage = Math.max(0, Math.min(S.siSkuPage, totalPages-1));
+      const page = sorted.slice(S.siSkuPage * S.siSkuPageSize, (S.siSkuPage+1) * S.siSkuPageSize);
+      const maxQty = Math.max(...sorted.map(r=>Math.max(parseFloat(r.total_ordered||0), parseFloat(r.total_sold||0))), 1);
+
+      const sortArrow = (c) => {
+        if(S.siSkuSort.col !== c) return '<span style="opacity:.3;font-size:8px"> ↕</span>';
+        return S.siSkuSort.dir === -1
+          ? '<span style="color:var(--accent);font-size:9px"> ↓</span>'
+          : '<span style="color:var(--accent);font-size:9px"> ↑</span>';
+      };
+      const thStyle = (align='right') =>
+        `padding:7px 8px;text-align:${align};color:#94a3b8;font-weight:500;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;white-space:nowrap`;
+      const thClick = (c) => `onclick="S.siSkuSort.col='${c}';S.siSkuSort.dir=S.siSkuSort.col==='${c}'&&S.siSkuSort.dir===-1?1:-1;S.siSkuSort.col='${c}';renderSkuTable_()"`;
+
+      const rows = page.map(r=>{
+        const ordered = parseFloat(r.total_ordered||0);
+        const sold    = parseFloat(r.total_sold||0);
+        const ratio   = sold>0 ? ordered/sold : null;
+        const ratioTxt   = ratio===null?'—':ratio.toFixed(2)+'×';
+        const ratioColor = ratio===null?'var(--text3)':ratio>2?'var(--red)':ratio<0.8?'var(--yellow)':'var(--green)';
+        const barW = 160;
+        const oW = maxQty>0?Math.round((ordered/maxQty)*barW):0;
+        const sW = maxQty>0?Math.round((sold/maxQty)*barW):0;
+        const skuEsc = jse(r.sku);
+        const nmEsc  = jse(r.product_name||'');
+        return `<tr style="border-bottom:1px solid var(--border)"
+          onmouseenter="showSkuTooltip('${skuEsc}','${nmEsc}',${ordered},${sold},${parseFloat(r.sold_1y||0)},${parseFloat(r.sold_90d||0)},event)"
+          onmouseleave="hideSkuTooltip()">
+          <td style="padding:6px 8px;color:var(--accent);font-size:11px;white-space:nowrap">${xe(r.sku)}</td>
+          <td style="padding:6px 8px;font-family:var(--sans);font-size:11px;color:var(--text);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${xe(r.product_name||'')}">${xe(r.product_name||'')}</td>
+          <td style="padding:6px 8px;text-align:right;color:var(--accent)">${fmt0(ordered)}</td>
+          <td style="padding:6px 8px;min-width:180px">
+            <div style="height:5px;background:rgba(79,142,247,.25);border-radius:2px;margin-bottom:3px">
+              <div style="height:5px;width:${oW}px;background:rgba(79,142,247,.8);border-radius:2px"></div>
+            </div>
+            <div style="height:5px;background:rgba(62,207,142,.25);border-radius:2px">
+              <div style="height:5px;width:${sW}px;background:rgba(62,207,142,.8);border-radius:2px"></div>
+            </div>
+          </td>
+          <td style="padding:6px 8px;text-align:right;color:var(--green)">${fmt0(sold)}</td>
+          <td style="padding:6px 8px;text-align:right;color:${ratioColor};font-weight:600">${ratioTxt}</td>
+          <td style="padding:6px 8px;text-align:right;color:var(--text2)">${fmt0(r.sold_1y)}</td>
+          <td style="padding:6px 8px;text-align:right;color:var(--text3)">${fmt0(r.sold_90d)}</td>
+        </tr>`;
+      }).join('');
+
+      // 페이지네이션 버튼
+      const pageInfo = `<span style="font-family:var(--mono);font-size:10px;color:var(--text3)">
+        ${S.siSkuPage*S.siSkuPageSize+1}–${Math.min((S.siSkuPage+1)*S.siSkuPageSize, sorted.length)} / ${sorted.length}개
+      </span>`;
+      const prevBtn = `<button onclick="S.siSkuPage--;renderSkuTable_()" ${S.siSkuPage<=0?'disabled':''} style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--text2);padding:3px 10px;cursor:pointer;font-size:11px">◀</button>`;
+      const nextBtn = `<button onclick="S.siSkuPage++;renderSkuTable_()" ${S.siSkuPage>=totalPages-1?'disabled':''} style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--text2);padding:3px 10px;cursor:pointer;font-size:11px">▶</button>`;
+
+      document.getElementById('si-wos-chart').innerHTML =
+        `<table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px;min-width:700px">
+          <thead><tr style="background:var(--bg3)">
+            <th style="${thStyle('left')}" ${thClick('sku')}>SKU${sortArrow('sku')}</th>
+            <th style="${thStyle('left')}" ${thClick('product_name')}>상품명${sortArrow('product_name')}</th>
+            <th style="${thStyle('right')};color:rgba(79,142,247,.9)" ${thClick('total_ordered')}>총발주량${sortArrow('total_ordered')}</th>
+            <th style="${thStyle('left')};min-width:190px">발주 vs 판매</th>
+            <th style="${thStyle('right')};color:rgba(62,207,142,.9)" ${thClick('total_sold')}>총판매량${sortArrow('total_sold')}</th>
+            <th style="${thStyle('right')}" ${thClick('order_to_sales_ratio')}>발주/판매비율${sortArrow('order_to_sales_ratio')}</th>
+            <th style="${thStyle('right')}" ${thClick('sold_1y')}>1년판매${sortArrow('sold_1y')}</th>
+            <th style="${thStyle('right')}" ${thClick('sold_90d')}>90일판매${sortArrow('sold_90d')}</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <div style="margin-top:10px;display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap">
+          <div style="font-family:var(--mono);font-size:10px;color:var(--text3)">
+            비율 &gt;2× = <span style="color:var(--red)">과다 발주</span> | &lt;0.8× = <span style="color:var(--yellow)">부족 발주</span> | 정상 = <span style="color:var(--green)">적정</span>
           </div>
-          <div style="height:6px;background:rgba(62,207,142,.3);border-radius:2px">
-            <div style="height:6px;width:${sW}px;background:rgba(62,207,142,.8);border-radius:2px"></div>
-          </div>
-        </td>
-        <td style="padding:6px 8px;text-align:right;color:var(--green)">${fmt0(sold)}</td>
-        <td style="padding:6px 8px;text-align:right;color:${ratioColor};font-weight:600">${ratioTxt}</td>
-        <td style="padding:6px 8px;text-align:right;color:var(--text2)">${fmt0(r.sold_1y)}</td>
-        <td style="padding:6px 8px;text-align:right;color:var(--text3)">${fmt0(r.sold_90d)}</td>
-      </tr>`;
-    }).join('');
-    document.getElementById('si-wos-chart').innerHTML =
-      `<table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px;min-width:700px">
-        <thead><tr style="background:var(--bg3)">
-          <th style="padding:7px 8px;text-align:left;color:#94a3b8;font-weight:500;border-bottom:1px solid var(--border)">SKU</th>
-          <th style="padding:7px 8px;text-align:left;color:#94a3b8;font-weight:500;border-bottom:1px solid var(--border)">상품명</th>
-          <th style="padding:7px 8px;text-align:right;color:rgba(79,142,247,.8);font-weight:500;border-bottom:1px solid var(--border)">총발주량</th>
-          <th style="padding:7px 8px;text-align:left;color:#94a3b8;font-weight:500;border-bottom:1px solid var(--border);min-width:200px">발주 vs 판매</th>
-          <th style="padding:7px 8px;text-align:right;color:rgba(62,207,142,.8);font-weight:500;border-bottom:1px solid var(--border)">총판매량</th>
-          <th style="padding:7px 8px;text-align:right;color:#94a3b8;font-weight:500;border-bottom:1px solid var(--border)">발주/판매비율</th>
-          <th style="padding:7px 8px;text-align:right;color:#94a3b8;font-weight:500;border-bottom:1px solid var(--border)">1년판매</th>
-          <th style="padding:7px 8px;text-align:right;color:#94a3b8;font-weight:500;border-bottom:1px solid var(--border)">90일판매</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      <div style="margin-top:8px;font-family:var(--mono);font-size:10px;color:var(--text3)">
-        비율 &gt;2× = <span style="color:var(--red)">과다 발주</span> | &lt;0.8× = <span style="color:var(--yellow)">부족 발주</span> | 정상 = <span style="color:var(--green)">적정</span> | TOP 20 SKU 기준
-      </div>`;
+          <div style="display:flex;align-items:center;gap:8px">${prevBtn}${pageInfo}${nextBtn}</div>
+        </div>`;
+    }
+
+    // 전역 접근용 래퍼
+    window.renderSkuTable_ = renderSkuTable;
+    // 정렬 클릭 핸들러 재정의
+    window.renderSkuTable_ = function(){
+      renderSkuTable();
+    };
+    renderSkuTable();
+  }
   }
 
   // ── PO 히스토리 테이블
@@ -2847,6 +2955,145 @@ function renderSupplierIntelligence(){
       <td style="padding:6px 10px"><span style="background:${statusBg};color:${statusColor};padding:2px 7px;border-radius:3px;font-size:10px;font-weight:600">${isComplete?'COMPLETED':'PENDING'}</span></td>
     </tr>`;
   }).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+//  SKU HOVER TOOLTIP (발주 vs 판매 미니 차트)
+// ═══════════════════════════════════════════════════════
+function showSkuTooltip(sku, name, ordered, sold, sold1y, sold90d, evt){
+  let tip = document.getElementById('sku-compare-tooltip');
+  if(!tip){
+    tip = document.createElement('div');
+    tip.id = 'sku-compare-tooltip';
+    tip.style.cssText = `
+      position:fixed;display:none;z-index:9999;
+      background:var(--bg2);border:1px solid var(--border2);
+      border-radius:10px;padding:14px 16px;
+      font-family:var(--mono);font-size:11px;color:var(--text);
+      box-shadow:0 8px 32px rgba(0,0,0,.6);
+      pointer-events:none;min-width:340px;max-width:420px;
+    `;
+    document.body.appendChild(tip);
+  }
+
+  const fmt0 = n => (n||0).toLocaleString('en-US',{maximumFractionDigits:0});
+  const ratio = sold>0 ? (ordered/sold).toFixed(2)+'×' : '—';
+  const ratioColor = sold<=0?'var(--text3)':ordered/sold>2?'var(--red)':ordered/sold<0.8?'var(--yellow)':'var(--green)';
+
+  // ── 옵션 A: 요약 바
+  const maxA = Math.max(ordered, sold, 1);
+  const oW = Math.round((ordered/maxA)*160);
+  const sW = Math.round((sold/maxA)*160);
+  const o1W = Math.round((sold1y/maxA)*160);
+  const s9W = Math.round((sold90d/maxA)*160);
+
+  // ── 옵션 B: 월별 라인차트 SVG
+  const monthly = (S.siSkuMonthly||{})[sku] || [];
+  let chartSVG = '';
+  if(monthly.length >= 2){
+    // 최근 24개월만
+    const recent = monthly.slice(-24);
+    const maxVal = Math.max(...recent.map(d=>Math.max(d.ordered, d.sold)), 1);
+    const W=300, H=80, padL=8, padR=8, padT=8, padB=20;
+    const cW = W-padL-padR, cH = H-padT-padB;
+    const n = recent.length;
+
+    // 발주 막대
+    let bars = '';
+    recent.forEach((d,i)=>{
+      const x = padL + (i/n)*cW;
+      const bw = Math.max(1, cW/n - 2);
+      const bh = maxVal>0 ? (d.ordered/maxVal)*cH : 0;
+      const y  = padT + cH - bh;
+      bars += `<rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="rgba(79,142,247,.5)" rx="1"/>`;
+    });
+
+    // 판매 라인
+    let linePath = '';
+    recent.forEach((d,i)=>{
+      const x = padL + (i/n)*cW + (cW/n/2);
+      const y = padT + cH - (maxVal>0?(d.sold/maxVal)*cH:0);
+      linePath += (i===0?`M${x},${y}`:`L${x},${y}`);
+    });
+
+    // X축 레이블 (첫/중간/마지막)
+    const labelIdxs = [0, Math.floor(n/2), n-1];
+    let labels = '';
+    labelIdxs.forEach(i=>{
+      if(!recent[i]) return;
+      const x = padL + (i/n)*cW + (cW/n/2);
+      labels += `<text x="${x}" y="${H-4}" text-anchor="middle" font-size="8" fill="#555e78">${recent[i].ym.slice(2)}</text>`;
+    });
+
+    chartSVG = `
+      <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+        <div style="font-size:9px;color:var(--text3);margin-bottom:4px;display:flex;gap:12px">
+          <span><span style="display:inline-block;width:8px;height:8px;background:rgba(79,142,247,.6);border-radius:1px;margin-right:3px"></span>월별 발주</span>
+          <span><span style="display:inline-block;width:16px;height:2px;background:var(--green);margin-right:3px;vertical-align:middle"></span>월별 판매</span>
+        </div>
+        <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px">
+          <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT+cH}" stroke="var(--border)" stroke-width="0.5"/>
+          <line x1="${padL}" y1="${padT+cH}" x2="${W-padR}" y2="${padT+cH}" stroke="var(--border)" stroke-width="0.5"/>
+          ${bars}
+          <path d="${linePath}" fill="none" stroke="var(--green)" stroke-width="1.5"/>
+          ${labels}
+        </svg>
+      </div>`;
+  }
+
+  tip.innerHTML = `
+    <div style="color:var(--accent);font-size:11px;font-weight:600;margin-bottom:2px">${xe(sku)}</div>
+    <div style="color:var(--text2);font-size:10px;margin-bottom:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:360px">${xe(name)}</div>
+
+    <div style="display:grid;grid-template-columns:80px 1fr 50px;gap:4px;align-items:center;row-gap:6px">
+      <span style="color:var(--text3);font-size:10px">총 발주</span>
+      <div style="height:6px;background:rgba(79,142,247,.2);border-radius:2px">
+        <div style="height:6px;width:${oW}px;background:rgba(79,142,247,.8);border-radius:2px"></div>
+      </div>
+      <span style="text-align:right;color:var(--accent)">${fmt0(ordered)}</span>
+
+      <span style="color:var(--text3);font-size:10px">총 판매</span>
+      <div style="height:6px;background:rgba(62,207,142,.2);border-radius:2px">
+        <div style="height:6px;width:${sW}px;background:rgba(62,207,142,.8);border-radius:2px"></div>
+      </div>
+      <span style="text-align:right;color:var(--green)">${fmt0(sold)}</span>
+
+      <span style="color:var(--text3);font-size:10px">1년 판매</span>
+      <div style="height:4px;background:rgba(62,207,142,.15);border-radius:2px">
+        <div style="height:4px;width:${o1W}px;background:rgba(62,207,142,.5);border-radius:2px"></div>
+      </div>
+      <span style="text-align:right;color:var(--text2);font-size:10px">${fmt0(sold1y)}</span>
+
+      <span style="color:var(--text3);font-size:10px">90일 판매</span>
+      <div style="height:4px;background:rgba(62,207,142,.15);border-radius:2px">
+        <div style="height:4px;width:${s9W}px;background:rgba(62,207,142,.5);border-radius:2px"></div>
+      </div>
+      <span style="text-align:right;color:var(--text2);font-size:10px">${fmt0(sold90d)}</span>
+    </div>
+
+    <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <span style="color:var(--text3);font-size:10px">발주/판매 비율</span>
+      <span style="color:${ratioColor};font-size:14px;font-weight:700">${ratio}</span>
+    </div>
+    ${chartSVG}
+  `;
+
+  // 위치 조정
+  const vw=window.innerWidth, vh=window.innerHeight;
+  let x=evt.clientX+16, y=evt.clientY-20;
+  const tipW=420, tipH=monthly.length>=2?340:200;
+  if(x+tipW>vw) x=evt.clientX-tipW-8;
+  if(y+tipH>vh) y=evt.clientY-tipH-8;
+  if(x<8) x=8;
+  if(y<8) y=8;
+  tip.style.left=x+'px';
+  tip.style.top=y+'px';
+  tip.style.display='block';
+}
+
+function hideSkuTooltip(){
+  const tip = document.getElementById('sku-compare-tooltip');
+  if(tip) tip.style.display='none';
 }
 
 // ═══════════════════════════════════════════════════════
