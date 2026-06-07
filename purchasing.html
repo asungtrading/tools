@@ -525,7 +525,16 @@ body.hide-bo6090 [data-col-id="bo6090"]{display:none!important}
             <option value="">— Supplier를 선택하세요 —</option>
           </select>
           <div id="si-status" style="font-family:var(--mono);font-size:11px;color:var(--text3)"></div>
-          <div style="margin-left:auto;display:flex;gap:8px">
+          <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <!-- SKU 검색 -->
+            <div style="display:flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:4px 9px">
+              <span style="color:var(--text3);font-size:12px">⌕</span>
+              <input type="text" id="si-sku-search" placeholder="SKU 검색..."
+                oninput="siFilterSku(this.value)"
+                style="background:none;border:none;color:var(--text);font-family:var(--mono);font-size:11px;outline:none;width:120px">
+              <button id="si-sku-clear" onclick="siClearSku()" style="display:none;background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;padding:0 2px">✕</button>
+            </div>
+            <!-- 기간 선택 -->
             <select id="si-period" onchange="if(S.siSupplier)loadSupplierIntelligence(S.siSupplier)"
               style="background:var(--bg3);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:var(--mono);font-size:11px;padding:4px 8px;outline:none;cursor:pointer">
               <option value="all">전체 기간</option>
@@ -533,6 +542,9 @@ body.hide-bo6090 [data-col-id="bo6090"]{display:none!important}
               <option value="2y">최근 2년</option>
               <option value="1y">최근 1년</option>
             </select>
+            <!-- CSV 다운로드 -->
+            <button onclick="dlSkuAnalysisCSV()" class="btn"
+              style="font-size:11px;padding:4px 10px">↓ CSV</button>
           </div>
         </div>
 
@@ -2843,7 +2855,17 @@ function renderSupplierIntelligence(){
 
     function renderSkuTable(){
       const { col, dir } = S.siSkuSort;
-      const sorted = [...skuRows].sort((a,b)=>{
+      let filtered = [...skuRows];
+
+      // SKU 검색 필터
+      if(S.siSkuFilter){
+        filtered = filtered.filter(r=>
+          (r.sku||'').toUpperCase().includes(S.siSkuFilter) ||
+          (r.product_name||'').toUpperCase().includes(S.siSkuFilter)
+        );
+      }
+
+      const sorted = filtered.sort((a,b)=>{
         const av = parseFloat(a[col])||0;
         const bv = parseFloat(b[col])||0;
         if(col==='sku'||col==='product_name'){
@@ -2954,6 +2976,74 @@ function renderSupplierIntelligence(){
       <td style="padding:6px 10px"><span style="background:${statusBg};color:${statusColor};padding:2px 7px;border-radius:3px;font-size:10px;font-weight:600">${isComplete?'COMPLETED':'PENDING'}</span></td>
     </tr>`;
   }).join('');
+}
+
+// ── SKU 검색 필터
+S.siSkuFilter = '';
+
+function siFilterSku(val){
+  S.siSkuFilter = (val||'').trim().toUpperCase();
+  const clearBtn = document.getElementById('si-sku-clear');
+  if(clearBtn) clearBtn.style.display = S.siSkuFilter ? 'inline' : 'none';
+  if(window.renderSkuTable_) renderSkuTable_();
+}
+
+function siClearSku(){
+  S.siSkuFilter = '';
+  const inp = document.getElementById('si-sku-search');
+  if(inp) inp.value = '';
+  const clearBtn = document.getElementById('si-sku-clear');
+  if(clearBtn) clearBtn.style.display = 'none';
+  if(window.renderSkuTable_) renderSkuTable_();
+}
+
+// ── SKU 분석 CSV 다운로드
+function dlSkuAnalysisCSV(){
+  if(!S.siData || !S.siData.skuRows || !S.siData.skuRows.length){
+    alert('먼저 Supplier를 선택하고 데이터를 로드해주세요.');
+    return;
+  }
+  const { skuRows, supplier } = S.siData;
+  const { col, dir } = S.siSkuSort || { col:'total_ordered', dir:-1 };
+
+  let rows = [...skuRows];
+
+  // SKU 필터 적용
+  if(S.siSkuFilter){
+    rows = rows.filter(r =>
+      (r.sku||'').toUpperCase().includes(S.siSkuFilter) ||
+      (r.product_name||'').toUpperCase().includes(S.siSkuFilter)
+    );
+  }
+
+  // 정렬 적용
+  rows.sort((a,b)=>{
+    const av = parseFloat(a[col])||0;
+    const bv = parseFloat(b[col])||0;
+    if(col==='sku'||col==='product_name'){
+      return (a[col]||'').localeCompare(b[col]||'') * dir;
+    }
+    return (av-bv)*dir;
+  });
+
+  const hdr = ['SKU','상품명','총발주량','총판매량','발주/판매비율','1년판매','90일판매','첫발주일','최근발주일','PO횟수'];
+  const toLine = r => {
+    const ordered = parseFloat(r.total_ordered||0);
+    const sold    = parseFloat(r.total_sold||0);
+    const ratio   = sold>0 ? (ordered/sold).toFixed(2) : '';
+    return [
+      csvQ(r.sku), csvQ(r.product_name||''),
+      ordered, sold, ratio,
+      parseFloat(r.sold_1y||0), parseFloat(r.sold_90d||0),
+      r.first_order||'', r.last_order||'',
+      parseInt(r.po_count||0)
+    ].join(',');
+  };
+
+  const supName = (supplier||'Supplier').replace(/[^a-zA-Z0-9]/g,'_');
+  const today = new Date().toISOString().slice(0,10);
+  dl([hdr.join(','), ...rows.map(toLine)].join('\n'),
+     `SKU_Analysis_${supName}_${today}.csv`);
 }
 
 // ═══════════════════════════════════════════════════════
