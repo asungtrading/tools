@@ -2619,7 +2619,8 @@ async function loadSupplierIntelligence(supplier){
       WITH
       purchase AS (
         SELECT
-          sku, product_name,
+          sku,
+          MAX(product_name) AS product_name,
           SUM(quantity)    AS total_ordered,
           SUM(line_total)  AS total_amount,
           MIN(order_date)  AS first_order,
@@ -2630,7 +2631,7 @@ async function loadSupplierIntelligence(supplier){
           AND status != 'VOIDED'
           AND order_date IS NOT NULL
           ${dateFilter}
-        GROUP BY sku, product_name
+        GROUP BY sku
       ),
       sales AS (
         SELECT
