@@ -339,6 +339,7 @@ body.hide-bo6090 [data-col-id="bo6090"]{display:none!important}
         <button class="mtab active" onclick="setTab('order',this)">발주 추천</button>
         <button class="mtab" onclick="setTab('forecast',this)">Forecast</button>
         <button class="mtab" onclick="setTab('deadstock',this)">데드 스톡</button>
+        <button class="mtab" onclick="setTab('supplier',this)">📊 Supplier 분석</button>
       </div>
       <div id="col-toggle-bar" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
         <span style="font-size:10px;color:var(--text3);margin-right:2px">컬럼:</span>
@@ -512,6 +513,92 @@ body.hide-bo6090 [data-col-id="bo6090"]{display:none!important}
           </table>
         </div>
       </div>
+
+      <!-- ═══ SUPPLIER INTELLIGENCE VIEW ═══ -->
+      <div id="si-view" style="flex:1;overflow-y:auto;padding:0;display:none;flex-direction:column">
+
+        <!-- 헤더 -->
+        <div style="padding:14px 18px 10px;border-bottom:1px solid var(--border);background:var(--bg2);flex-shrink:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <div style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.1em;text-transform:uppercase">Supplier 선택</div>
+          <select id="si-sup-sel" onchange="loadSupplierIntelligence(this.value)"
+            style="background:var(--bg3);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:var(--sans);font-size:12px;padding:5px 10px;outline:none;cursor:pointer;min-width:220px;max-width:340px">
+            <option value="">— Supplier를 선택하세요 —</option>
+          </select>
+          <div id="si-status" style="font-family:var(--mono);font-size:11px;color:var(--text3)"></div>
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <select id="si-period" onchange="if(S.siSupplier)loadSupplierIntelligence(S.siSupplier)"
+              style="background:var(--bg3);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:var(--mono);font-size:11px;padding:4px 8px;outline:none;cursor:pointer">
+              <option value="all">전체 기간</option>
+              <option value="3y">최근 3년</option>
+              <option value="2y">최근 2년</option>
+              <option value="1y">최근 1년</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 빈 상태 -->
+        <div id="si-empty" style="flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;color:var(--text3)">
+          <div style="font-size:40px;opacity:.2">📊</div>
+          <div style="font-size:14px;color:var(--text2)">Supplier를 선택하면 구매 패턴 분석이 표시됩니다</div>
+          <div style="font-size:11.5px;text-align:center;line-height:1.8;max-width:420px">
+            발주 빈도 · 금액 추이 · 계절성 · 재고 적정성 · 디맨드 충족률을 한눈에 확인하세요
+          </div>
+        </div>
+
+        <!-- 분석 컨텐츠 -->
+        <div id="si-content" style="display:none;padding:16px;display:none;flex-direction:column;gap:16px">
+
+          <!-- 섹션 1: KPI 카드 -->
+          <div id="si-kpi" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px"></div>
+
+          <!-- 섹션 2: 연도별 발주 패턴 -->
+          <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px">
+            <div style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px">📅 연도별 발주 패턴</div>
+            <div id="si-yearly-chart" style="width:100%;overflow-x:auto"></div>
+          </div>
+
+          <!-- 섹션 3: 월별 계절성 히트맵 -->
+          <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px">
+            <div style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px">🌡 월별 발주 계절성</div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:10px">각 월의 평균 발주 횟수와 금액 (어두울수록 많음)</div>
+            <div id="si-heatmap"></div>
+          </div>
+
+          <!-- 섹션 4: 재고 vs 세일즈 (Weeks of Supply) -->
+          <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px">
+            <div style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px">⚖️ 재고 적정성 분석</div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:10px">발주량 vs 판매량 비교 · Weeks of Supply</div>
+            <div id="si-wos-chart" style="overflow-x:auto"></div>
+          </div>
+
+          <!-- 섹션 5: PO 히스토리 테이블 -->
+          <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+              <div style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.08em;text-transform:uppercase">📋 PO 히스토리</div>
+              <div style="font-family:var(--mono);font-size:10px;color:var(--text3)" id="si-po-count"></div>
+            </div>
+            <div style="overflow-x:auto">
+              <table id="si-po-tbl" style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px;min-width:700px">
+                <thead>
+                  <tr style="background:var(--bg3)">
+                    <th style="padding:7px 10px;text-align:left;color:#94a3b8;font-weight:500;border-bottom:1px solid var(--border);white-space:nowrap">PO 번호</th>
+                    <th style="padding:7px 10px;text-align:left;color:#94a3b8;font-weight:500;border-bottom:1px solid var(--border);white-space:nowrap">발주일</th>
+                    <th style="padding:7px 10px;text-align:right;color:#94a3b8;font-weight:500;border-bottom:1px solid var(--border);white-space:nowrap">SKU 수</th>
+                    <th style="padding:7px 10px;text-align:right;color:#94a3b8;font-weight:500;border-bottom:1px solid var(--border);white-space:nowrap">총 발주량</th>
+                    <th style="padding:7px 10px;text-align:right;color:#94a3b8;font-weight:500;border-bottom:1px solid var(--border);white-space:nowrap">총 금액</th>
+                    <th style="padding:7px 10px;text-align:left;color:#94a3b8;font-weight:500;border-bottom:1px solid var(--border);white-space:nowrap">통화</th>
+                    <th style="padding:7px 10px;text-align:left;color:#94a3b8;font-weight:500;border-bottom:1px solid var(--border);white-space:nowrap">입고일</th>
+                    <th style="padding:7px 10px;text-align:left;color:#94a3b8;font-weight:500;border-bottom:1px solid var(--border);white-space:nowrap">상태</th>
+                  </tr>
+                </thead>
+                <tbody id="si-po-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+        </div><!-- /si-content -->
+      </div><!-- /si-view -->
+
     </div>
   </main>
 </div>
@@ -1207,8 +1294,10 @@ function setTab(tab,btn){
   document.getElementById('order-view').style.display=tab==='order'?'flex':'none';
   document.getElementById('fc-view').style.display=tab==='forecast'?'block':'none';
   document.getElementById('ds-view').style.display=tab==='deadstock'?'flex':'none';
+  document.getElementById('si-view').style.display=tab==='supplier'?'flex':'none';
   if(tab==='forecast') renderForecast();
   if(tab==='deadstock') renderDeadStock();
+  if(tab==='supplier') initSupplierIntelligence();
 }
 
 let _allSuppliers=[];
@@ -2420,6 +2509,343 @@ function dlDeadStockCSV(){
     r.tor,r.edm,r.total,r.last||'',r.dsls>=99999?'':r.dsls,r.qty90,r.qty365,
     (r.cost||0).toFixed(2),(r.value||0).toFixed(2),r.status].join(',');
   dl([hdr.join(','),...rows.map(toLine)].join('\n'),`DeadStock_${STOCK_DATE}.csv`);
+}
+
+// ═══════════════════════════════════════════════════════
+//  SUPPLIER INTELLIGENCE
+// ═══════════════════════════════════════════════════════
+const BQ_PURCHASE = 'asung_purchase_history';
+const BQ_PUR_DATASET = 'Cin7_Purchase_Data';
+S.siSupplier = null;
+S.siData = null;
+
+function initSupplierIntelligence(){
+  // 공급업체 드롭다운 채우기 (MASTER 기반)
+  const sel = document.getElementById('si-sup-sel');
+  if(sel.options.length <= 1){
+    const sups = [...new Set(Object.values(MASTER).map(m=>m.supplier).filter(Boolean))].sort();
+    sups.forEach(s=>{
+      const o=document.createElement('option');
+      o.value=s; o.textContent=s;
+      sel.appendChild(o);
+    });
+  }
+  // 이미 선택된 Supplier가 있으면 자동 설정
+  if(S.supplier && !S.siSupplier){
+    sel.value = S.supplier;
+    loadSupplierIntelligence(S.supplier);
+  }
+}
+
+async function loadSupplierIntelligence(supplier){
+  if(!supplier){ return; }
+  if(!S.bqReady){
+    document.getElementById('si-status').textContent='⚠ BigQuery 연결 필요 — 상단 BQ 버튼을 클릭하세요';
+    document.getElementById('si-status').style.color='var(--yellow)';
+    return;
+  }
+  S.siSupplier = supplier;
+  document.getElementById('si-empty').style.display='none';
+  document.getElementById('si-content').style.display='flex';
+  document.getElementById('si-status').textContent='⟳ 데이터 로딩 중...';
+  document.getElementById('si-status').style.color='var(--accent)';
+
+  const period = document.getElementById('si-period').value;
+  const dateFilter = period==='1y' ? `AND order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR)`
+                   : period==='2y' ? `AND order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 2 YEAR)`
+                   : period==='3y' ? `AND order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 YEAR)`
+                   : '';
+
+  const supEsc = supplier.replace(/'/g, "\\'");
+
+  try {
+    // ── 쿼리 1: PO 요약 (PO별 집계)
+    const poSummarySQL = `
+      SELECT
+        po_number,
+        MIN(order_date)    AS order_date,
+        MIN(received_date) AS received_date,
+        MIN(status)        AS status,
+        MIN(currency)      AS currency,
+        COUNT(DISTINCT sku) AS sku_count,
+        SUM(quantity)       AS total_qty,
+        SUM(line_total)     AS total_amount,
+        BOOL_AND(po_complete) AS is_complete
+      FROM \`${BQ_PROJECT}.${BQ_PUR_DATASET}.${BQ_PURCHASE}\`
+      WHERE supplier_name = '${supEsc}'
+        AND status != 'VOIDED'
+        AND order_date IS NOT NULL
+        ${dateFilter}
+      GROUP BY po_number
+      ORDER BY order_date DESC
+    `;
+
+    // ── 쿼리 2: 연도별 집계
+    const yearlySQL = `
+      SELECT
+        EXTRACT(YEAR FROM order_date) AS yr,
+        COUNT(DISTINCT po_number)     AS po_count,
+        SUM(quantity)                 AS total_qty,
+        SUM(line_total)               AS total_amount,
+        COUNT(DISTINCT sku)           AS sku_count
+      FROM \`${BQ_PROJECT}.${BQ_PUR_DATASET}.${BQ_PURCHASE}\`
+      WHERE supplier_name = '${supEsc}'
+        AND status != 'VOIDED'
+        AND order_date IS NOT NULL
+        ${dateFilter}
+      GROUP BY yr
+      ORDER BY yr
+    `;
+
+    // ── 쿼리 3: 월별 계절성
+    const monthlySQL = `
+      SELECT
+        EXTRACT(YEAR  FROM order_date) AS yr,
+        EXTRACT(MONTH FROM order_date) AS mo,
+        COUNT(DISTINCT po_number)      AS po_count,
+        SUM(line_total)                AS total_amount,
+        SUM(quantity)                  AS total_qty
+      FROM \`${BQ_PROJECT}.${BQ_PUR_DATASET}.${BQ_PURCHASE}\`
+      WHERE supplier_name = '${supEsc}'
+        AND status != 'VOIDED'
+        AND order_date IS NOT NULL
+        ${dateFilter}
+      GROUP BY yr, mo
+      ORDER BY yr, mo
+    `;
+
+    // ── 쿼리 4: SKU별 발주 vs 판매 비교
+    const skuCompareSQL = `
+      WITH
+      purchase AS (
+        SELECT
+          sku, product_name,
+          SUM(quantity)    AS total_ordered,
+          SUM(line_total)  AS total_amount,
+          MIN(order_date)  AS first_order,
+          MAX(order_date)  AS last_order,
+          COUNT(DISTINCT po_number) AS po_count
+        FROM \`${BQ_PROJECT}.${BQ_PUR_DATASET}.${BQ_PURCHASE}\`
+        WHERE supplier_name = '${supEsc}'
+          AND status != 'VOIDED'
+          AND order_date IS NOT NULL
+          ${dateFilter}
+        GROUP BY sku, product_name
+      ),
+      sales AS (
+        SELECT
+          SKU AS sku,
+          SUM(Quantity) AS total_sold,
+          SUM(CASE WHEN Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY) THEN Quantity ELSE 0 END) AS sold_1y,
+          SUM(CASE WHEN Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)  THEN Quantity ELSE 0 END) AS sold_90d
+        FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_SALES}\`
+        WHERE Quantity > 0
+        GROUP BY SKU
+      )
+      SELECT
+        p.sku, p.product_name,
+        p.total_ordered, p.total_amount,
+        p.first_order, p.last_order, p.po_count,
+        COALESCE(s.total_sold, 0) AS total_sold,
+        COALESCE(s.sold_1y, 0)   AS sold_1y,
+        COALESCE(s.sold_90d, 0)  AS sold_90d,
+        SAFE_DIVIDE(p.total_ordered, NULLIF(COALESCE(s.total_sold,0),0)) AS order_to_sales_ratio
+      FROM purchase p
+      LEFT JOIN sales s USING(sku)
+      ORDER BY p.total_amount DESC
+      LIMIT 200
+    `;
+
+    // 병렬 실행
+    const [poRows, yearlyRows, monthlyRows, skuRows] = await Promise.all([
+      runBQQuery(poSummarySQL),
+      runBQQuery(yearlySQL),
+      runBQQuery(monthlySQL),
+      runBQQuery(skuCompareSQL),
+    ]);
+
+    S.siData = { poRows, yearlyRows, monthlyRows, skuRows, supplier };
+    renderSupplierIntelligence();
+    document.getElementById('si-status').textContent=`✅ ${poRows.length}개 PO 분석 완료`;
+    document.getElementById('si-status').style.color='var(--green)';
+
+  } catch(e) {
+    document.getElementById('si-status').textContent='❌ 오류: ' + e.message;
+    document.getElementById('si-status').style.color='var(--red)';
+    console.error('SI error:', e);
+  }
+}
+
+function renderSupplierIntelligence(){
+  const { poRows, yearlyRows, monthlyRows, skuRows, supplier } = S.siData;
+  const fmt0 = n => (parseFloat(n)||0).toLocaleString('en-US',{maximumFractionDigits:0});
+  const fmt2 = n => '$'+(parseFloat(n)||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
+  const MONTHS_KO = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+
+  // ── KPI 카드
+  const totalPOs    = poRows.length;
+  const totalAmt    = poRows.reduce((a,r)=>a+parseFloat(r.total_amount||0),0);
+  const totalQty    = poRows.reduce((a,r)=>a+parseFloat(r.total_qty||0),0);
+  const avgPerPO    = totalPOs ? totalAmt/totalPOs : 0;
+  const firstOrder  = poRows.length ? [...poRows].sort((a,b)=>a.order_date>b.order_date?1:-1)[0].order_date : '—';
+  const lastOrder   = poRows.length ? poRows[0].order_date : '—';
+  const totalYears  = yearlyRows.length;
+  const avgPOPerYear = totalYears ? (totalPOs/totalYears).toFixed(1) : '—';
+  const uniqueSkus  = new Set(skuRows.map(r=>r.sku)).size;
+
+  // 리드타임 계산 (발주 → 입고 평균)
+  const ltDays = poRows.filter(r=>r.order_date&&r.received_date).map(r=>{
+    const d1=new Date(r.order_date), d2=new Date(r.received_date);
+    return Math.round((d2-d1)/(1000*60*60*24));
+  }).filter(d=>d>0&&d<365);
+  const avgLT = ltDays.length ? Math.round(ltDays.reduce((a,b)=>a+b,0)/ltDays.length) : null;
+
+  const kpiData = [
+    {label:'총 PO 횟수',     val:totalPOs+'건',           sub:`${firstOrder} ~ ${lastOrder}`, color:'var(--accent)'},
+    {label:'총 발주 금액',   val:fmt2(totalAmt),           sub:`평균 ${fmt2(avgPerPO)}/PO`, color:'var(--green)'},
+    {label:'총 발주 수량',   val:fmt0(totalQty)+'개',      sub:`${uniqueSkus} SKU`, color:'var(--text)'},
+    {label:'연평균 PO 횟수', val:avgPOPerYear+'회/년',     sub:`${totalYears}년 데이터`, color:'var(--yellow)'},
+    {label:'평균 리드타임',  val:avgLT!==null?avgLT+'일':'—', sub:`${ltDays.length}건 기준`, color:'var(--purple)'},
+  ];
+
+  document.getElementById('si-kpi').innerHTML = kpiData.map(k=>`
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:12px">
+      <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin-bottom:4px">${k.label}</div>
+      <div style="font-family:var(--mono);font-size:20px;font-weight:700;color:${k.color};line-height:1.2">${k.val}</div>
+      <div style="font-size:10.5px;color:var(--text3);margin-top:3px">${k.sub}</div>
+    </div>
+  `).join('');
+
+  // ── 연도별 바차트 (SVG)
+  if(yearlyRows.length){
+    const maxAmt = Math.max(...yearlyRows.map(r=>parseFloat(r.total_amount||0)));
+    const maxPO  = Math.max(...yearlyRows.map(r=>parseInt(r.po_count||0)));
+    const W=Math.max(400, yearlyRows.length*90), H=180, pad={t:10,r:20,b:40,l:60};
+    const bW = Math.min(50,(W-pad.l-pad.r)/yearlyRows.length*0.6);
+    const chartH = H-pad.t-pad.b;
+
+    let bars='', labels='', poLine='', poPoints='';
+    yearlyRows.forEach((r,i)=>{
+      const x = pad.l + (i+0.5)*(W-pad.l-pad.r)/yearlyRows.length;
+      const amt = parseFloat(r.total_amount||0);
+      const po  = parseInt(r.po_count||0);
+      const bH  = maxAmt>0 ? (amt/maxAmt)*chartH : 0;
+      const y   = pad.t + chartH - bH;
+      const py  = maxPO>0 ? pad.t + chartH - (po/maxPO)*chartH : pad.t+chartH;
+      bars += `<rect x="${x-bW/2}" y="${y}" width="${bW}" height="${bH}" fill="rgba(79,142,247,.5)" rx="2"/>`;
+      bars += `<text x="${x}" y="${y-4}" text-anchor="middle" font-size="9" fill="#8b92a8">${fmt2(amt)}</text>`;
+      labels += `<text x="${x}" y="${H-8}" text-anchor="middle" font-size="10" fill="#8b92a8">${r.yr}</text>`;
+      labels += `<text x="${x}" y="${H-22}" text-anchor="middle" font-size="9" fill="var(--green)">${po}회</text>`;
+      poLine += (i===0?`M${x},${py}`:` L${x},${py}`);
+      poPoints += `<circle cx="${x}" cy="${py}" r="3" fill="var(--green)"/>`;
+    });
+    // Y축
+    const yAxis = `<line x1="${pad.l}" y1="${pad.t}" x2="${pad.l}" y2="${pad.t+chartH}" stroke="var(--border)" stroke-width="1"/>
+      <text x="${pad.l-4}" y="${pad.t+8}" text-anchor="end" font-size="9" fill="#555e78">$${(maxAmt/1000).toFixed(0)}K</text>
+      <text x="${pad.l-4}" y="${pad.t+chartH}" text-anchor="end" font-size="9" fill="#555e78">$0</text>`;
+    document.getElementById('si-yearly-chart').innerHTML =
+      `<svg viewBox="0 0 ${W} ${H}" style="width:100%;min-width:${W}px;height:${H}px">
+        ${yAxis}${bars}
+        <path d="${poLine}" fill="none" stroke="var(--green)" stroke-width="1.5" opacity=".7"/>
+        ${poPoints}${labels}
+      </svg>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:6px;display:flex;gap:14px">
+        <span><span style="display:inline-block;width:10px;height:10px;background:rgba(79,142,247,.5);border-radius:2px;margin-right:4px"></span>발주 금액</span>
+        <span><span style="display:inline-block;width:10px;height:2px;background:var(--green);margin-right:4px;vertical-align:middle"></span>PO 횟수</span>
+      </div>`;
+  }
+
+  // ── 월별 히트맵
+  if(monthlyRows.length){
+    const years = [...new Set(monthlyRows.map(r=>parseInt(r.yr)))].sort();
+    // 월별 평균 PO 횟수
+    const monthAvg = Array(12).fill(0).map((_,mi)=>{
+      const vals = monthlyRows.filter(r=>parseInt(r.mo)===mi+1).map(r=>parseFloat(r.po_count||0));
+      return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0;
+    });
+    const maxAvg = Math.max(...monthAvg, 0.01);
+    const heatCells = monthAvg.map((v,i)=>{
+      const intensity = v/maxAvg;
+      const bg = `rgba(79,142,247,${(intensity*0.7+0.05).toFixed(2)})`;
+      const textC = intensity>0.5?'#fff':'var(--text2)';
+      return `<div style="flex:1;padding:8px 4px;background:${bg};border-radius:4px;text-align:center;cursor:default" title="${MONTHS_KO[i]}: 평균 ${v.toFixed(1)}회 발주">
+        <div style="font-family:var(--mono);font-size:9px;color:${textC};opacity:.8">${MONTHS_KO[i]}</div>
+        <div style="font-family:var(--mono);font-size:13px;font-weight:600;color:${textC}">${v>0?v.toFixed(1):'—'}</div>
+        <div style="font-family:var(--mono);font-size:8px;color:${textC};opacity:.7">회</div>
+      </div>`;
+    }).join('');
+    document.getElementById('si-heatmap').innerHTML =
+      `<div style="display:flex;gap:4px;flex-wrap:nowrap">${heatCells}</div>
+       <div style="margin-top:8px;font-family:var(--mono);font-size:10px;color:var(--text3)">색상 = 월별 평균 발주 빈도 (${years[0]} ~ ${years[years.length-1]})</div>`;
+  }
+
+  // ── 재고 적정성 (SKU별 발주량 vs 판매량 TOP 20)
+  if(skuRows.length){
+    const top = skuRows.slice(0,20);
+    const maxQty = Math.max(...top.map(r=>Math.max(parseFloat(r.total_ordered||0), parseFloat(r.total_sold||0))), 1);
+    const rows = top.map(r=>{
+      const ordered = parseFloat(r.total_ordered||0);
+      const sold    = parseFloat(r.total_sold||0);
+      const ratio   = sold>0 ? ordered/sold : null;
+      const ratioTxt = ratio===null?'—':ratio.toFixed(2)+'×';
+      const ratioColor = ratio===null?'var(--text3)':ratio>2?'var(--red)':ratio<0.8?'var(--yellow)':'var(--green)';
+      const barW = 180;
+      const oW = maxQty>0?Math.round((ordered/maxQty)*barW):0;
+      const sW = maxQty>0?Math.round((sold/maxQty)*barW):0;
+      return `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:6px 8px;color:var(--accent);font-size:11px;white-space:nowrap">${xe(r.sku)}</td>
+        <td style="padding:6px 8px;font-family:var(--sans);font-size:11px;color:var(--text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${xe(r.product_name||'')}">${xe(r.product_name||'')}</td>
+        <td style="padding:6px 8px;text-align:right;color:var(--accent)">${fmt0(ordered)}</td>
+        <td style="padding:6px 8px">
+          <div style="height:6px;background:rgba(79,142,247,.3);border-radius:2px;margin-bottom:2px">
+            <div style="height:6px;width:${oW}px;background:rgba(79,142,247,.8);border-radius:2px"></div>
+          </div>
+          <div style="height:6px;background:rgba(62,207,142,.3);border-radius:2px">
+            <div style="height:6px;width:${sW}px;background:rgba(62,207,142,.8);border-radius:2px"></div>
+          </div>
+        </td>
+        <td style="padding:6px 8px;text-align:right;color:var(--green)">${fmt0(sold)}</td>
+        <td style="padding:6px 8px;text-align:right;color:${ratioColor};font-weight:600">${ratioTxt}</td>
+        <td style="padding:6px 8px;text-align:right;color:var(--text2)">${fmt0(r.sold_1y)}</td>
+        <td style="padding:6px 8px;text-align:right;color:var(--text3)">${fmt0(r.sold_90d)}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('si-wos-chart').innerHTML =
+      `<table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px;min-width:700px">
+        <thead><tr style="background:var(--bg3)">
+          <th style="padding:7px 8px;text-align:left;color:#94a3b8;font-weight:500;border-bottom:1px solid var(--border)">SKU</th>
+          <th style="padding:7px 8px;text-align:left;color:#94a3b8;font-weight:500;border-bottom:1px solid var(--border)">상품명</th>
+          <th style="padding:7px 8px;text-align:right;color:rgba(79,142,247,.8);font-weight:500;border-bottom:1px solid var(--border)">총발주량</th>
+          <th style="padding:7px 8px;text-align:left;color:#94a3b8;font-weight:500;border-bottom:1px solid var(--border);min-width:200px">발주 vs 판매</th>
+          <th style="padding:7px 8px;text-align:right;color:rgba(62,207,142,.8);font-weight:500;border-bottom:1px solid var(--border)">총판매량</th>
+          <th style="padding:7px 8px;text-align:right;color:#94a3b8;font-weight:500;border-bottom:1px solid var(--border)">발주/판매비율</th>
+          <th style="padding:7px 8px;text-align:right;color:#94a3b8;font-weight:500;border-bottom:1px solid var(--border)">1년판매</th>
+          <th style="padding:7px 8px;text-align:right;color:#94a3b8;font-weight:500;border-bottom:1px solid var(--border)">90일판매</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div style="margin-top:8px;font-family:var(--mono);font-size:10px;color:var(--text3)">
+        비율 &gt;2× = <span style="color:var(--red)">과다 발주</span> | &lt;0.8× = <span style="color:var(--yellow)">부족 발주</span> | 정상 = <span style="color:var(--green)">적정</span> | TOP 20 SKU 기준
+      </div>`;
+  }
+
+  // ── PO 히스토리 테이블
+  document.getElementById('si-po-count').textContent = `총 ${poRows.length}건`;
+  document.getElementById('si-po-tbody').innerHTML = poRows.map(r=>{
+    const isComplete = r.is_complete==='true'||r.is_complete===true;
+    const statusBg = isComplete?'rgba(62,207,142,.15)':'rgba(247,196,79,.12)';
+    const statusColor = isComplete?'var(--green)':'var(--yellow)';
+    return `<tr style="border-bottom:1px solid var(--border2)">
+      <td style="padding:6px 10px;color:var(--accent)">${xe(r.po_number)}</td>
+      <td style="padding:6px 10px;color:var(--text2)">${r.order_date||'—'}</td>
+      <td style="padding:6px 10px;text-align:right;color:var(--text)">${fmt0(r.sku_count)}</td>
+      <td style="padding:6px 10px;text-align:right;color:var(--text)">${fmt0(r.total_qty)}</td>
+      <td style="padding:6px 10px;text-align:right;color:var(--green)">${fmt2(r.total_amount)}</td>
+      <td style="padding:6px 10px;color:var(--text3)">${xe(r.currency||'')}</td>
+      <td style="padding:6px 10px;color:var(--text3)">${r.received_date||'—'}</td>
+      <td style="padding:6px 10px"><span style="background:${statusBg};color:${statusColor};padding:2px 7px;border-radius:3px;font-size:10px;font-weight:600">${isComplete?'COMPLETED':'PENDING'}</span></td>
+    </tr>`;
+  }).join('');
 }
 
 // ═══════════════════════════════════════════════════════
