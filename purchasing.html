@@ -525,6 +525,13 @@ body.hide-bo6090 [data-col-id="bo6090"]{display:none!important}
             <option value="">— Supplier를 선택하세요 —</option>
           </select>
           <div id="si-status" style="font-family:var(--mono);font-size:11px;color:var(--text3)"></div>
+          <button id="si-refresh-btn" onclick="siForceRefresh()" title="캐시 무시하고 새로 조회"
+            style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:5px;
+              color:var(--text3);font-family:var(--mono);font-size:11px;padding:4px 8px;cursor:pointer;
+              transition:all .15s"
+            onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'">
+            ↺ 새로고침
+          </button>
           <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <!-- SKU 검색 -->
             <div style="display:flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:4px 9px">
@@ -892,9 +899,14 @@ function checkOAuthCallback(){
   if(!hash) return;
   const params = new URLSearchParams(hash.substring(1));
   const token = params.get('access_token');
+  const expiresIn = parseInt(params.get('expires_in') || '3600');
   if(token){
     S.accessToken = token;
-    sessionStorage.setItem('bq_token', token);
+    // localStorage에 저장 (탭 닫아도 유지) + 만료 시각 기록
+    const expireAt = Date.now() + expiresIn * 1000;
+    localStorage.setItem('bq_token', token);
+    localStorage.setItem('bq_token_expire', String(expireAt));
+    sessionStorage.removeItem('bq_token'); // 구버전 정리
     window.history.replaceState(null,'',window.location.pathname);
     updateBQStatus('load','토큰 확인 중...');
     loadSalesDataFromBQ();
@@ -922,6 +934,43 @@ function updateBQStatus(state, txt){
 // ═══════════════════════════════════════════════════════
 //  BQ QUERY HELPER
 // ═══════════════════════════════════════════════════════
+
+// ── 토큰 만료 배너 표시
+function showTokenExpiredBanner(){
+  let banner = document.getElementById('token-expired-banner');
+  if(!banner){
+    banner = document.createElement('div');
+    banner.id = 'token-expired-banner';
+    banner.style.cssText = `
+      padding:8px 14px;font-family:var(--mono);font-size:11.5px;
+      display:flex;align-items:center;gap:10px;flex-shrink:0;
+      border-bottom:1px solid rgba(247,111,111,.3);
+      background:rgba(247,111,111,.08);color:var(--red);
+      position:sticky;top:0;z-index:50;
+    `;
+    banner.innerHTML = `
+      <span>🔑 BQ 토큰이 만료됐어요 (1시간 제한). 재연결하면 계속 사용할 수 있어요.</span>
+      <button onclick="connectBQ()" style="margin-left:8px;background:var(--red);border:none;border-radius:4px;
+        color:#fff;font-family:var(--mono);font-size:11px;padding:4px 10px;cursor:pointer">
+        재연결 →
+      </button>
+      <span onclick="this.parentElement.style.display='none'"
+            style="margin-left:auto;cursor:pointer;color:var(--text3);font-size:13px;padding:0 4px">✕</span>
+    `;
+    // order-view 최상단에 삽입
+    const orderView = document.getElementById('order-view');
+    if(orderView) orderView.insertBefore(banner, orderView.firstChild);
+  }
+  banner.style.display = 'flex';
+  // BQ 상태 표시 업데이트
+  updateBQStatus('warn', '토큰 만료 — 재연결 필요');
+  S.bqReady = false;
+  // localStorage/sessionStorage 토큰 제거
+  localStorage.removeItem('bq_token');
+  sessionStorage.removeItem('bq_token');
+  S.accessToken = null;
+}
+
 async function runBQQuery(sql){
   const url = `https://bigquery.googleapis.com/bigquery/v2/projects/${BQ_PROJECT}/queries`;
   const resp = await fetch(url, {
@@ -931,6 +980,11 @@ async function runBQQuery(sql){
   });
   if(!resp.ok){
     const err = await resp.json();
+    // 401: 토큰 만료 → 배너로 안내
+    if(resp.status === 401){
+      showTokenExpiredBanner();
+      throw new Error('TOKEN_EXPIRED');
+    }
     throw new Error(err.error?.message || resp.statusText);
   }
   const data = await resp.json();
@@ -1285,8 +1339,11 @@ async function loadSalesDataFromBQ(){
 
   } catch(err) {
     hideLoading();
-    updateBQStatus('warn','연결 실패: '+err.message);
-    alert('BigQuery 연결 오류: '+err.message);
+    // TOKEN_EXPIRED는 runBQQuery에서 배너로 이미 처리됨 — alert 생략
+    if(err.message !== 'TOKEN_EXPIRED'){
+      updateBQStatus('warn','연결 실패: '+err.message);
+      alert('BigQuery 연결 오류: '+err.message);
+    }
   }
 }
 
@@ -2530,6 +2587,17 @@ const BQ_PURCHASE = 'asung_purchase_history';
 const BQ_PUR_DATASET = 'Cin7_Purchase_Data';
 S.siSupplier = null;
 S.siData = null;
+S.siCache = {};   // { "SupplierName::period": { data, skuMonthly, ts } }
+
+// 캐시 무시하고 강제 재쿼리
+function siForceRefresh(){
+  if(!S.siSupplier) return;
+  const period = document.getElementById('si-period').value;
+  const cacheKey = S.siSupplier + '::' + period;
+  delete S.siCache[cacheKey];
+  document.getElementById('si-refresh-btn').style.display = 'none';
+  loadSupplierIntelligence(S.siSupplier);
+}
 
 function initSupplierIntelligence(){
   // 공급업체 드롭다운 채우기 (MASTER 기반)
@@ -2559,14 +2627,35 @@ async function loadSupplierIntelligence(supplier){
   S.siSupplier = supplier;
   document.getElementById('si-empty').style.display='none';
   document.getElementById('si-content').style.display='flex';
+
+  const period = document.getElementById('si-period').value;
+
+  // ── 캐시 키: Supplier + 기간 조합
+  const cacheKey = supplier + '::' + period;
+  const cached = S.siCache[cacheKey];
+  const CACHE_TTL_MS = 10 * 60 * 1000; // 10분
+
+  if(cached && (Date.now() - cached.ts) < CACHE_TTL_MS){
+    // 캐시 히트 — BQ 쿼리 없이 바로 렌더링
+    S.siData = cached.data;
+    S.siSkuMonthly = cached.skuMonthly;
+    renderSupplierIntelligence();
+    const age = Math.round((Date.now() - cached.ts) / 1000);
+    document.getElementById('si-status').textContent=`✅ 캐시 (${age}초 전) — ${cached.data.poRows.length}개 PO`;
+    document.getElementById('si-status').style.color='var(--green)';
+    document.getElementById('si-refresh-btn').style.display = 'inline-block';
+    return;
+  }
+
   document.getElementById('si-status').textContent='⟳ 데이터 로딩 중...';
   document.getElementById('si-status').style.color='var(--accent)';
 
-  const period = document.getElementById('si-period').value;
   const dateFilter = period==='1y' ? `AND order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR)`
                    : period==='2y' ? `AND order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 2 YEAR)`
                    : period==='3y' ? `AND order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 YEAR)`
                    : '';
+  // skuMonthlySQL sales 쪽 날짜 필터 (period 무관, 최대 3년치만 조회해 스캔량 제한)
+  const saleDateFilter = `AND Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 YEAR)`;
 
   const supEsc = supplier.replace(/'/g, "\\'");
 
@@ -2690,6 +2779,7 @@ async function loadSupplierIntelligence(supplier){
           SUM(Quantity) AS sold_qty
         FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_SALES}\`
         WHERE Quantity > 0
+          ${saleDateFilter}
         GROUP BY sku, ym
       ),
       combined AS (
@@ -2733,11 +2823,17 @@ async function loadSupplierIntelligence(supplier){
     });
 
     S.siData = { poRows, yearlyRows, monthlyRows, skuRows, supplier };
+
+    // ── 캐시 저장
+    S.siCache[cacheKey] = { data: S.siData, skuMonthly: S.siSkuMonthly, ts: Date.now() };
+
     renderSupplierIntelligence();
     document.getElementById('si-status').textContent=`✅ ${poRows.length}개 PO 분석 완료`;
     document.getElementById('si-status').style.color='var(--green)';
+    document.getElementById('si-refresh-btn').style.display = 'none';
 
   } catch(e) {
+    if(e.message === 'TOKEN_EXPIRED') return; // 배너로 이미 처리됨
     document.getElementById('si-status').textContent='❌ 오류: ' + e.message;
     document.getElementById('si-status').style.color='var(--red)';
     console.error('SI error:', e);
@@ -3358,11 +3454,24 @@ loadWMASettings();
     stockLbl.textContent='재고 날짜 BQ 연결 후 확인';
   }
 
-  const savedToken = sessionStorage.getItem('bq_token');
-  if(savedToken && !S.accessToken) {
-    S.accessToken = savedToken;
-    updateBQStatus('load', '기존 토큰으로 재연결 중...');
-    loadSalesDataFromBQ();
+  // localStorage에서 토큰 복원 (sessionStorage 구버전도 폴백 처리)
+  const savedToken = localStorage.getItem('bq_token') || sessionStorage.getItem('bq_token');
+  const savedExpire = parseInt(localStorage.getItem('bq_token_expire') || '0');
+  if(savedToken && !S.accessToken){
+    if(savedExpire && Date.now() > savedExpire){
+      // 이미 만료된 토큰: 조용히 제거하고 수동 연결 대기
+      localStorage.removeItem('bq_token');
+      localStorage.removeItem('bq_token_expire');
+      sessionStorage.removeItem('bq_token');
+      updateBQStatus('warn', '토큰 만료 — 재연결 필요');
+      document.getElementById('bq-banner').className = 'banner warn';
+      document.getElementById('bq-banner').innerHTML =
+        '🔑 저장된 BQ 토큰이 만료됐어요. <a onclick="connectBQ()">재연결 →</a>';
+    } else {
+      S.accessToken = savedToken;
+      updateBQStatus('load', '저장된 토큰으로 연결 중...');
+      loadSalesDataFromBQ();
+    }
   }
 })();
 
