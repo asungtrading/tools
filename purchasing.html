@@ -635,11 +635,11 @@ body.hide-bo6090 [data-col-id="bo6090"]{display:none!important}
             <!-- 기간 -->
             <select id="rv-period" onchange="if(S.bqReady)loadReceivingAudit()"
               style="background:var(--bg3);border:1px solid var(--border);border-radius:5px;color:var(--text);font-family:var(--mono);font-size:11px;padding:4px 8px;outline:none;cursor:pointer">
+              <option value="0" selected>전체 기간</option>
               <option value="30">최근 30일</option>
               <option value="60">최근 60일</option>
               <option value="90">최근 90일</option>
               <option value="180">최근 180일</option>
-              <option value="0">전체 기간</option>
             </select>
             <!-- 이상 유형 필터 -->
             <div id="rv-filter-btns" style="display:flex;gap:4px"></div>
@@ -2674,7 +2674,12 @@ function rvForceRefresh(){
 async function loadReceivingAudit(){
   if(!S.bqReady) return;
   const days=parseInt(document.getElementById('rv-period').value)||0;
-  const dateFilter=days>0?`AND received_date >= DATE_SUB(CURRENT_DATE(), INTERVAL ${days} DAY)`:'';
+  // 기간 필터: order_date 기준 (received_date가 NULL인 부족입고도 커버)
+  // received_date OR order_date 둘 중 하나라도 기간 내이면 포함
+  const dateFilter=days>0
+    ? `AND (order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL ${days} DAY)
+           OR received_date >= DATE_SUB(CURRENT_DATE(), INTERVAL ${days} DAY))`
+    : '';
   document.getElementById('rv-status').textContent='⟳ 조회 중...';
   document.getElementById('rv-status').style.color='var(--accent)';
   document.getElementById('rv-kpi').innerHTML='';
