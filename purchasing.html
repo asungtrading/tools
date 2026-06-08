@@ -80,9 +80,18 @@ body.hide-bo6090 [data-col-id="bo6090"]{display:none!important}
 .si:focus{border-color:var(--accent)}
 .su{font-family:var(--mono);font-size:10px;color:#94a3b8;white-space:nowrap}
 #main{flex:1;display:flex;flex-direction:column;overflow:hidden}
-#tab-bar{height:40px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 18px;flex-shrink:0;justify-content:space-between}
-.mtab{background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);font-family:var(--sans);font-size:12.5px;font-weight:500;padding:9px 14px;cursor:pointer;transition:all .15s;margin-bottom:-1px}
+#tab-bar{background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 18px;flex-shrink:0;justify-content:space-between;flex-wrap:wrap;min-height:40px;gap:4px}
+.mtab{background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);font-family:var(--sans);font-size:12.5px;font-weight:500;padding:8px 10px;cursor:pointer;transition:all .15s;margin-bottom:-1px;white-space:nowrap}
 .mtab:hover{color:var(--text)}
+@media(max-width:640px){
+  #tab-bar{padding:0 8px;gap:2px}
+  .mtab{font-size:11px;padding:7px 8px}
+  #col-toggle-bar{display:none}
+  .col-toggle-mobile-btn{display:inline-flex!important}
+}
+@media(max-width:480px){
+  .mtab{font-size:10.5px;padding:6px 6px}
+}
 .mtab.active{color:var(--accent);border-bottom-color:var(--accent)}
 #content{flex:1;overflow:hidden;display:flex;flex-direction:column}
 #order-view{flex:1;overflow:hidden;display:flex;flex-direction:column}
@@ -335,14 +344,21 @@ body.hide-bo6090 [data-col-id="bo6090"]{display:none!important}
 
   <main id="main">
     <div id="tab-bar">
-      <div style="display:flex;align-items:flex-end;gap:0">
+      <div style="display:flex;align-items:flex-end;gap:0;overflow-x:auto;-webkit-overflow-scrolling:touch;flex-shrink:1;min-width:0;scrollbar-width:none">
         <button class="mtab active" onclick="setTab('order',this)">발주 추천</button>
         <button class="mtab" onclick="setTab('forecast',this)">Forecast</button>
         <button class="mtab" onclick="setTab('deadstock',this)">데드 스톡</button>
         <button class="mtab" onclick="setTab('supplier',this)">📊 Supplier 분석</button>
         <button class="mtab" onclick="setTab('receiving',this)">📦 입고 검증</button>
       </div>
-      <div id="col-toggle-bar" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+      <!-- 모바일: 컬럼 토글 펼치기 버튼 -->
+      <button class="col-toggle-mobile-btn" onclick="toggleColBar()"
+        style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:4px;
+          color:var(--text2);font-family:var(--mono);font-size:10px;padding:3px 8px;cursor:pointer;
+          white-space:nowrap;flex-shrink:0">
+        컬럼 ▾
+      </button>
+      <div id="col-toggle-bar" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;flex-shrink:0">
         <span style="font-size:10px;color:var(--text3);margin-right:2px">컬럼:</span>
         <button class="col-btn active" data-col="cov" onclick="toggleCol('cov',this)">재고일수</button>
         <button class="col-btn active" data-col="avail" onclick="toggleCol('avail',this)">Available</button>
@@ -1400,6 +1416,16 @@ function setBranch(b){
   document.getElementById('sv-branch').textContent='Branch: '+{toronto:'Toronto',edmonton:'Edmonton',all:'합산'}[b];
   recompute(); renderTable();
 }
+// 모바일 컬럼 토글바 접기/펼치기
+function toggleColBar(){
+  const bar = document.getElementById('col-toggle-bar');
+  const btn = document.querySelector('.col-toggle-mobile-btn');
+  if(!bar) return;
+  const isVisible = bar.style.display !== 'none';
+  bar.style.display = isVisible ? 'none' : 'flex';
+  if(btn) btn.textContent = isVisible ? '컬럼 ▾' : '컬럼 ▴';
+}
+
 function setTab(tab,btn){
   document.querySelectorAll('.mtab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
