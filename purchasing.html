@@ -2643,7 +2643,7 @@ S.siCache = {};   // { "SupplierName::period": { data, skuMonthly, ts } }
 // ═══════════════════════════════════════════════════════
 S.rvCache  = {};
 S.rvFilter = 'all';
-S.rvSort   = { col:'over_pct', dir:-1 };
+S.rvSort   = { col:'diff_pct', dir:-1 };
 
 function initReceivingAudit(){
   if(!S.bqReady){
@@ -2688,29 +2688,43 @@ async function loadReceivingAudit(){
         MAX(quantity)          AS quantity,
         MAX(received_quantity) AS received_quantity
       FROM \`${BQ_PROJECT}.${BQ_PUR_DATASET}.${BQ_PURCHASE}\`
-      WHERE received_date IS NOT NULL
-        AND status != 'VOIDED'
+      WHERE status != 'VOIDED'
+        -- received_date 기준 기간 필터 (없으면 전체)
         ${dateFilter}
       GROUP BY po_number,supplier_name,sku,product_name,order_date,received_date,status,po_complete
+    ),
+    anomalies AS (
+      SELECT
+        po_number, supplier_name, sku, product_name,
+        order_date, received_date,
+        quantity          AS ordered_qty,
+        received_quantity AS received_qty,
+        received_quantity - quantity                                    AS diff_qty,
+        ROUND(SAFE_DIVIDE(ABS(received_quantity-quantity),NULLIF(quantity,0))*100,1) AS diff_pct,
+        CASE
+          WHEN quantity = 0 AND received_quantity > 0                  THEN 'unordered'
+          WHEN received_quantity > quantity                             THEN 'over'
+          WHEN received_quantity > 0 AND received_quantity < quantity   THEN 'under'
+          ELSE NULL
+        END AS anomaly_type
+      FROM base
+      WHERE
+        -- 초과 입고: 발주보다 많이 받음
+        (received_quantity > quantity)
+        -- 미발주 입고: PO 없이 입고
+        OR (quantity = 0 AND received_quantity > 0)
+        -- 부족 입고: 입고 기록은 있는데 발주량보다 적음
+        OR (received_quantity > 0 AND received_quantity < quantity)
     )
-    SELECT
-      po_number, supplier_name, sku, product_name,
-      order_date, received_date,
-      quantity          AS ordered_qty,
-      received_quantity AS received_qty,
-      received_quantity - quantity AS over_qty,
-      ROUND(SAFE_DIVIDE(received_quantity-quantity,NULLIF(quantity,0))*100,1) AS over_pct,
-      CASE
-        WHEN quantity=0 AND received_quantity>0 THEN 'unordered'
-        WHEN received_quantity>quantity          THEN 'over'
-        ELSE NULL
-      END AS anomaly_type
-    FROM base
-    WHERE (quantity=0 AND received_quantity>0)
-       OR received_quantity>quantity
+    SELECT * FROM anomalies
     ORDER BY
-      CASE WHEN quantity=0 AND received_quantity>0 THEN 0 ELSE 1 END,
-      SAFE_DIVIDE(received_quantity-quantity,NULLIF(quantity,0)) DESC
+      CASE anomaly_type
+        WHEN 'unordered' THEN 0
+        WHEN 'over'      THEN 1
+        WHEN 'under'     THEN 2
+        ELSE 3
+      END,
+      diff_pct DESC
   `;
 
   try{
@@ -2729,10 +2743,12 @@ async function loadReceivingAudit(){
 }
 
 function renderReceivingAudit(allRows){
-  const overRows     =allRows.filter(r=>r.anomaly_type==='over');
-  const unorderedRows=allRows.filter(r=>r.anomaly_type==='unordered');
-  const overCnt      =overRows.length;
-  const unorderedCnt =unorderedRows.length;
+  const overRows     = allRows.filter(r=>r.anomaly_type==='over');
+  const underRows    = allRows.filter(r=>r.anomaly_type==='under');
+  const unorderedRows= allRows.filter(r=>r.anomaly_type==='unordered');
+  const overCnt      = overRows.length;
+  const underCnt     = underRows.length;
+  const unorderedCnt = unorderedRows.length;
 
   // 필터 버튼
   const mkBtn=(val,label,color,count)=>{
@@ -2744,32 +2760,36 @@ function renderReceivingAudit(allRows){
       ${label} <span style="opacity:.7">(${count})</span></button>`;
   };
   document.getElementById('rv-filter-btns').innerHTML=
-    mkBtn('all','전체','var(--text2)',allRows.length)+
-    mkBtn('over','초과 입고','var(--red)',overCnt)+
-    mkBtn('unordered','미발주 입고','var(--yellow)',unorderedCnt);
+    mkBtn('all',      '전체',       'var(--text2)', allRows.length)+
+    mkBtn('over',     '초과 입고',  'var(--red)',    overCnt)+
+    mkBtn('under',    '부족 입고',  'var(--accent)', underCnt)+
+    mkBtn('unordered','미발주 입고','var(--yellow)', unorderedCnt);
 
   // KPI
-  const totalOverQty=overRows.reduce((s,r)=>s+parseFloat(r.over_qty||0),0);
-  const worstPct=overRows.reduce((mx,r)=>parseFloat(r.over_pct||0)>mx?parseFloat(r.over_pct||0):mx,0);
-  const kpi=`background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 14px;min-width:130px;flex:1`;
+  const totalOverQty  = overRows.reduce((s,r)=>s+parseFloat(r.diff_qty||0),0);
+  const totalUnderQty = underRows.reduce((s,r)=>s+Math.abs(parseFloat(r.diff_qty||0)),0);
+  const worstOverPct  = overRows.reduce((mx,r)=>parseFloat(r.diff_pct||0)>mx?parseFloat(r.diff_pct||0):mx,0);
+  const kpi=`background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 14px;min-width:120px;flex:1`;
   document.getElementById('rv-kpi').innerHTML=`
     <div style="${kpi}">
-      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:4px">초과 입고 건수</div>
-      <div style="font-size:20px;font-weight:700;color:${overCnt>0?'var(--red)':'var(--green)'}">${overCnt}</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:4px">초과 입고</div>
+      <div style="font-size:20px;font-weight:700;color:${overCnt>0?'var(--red)':'var(--green)'}">${overCnt}건</div>
+      <div style="font-size:11px;color:var(--red);margin-top:2px">${totalOverQty>0?'+'+fmt0(totalOverQty)+' 개':''}</div>
     </div>
     <div style="${kpi}">
-      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:4px">초과 수량 합계</div>
-      <div style="font-size:20px;font-weight:700;color:${totalOverQty>0?'var(--red)':'var(--green)'}">${fmt0(totalOverQty)}</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:4px">부족 입고</div>
+      <div style="font-size:20px;font-weight:700;color:${underCnt>0?'var(--accent)':'var(--green)'}">${underCnt}건</div>
+      <div style="font-size:11px;color:var(--accent);margin-top:2px">${totalUnderQty>0?'-'+fmt0(totalUnderQty)+' 개':''}</div>
     </div>
     <div style="${kpi}">
       <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:4px">최대 초과율</div>
-      <div style="font-size:20px;font-weight:700;color:${worstPct>0?'var(--red)':'var(--green)'}">
-        ${worstPct>0?'+'+worstPct.toFixed(1)+'%':'—'}
+      <div style="font-size:20px;font-weight:700;color:${worstOverPct>0?'var(--red)':'var(--green)'}">
+        ${worstOverPct>0?'+'+worstOverPct.toFixed(1)+'%':'—'}
       </div>
     </div>
     <div style="${kpi}">
-      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:4px">미발주 입고 건수</div>
-      <div style="font-size:20px;font-weight:700;color:${unorderedCnt>0?'var(--yellow)':'var(--green)'}">${unorderedCnt}</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:4px">미발주 입고</div>
+      <div style="font-size:20px;font-weight:700;color:${unorderedCnt>0?'var(--yellow)':'var(--green)'}">${unorderedCnt}건</div>
     </div>
   `;
 
@@ -2803,15 +2823,35 @@ function renderReceivingAudit(allRows){
       :'<span style="color:var(--accent);font-size:9px"> ↑</span>';
 
   const trows=sorted.map(r=>{
-    const isOver=r.anomaly_type==='over';
-    const ordQty=parseFloat(r.ordered_qty||0);
-    const rcvQty=parseFloat(r.received_qty||0);
-    const isDbl=isOver&&Math.abs(rcvQty-ordQty*2)<=1;
-    const typeLabel=isOver
-      ?`<span style="background:rgba(247,111,111,.15);color:var(--red);padding:2px 7px;border-radius:3px;font-size:10px;font-weight:600">초과 입고</span>`
-      :`<span style="background:rgba(247,196,79,.12);color:var(--yellow);padding:2px 7px;border-radius:3px;font-size:10px;font-weight:600">미발주 입고</span>`;
-    const dblBadge=isDbl
-      ?`<span style="color:var(--yellow);font-size:9px;margin-left:4px" title="입고량이 발주량의 2배 — 이중 스캔 의심">⚠ 이중스캔?</span>`:'';
+    const isOver     = r.anomaly_type==='over';
+    const isUnder    = r.anomaly_type==='under';
+    const isUnordered= r.anomaly_type==='unordered';
+    const ordQty  = parseFloat(r.ordered_qty||0);
+    const rcvQty  = parseFloat(r.received_qty||0);
+    const diffQty = parseFloat(r.diff_qty||0);
+    const diffPct = parseFloat(r.diff_pct||0);
+
+    // 이중 스캔 의심: 입고량 = 발주량 × 2 (±1)
+    const isDbl = isOver && Math.abs(rcvQty - ordQty*2) <= 1;
+
+    const typeLabel = isOver
+      ? `<span style="background:rgba(247,111,111,.15);color:var(--red);padding:2px 7px;border-radius:3px;font-size:10px;font-weight:600">초과 입고</span>`
+      : isUnder
+        ? `<span style="background:rgba(79,142,247,.12);color:var(--accent);padding:2px 7px;border-radius:3px;font-size:10px;font-weight:600">부족 입고</span>`
+        : `<span style="background:rgba(247,196,79,.12);color:var(--yellow);padding:2px 7px;border-radius:3px;font-size:10px;font-weight:600">미발주 입고</span>`;
+    const dblBadge = isDbl
+      ? `<span style="color:var(--yellow);font-size:9px;margin-left:4px" title="입고량이 발주량의 2배 — 이중 스캔 의심">⚠ 이중스캔?</span>` : '';
+
+    // 차이 수량/비율 표시
+    const diffColor = isOver ? 'var(--red)' : isUnder ? 'var(--accent)' : 'var(--text3)';
+    const diffTxt   = isOver    ? '+'+fmt0(diffQty)
+                    : isUnder   ? '-'+fmt0(Math.abs(diffQty))
+                    : '—';
+    const pctTxt    = isOver    ? '+'+diffPct.toFixed(1)+'%'
+                    : isUnder   ? '-'+diffPct.toFixed(1)+'%'
+                    : '—';
+    const rcvColor  = isOver ? 'var(--red)' : isUnder ? 'var(--accent)' : 'var(--yellow)';
+
     return `<tr style="border-bottom:1px solid var(--border2)"
         onmouseenter="this.style.background='var(--bg3)'" onmouseleave="this.style.background=''">
       <td style="padding:6px 8px;white-space:nowrap">${typeLabel}${dblBadge}</td>
@@ -2822,9 +2862,9 @@ function renderReceivingAudit(allRows){
       <td style="padding:6px 8px;text-align:right;color:var(--text3)">${r.order_date||'—'}</td>
       <td style="padding:6px 8px;text-align:right;color:var(--text3)">${r.received_date||'—'}</td>
       <td style="padding:6px 8px;text-align:right;color:var(--accent)">${fmt0(r.ordered_qty)}</td>
-      <td style="padding:6px 8px;text-align:right;color:${isOver?'var(--red)':'var(--yellow)'};font-weight:600">${fmt0(r.received_qty)}</td>
-      <td style="padding:6px 8px;text-align:right;color:${isOver?'var(--red)':'var(--text3)'};font-weight:600">${isOver?'+'+fmt0(r.over_qty):'—'}</td>
-      <td style="padding:6px 8px;text-align:right;color:${isOver?'var(--red)':'var(--text3)'};font-weight:700">${isOver?'+'+parseFloat(r.over_pct||0).toFixed(1)+'%':'—'}</td>
+      <td style="padding:6px 8px;text-align:right;color:${rcvColor};font-weight:600">${fmt0(r.received_qty)}</td>
+      <td style="padding:6px 8px;text-align:right;color:${diffColor};font-weight:600">${diffTxt}</td>
+      <td style="padding:6px 8px;text-align:right;color:${diffColor};font-weight:700">${pctTxt}</td>
     </tr>`;
   }).join('');
 
@@ -2840,14 +2880,14 @@ function renderReceivingAudit(allRows){
         <th style="${thS('right')}" ${thC('received_date')}>입고일${arr('received_date')}</th>
         <th style="${thS('right')};color:rgba(79,142,247,.9)" ${thC('ordered_qty')}>발주수량${arr('ordered_qty')}</th>
         <th style="${thS('right')};color:rgba(247,111,111,.9)" ${thC('received_qty')}>입고수량${arr('received_qty')}</th>
-        <th style="${thS('right')}" ${thC('over_qty')}>초과수량${arr('over_qty')}</th>
-        <th style="${thS('right')}" ${thC('over_pct')}>초과율${arr('over_pct')}</th>
+        <th style="${thS('right')}" ${thC('diff_qty')}>차이수량${arr('diff_qty')}</th>
+        <th style="${thS('right')}" ${thC('diff_pct')}>차이율${arr('diff_pct')}</th>
       </tr></thead>
       <tbody>${trows}</tbody>
     </table>
     <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <div style="font-family:var(--mono);font-size:10px;color:var(--text3)">
-        ⚠ 이중스캔? = 입고량이 발주량의 정확히 2배인 경우
+        🔴 초과 입고 = 발주보다 많이 입고 | 🔵 부족 입고 = 발주보다 적게 입고 | 🟡 미발주 입고 = PO 없이 입고 | ⚠ 이중스캔? = 입고량이 발주량의 2배
       </div>
       <button onclick="rvDownloadCSV()"
         style="background:var(--bg3);border:1px solid var(--border);border-radius:5px;
@@ -2862,18 +2902,22 @@ function rvDownloadCSV(){
   const rows=window._rvRows||[];
   const filtered=S.rvFilter==='all'?rows:rows.filter(r=>r.anomaly_type===S.rvFilter);
   if(!filtered.length){alert('데이터 없음');return;}
-  const hdr=['유형','PO번호','공급업체','SKU','상품명','발주일','입고일','발주수량','입고수량','초과수량','초과율(%)','이중스캔의심'];
+  const hdr=['유형','PO번호','공급업체','SKU','상품명','발주일','입고일','발주수량','입고수량','차이수량','차이율(%)','이중스캔의심'];
   const toLine=r=>{
     const ordQty=parseFloat(r.ordered_qty||0);
     const rcvQty=parseFloat(r.received_qty||0);
-    const isDbl=r.anomaly_type==='over'&&Math.abs(rcvQty-ordQty*2)<=1;
+    const diffQty = parseFloat(r.diff_qty||0);
+    const diffPct = parseFloat(r.diff_pct||0);
+    const isDbl   = r.anomaly_type==='over'&&Math.abs(rcvQty-ordQty*2)<=1;
+    const typeKr  = r.anomaly_type==='over'?'초과입고':r.anomaly_type==='under'?'부족입고':'미발주입고';
+    const diffStr = r.anomaly_type==='over'?'+'+diffQty:r.anomaly_type==='under'?'-'+Math.abs(diffQty):'';
+    const pctStr  = r.anomaly_type==='over'?'+'+diffPct:r.anomaly_type==='under'?'-'+diffPct:'';
     return [
-      r.anomaly_type==='over'?'초과입고':'미발주입고',
+      typeKr,
       csvQ(r.po_number),csvQ(r.supplier_name||''),csvQ(r.sku),csvQ(r.product_name||''),
       r.order_date||'',r.received_date||'',
       ordQty,rcvQty,
-      r.anomaly_type==='over'?parseFloat(r.over_qty||0):'',
-      r.anomaly_type==='over'?parseFloat(r.over_pct||0):'',
+      diffStr, pctStr,
       isDbl?'Y':''
     ].join(',');
   };
