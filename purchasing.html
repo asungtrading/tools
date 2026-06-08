@@ -2267,6 +2267,9 @@ function startResize(e, varName){
   document.addEventListener('mouseup',onUp);
 }
 function xe(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+// ── 전역 숫자 포맷 헬퍼
+function fmt0(n){ return (parseFloat(n)||0).toLocaleString('en-US',{maximumFractionDigits:0}); }
+function fmt2(n){ return (parseFloat(n)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function xeq(s){ return xe(s).replace(/'/g,'&#39;'); }
 // JS-string escape for inline event handlers: onclick="fn('${jse(s)}')"
 // HTML 엔티티(&#39;)는 속성 파싱시 '로 복원돼서 JS 문자열이 깨짐 → 반드시 \' 로 이스케이프해야 함
