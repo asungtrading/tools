@@ -2961,6 +2961,20 @@ function renderSupplierIntelligence(){
         );
       }
 
+      // 발주 적정성 필터
+      if(S.siRatioFilter !== 'all'){
+        filtered = filtered.filter(r=>{
+          const ordered = parseFloat(r.total_ordered||0);
+          const sold    = parseFloat(r.total_sold||0);
+          const ratio   = sold>0 ? ordered/sold : null;
+          if(S.siRatioFilter === 'over')  return ratio !== null && ratio > 2;
+          if(S.siRatioFilter === 'under') return ratio !== null && ratio < 0.8;
+          if(S.siRatioFilter === 'ok')    return ratio !== null && ratio >= 0.8 && ratio <= 2;
+          if(S.siRatioFilter === 'nodata') return ratio === null;
+          return true;
+        });
+      }
+
       const sorted = filtered.sort((a,b)=>{
         const av = parseFloat(a[col])||0;
         const bv = parseFloat(b[col])||0;
@@ -3039,8 +3053,12 @@ function renderSupplierIntelligence(){
           <tbody>${rows}</tbody>
         </table>
         <div style="margin-top:10px;display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap">
-          <div style="font-family:var(--mono);font-size:10px;color:var(--text3)">
-            비율 &gt;2× = <span style="color:var(--red)">과다 발주</span> | &lt;0.8× = <span style="color:var(--yellow)">부족 발주</span> | 정상 = <span style="color:var(--green)">적정</span>
+          <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+            ${_wosFilterBtn('all',   '전체',    'var(--text2)', S.siRatioFilter==='all')}
+            ${_wosFilterBtn('over',  '과다 발주 &gt;2×', 'var(--red)',   S.siRatioFilter==='over')}
+            ${_wosFilterBtn('under', '부족 발주 &lt;0.8×','var(--yellow)',S.siRatioFilter==='under')}
+            ${_wosFilterBtn('ok',    '적정',    'var(--green)', S.siRatioFilter==='ok')}
+            ${_wosFilterBtn('nodata','판매없음', 'var(--text3)', S.siRatioFilter==='nodata')}
           </div>
           <div style="display:flex;align-items:center;gap:8px">${prevBtn}${pageInfo}${nextBtn}</div>
         </div>`;
@@ -3076,6 +3094,7 @@ function renderSupplierIntelligence(){
 
 // ── SKU 검색 필터
 S.siSkuFilter = '';
+S.siRatioFilter = 'all';  // 'all' | 'over' | 'under' | 'ok'
 
 function siFilterSku(val){
   S.siSkuFilter = (val||'').trim().toUpperCase();
@@ -3091,6 +3110,27 @@ function siClearSku(){
   const clearBtn = document.getElementById('si-sku-clear');
   if(clearBtn) clearBtn.style.display = 'none';
   if(window.renderSkuTable_) renderSkuTable_();
+}
+
+// ── 발주 적정성 필터 버튼 클릭
+function siSetRatioFilter(val){
+  S.siRatioFilter = val;
+  S.siSkuPage = 0;
+  if(window.renderSkuTable_) renderSkuTable_();
+}
+
+// ── 발주 적정성 필터 버튼 렌더 헬퍼
+function _wosFilterBtn(val, label, color, isActive){
+  const activeBg    = isActive ? `background:${color};color:${val==='all'?'var(--bg)':'#000'};border-color:${color};` : '';
+  const activeColor = isActive ? '' : `color:${color};`;
+  return `<button onclick="siSetRatioFilter('${val}')"
+    style="background:var(--bg4);border:1px solid var(--border2);border-radius:4px;
+      font-family:var(--mono);font-size:10px;padding:3px 9px;cursor:pointer;
+      transition:all .15s;${activeColor}${activeBg}"
+    onmouseover="if(this.dataset.active!=='1'){this.style.borderColor='${color}';this.style.color='${color}';}"
+    onmouseout="if(this.dataset.active!=='1'){this.style.borderColor='';this.style.color='${color}';}"
+    data-active="${isActive?'1':'0'}"
+  >${label}</button>`;
 }
 
 // ── SKU 분석 CSV 다운로드
@@ -3110,6 +3150,20 @@ function dlSkuAnalysisCSV(){
       (r.sku||'').toUpperCase().includes(S.siSkuFilter) ||
       (r.product_name||'').toUpperCase().includes(S.siSkuFilter)
     );
+  }
+
+  // 발주 적정성 필터 적용 (현재 화면 필터와 동일하게 CSV 출력)
+  if(S.siRatioFilter !== 'all'){
+    rows = rows.filter(r=>{
+      const ordered = parseFloat(r.total_ordered||0);
+      const sold    = parseFloat(r.total_sold||0);
+      const ratio   = sold>0 ? ordered/sold : null;
+      if(S.siRatioFilter === 'over')   return ratio !== null && ratio > 2;
+      if(S.siRatioFilter === 'under')  return ratio !== null && ratio < 0.8;
+      if(S.siRatioFilter === 'ok')     return ratio !== null && ratio >= 0.8 && ratio <= 2;
+      if(S.siRatioFilter === 'nodata') return ratio === null;
+      return true;
+    });
   }
 
   // 정렬 적용
