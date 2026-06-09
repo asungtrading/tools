@@ -1081,6 +1081,20 @@ async function loadSalesDataFromBQ(){
     showLoading('판매 데이터 쿼리 중...');
     updateBQStatus('load','판매 데이터 로딩 중...');
 
+    // ── Supplier SKU 마스터 쿼리: purchase_history 기반
+    // master.json에 없는 SKU(신규/판매이력없음)도 발주추천에 포함되도록
+    const supplierSkuSQL = `
+      SELECT
+        sku,
+        MAX(product_name)  AS product_name,
+        MAX(supplier_name) AS supplier_name
+      FROM \`${BQ_PROJECT}.${BQ_PUR_DATASET}.${BQ_PURCHASE}\`
+      WHERE status != 'VOIDED'
+        AND sku IS NOT NULL
+        AND supplier_name IS NOT NULL
+      GROUP BY sku
+    `;
+
     // ── ADU 쿼리: SKU별 최근 90일 일별 판매량
     // asung_sales_historical_data 컬럼: Date, SKU, Quantity
     const aduSQL = `
@@ -1232,7 +1246,7 @@ async function loadSalesDataFromBQ(){
       GROUP BY SKU
     `;
     updateBQStatus('load','ADU 계산 중...');
-    const [aduRows, seaRows, boRows, dateRows, orderAduRows, stockRows, deadRows] = await Promise.all([
+    const [aduRows, seaRows, boRows, dateRows, orderAduRows, stockRows, deadRows, supplierSkuRows] = await Promise.all([
       runBQQuery(aduSQL),
       runBQQuery(seaSQL),
       runBQQuery(boSQL),
@@ -1240,6 +1254,7 @@ async function loadSalesDataFromBQ(){
       runBQQuery(orderAduSQL),
       runBQQuery(stockSQL).catch(e => { console.warn('[stock refresh] 스키마 불일치, 임베드 재고 유지:', e.message); return []; }),
       runBQQuery(deadSQL).catch(e => { console.warn('[dead stock] 쿼리 실패:', e.message); return []; }),
+      runBQQuery(supplierSkuSQL).catch(e => { console.warn('[supplierSku] 쿼리 실패:', e.message); return []; }),
     ]);
     // 재고 날짜 업데이트 + 지연 경고
     if(dateRows[0]?.latest_date){
@@ -1389,6 +1404,32 @@ async function loadSalesDataFromBQ(){
     });
 
     S.backorderData = boMap; // { SKU: { bo0_30, bo30_60, bo60_90, total } }
+
+    // ── MASTER 보강: purchase_history 기반 supplier SKU
+    // master.json에 없거나 supplier가 누락된 SKU를 BQ에서 채움
+    // → 판매 이력 없는 신규 상품도 발주 추천에 표시
+    let masterPatchCount = 0;
+    (supplierSkuRows || []).forEach(r => {
+      const sku = r.sku || r.SKU;
+      const sup = r.supplier_name || r.SUPPLIER_NAME || '';
+      const nm  = r.product_name  || r.PRODUCT_NAME  || '';
+      if (!sku || !sup) return;
+      if (!MASTER[sku]) {
+        // 완전 신규 SKU
+        MASTER[sku] = { name: nm, brand: '—', supplier: sup };
+        masterPatchCount++;
+      } else if (!MASTER[sku].supplier || MASTER[sku].supplier === '—') {
+        // supplier 누락된 기존 SKU 보완
+        MASTER[sku].supplier = sup;
+        if (!MASTER[sku].name && nm) MASTER[sku].name = nm;
+        masterPatchCount++;
+      }
+    });
+    if (masterPatchCount > 0) {
+      console.log(`[MASTER 보강] ${masterPatchCount}개 SKU supplier 정보 추가/수정`);
+      buildNav(); // supplier 목록 및 카운트 재빌드
+    }
+
     S.bqReady = true;
 
     const skuCount = Object.keys(S.salesData).length;
@@ -3028,7 +3069,7 @@ async function loadSupplierIntelligence(supplier){
                    : period==='3y' ? `AND order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 YEAR)`
                    : '';
   // skuMonthlySQL sales 쪽 날짜 필터 (period 무관, 최대 3년치만 조회해 스캔량 제한)
-  const saleDateFilter = `AND Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 YEAR)`;
+  const saleDateFilter = `AND Invoice_Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 YEAR)`;
 
   const supEsc = supplier.replace(/'/g, "\\'");
 
@@ -3121,25 +3162,27 @@ async function loadSupplierIntelligence(supplier){
           ${dateFilter}
         GROUP BY sku
       ),
-      -- ── 판매량: 이 공급사 SKU만 대상, 분기별 동시 집계
+      -- ── 판매량: BQ_ORDERS Invoice_Date 기준 (발주추천과 동일 소스)
+      -- Order_Progress='Invoiced' = 실제 출고완료 판매
+      supplier_skus AS (
+        SELECT DISTINCT sku
+        FROM \`${BQ_PROJECT}.${BQ_PUR_DATASET}.${BQ_PURCHASE}\`
+        WHERE supplier_name = '${supEsc}'
+          AND status != 'VOIDED'
+      ),
       sales AS (
         SELECT
           SKU AS sku,
-          SUM(CASE WHEN Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3  MONTH) THEN Quantity ELSE 0 END) AS sold_3m,
-          SUM(CASE WHEN Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 6  MONTH) THEN Quantity ELSE 0 END) AS sold_6m,
-          SUM(CASE WHEN Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 9  MONTH) THEN Quantity ELSE 0 END) AS sold_9m,
-          SUM(CASE WHEN Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 12 MONTH) THEN Quantity ELSE 0 END) AS sold_1y,
-          SUM(CASE WHEN Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)   THEN Quantity ELSE 0 END) AS sold_90d
-        FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_SALES}\`
-        WHERE Quantity > 0
-          AND Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR)
-          -- 이 공급사 SKU만 필터 (BQ 스캔 최적화 + 정확도)
-          AND SKU IN (
-            SELECT DISTINCT sku
-            FROM \`${BQ_PROJECT}.${BQ_PUR_DATASET}.${BQ_PURCHASE}\`
-            WHERE supplier_name = '${supEsc}'
-              AND status != 'VOIDED'
-          )
+          SUM(CASE WHEN Invoice_Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3  MONTH) THEN Quantity ELSE 0 END) AS sold_3m,
+          SUM(CASE WHEN Invoice_Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 6  MONTH) THEN Quantity ELSE 0 END) AS sold_6m,
+          SUM(CASE WHEN Invoice_Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 9  MONTH) THEN Quantity ELSE 0 END) AS sold_9m,
+          SUM(CASE WHEN Invoice_Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 12 MONTH) THEN Quantity ELSE 0 END) AS sold_1y,
+          SUM(CASE WHEN Invoice_Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)   THEN Quantity ELSE 0 END) AS sold_90d
+        FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_ORDERS}\`
+        WHERE Order_Progress = 'Invoiced'
+          AND Quantity > 0
+          AND Invoice_Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR)
+          AND SKU IN (SELECT sku FROM supplier_skus)
         GROUP BY SKU
       ),
       -- ── 현재 미처리 백오더 (이 공급사 SKU 한정)
@@ -3151,12 +3194,7 @@ async function loadSupplierIntelligence(supplier){
         WHERE Order_Progress NOT IN ('Invoiced','Voided','Void','Cancelled','2.Release to WMS','3.Finalized')
           AND Invoice_Date IS NULL
           AND Quantity > 0
-          AND SKU IN (
-            SELECT DISTINCT sku
-            FROM \`${BQ_PROJECT}.${BQ_PUR_DATASET}.${BQ_PURCHASE}\`
-            WHERE supplier_name = '${supEsc}'
-              AND status != 'VOIDED'
-          )
+          AND SKU IN (SELECT sku FROM supplier_skus)
         GROUP BY SKU
       )
       SELECT
@@ -3205,10 +3243,12 @@ async function loadSupplierIntelligence(supplier){
       sal AS (
         SELECT
           SKU AS sku,
-          FORMAT_DATE('%Y-%m', Date) AS ym,
+          FORMAT_DATE('%Y-%m', Invoice_Date) AS ym,
           SUM(Quantity) AS sold_qty
-        FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_SALES}\`
-        WHERE Quantity > 0
+        FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_ORDERS}\`
+        WHERE Order_Progress = 'Invoiced'
+          AND Quantity > 0
+          AND Invoice_Date IS NOT NULL
           ${saleDateFilter}
         GROUP BY sku, ym
       ),
