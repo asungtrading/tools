@@ -1228,7 +1228,6 @@ async function loadSalesDataFromBQ(){
         FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_ORDERS}\`
         WHERE Order_Progress = 'Backordered'
           AND Status = 'Ordered'
-          AND Invoice_Date IS NULL
           AND Order_Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
           AND Quantity > 0
         GROUP BY SKU, Customer
@@ -3214,7 +3213,6 @@ async function loadSupplierIntelligence(supplier){
         FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_ORDERS}\`
         WHERE Order_Progress = 'Backordered'
           AND Status = 'Ordered'
-          AND Invoice_Date IS NULL
           AND Quantity > 0
           AND SKU IN (SELECT sku FROM supplier_skus)
         GROUP BY SKU
