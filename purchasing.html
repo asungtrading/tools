@@ -1081,18 +1081,35 @@ async function loadSalesDataFromBQ(){
     showLoading('판매 데이터 쿼리 중...');
     updateBQStatus('load','판매 데이터 로딩 중...');
 
-    // ── Supplier SKU 마스터 쿼리: purchase_history 기반
-    // master.json에 없는 SKU(신규/판매이력없음)도 발주추천에 포함되도록
+    // ── Supplier SKU 마스터 쿼리: purchase_history + sales brand 조인
+    // master.json에 없는 SKU도 발주추천에 포함, brand는 판매 테이블에서 보완
     const supplierSkuSQL = `
+      WITH pur AS (
+        SELECT
+          sku,
+          MAX(product_name)  AS product_name,
+          MAX(supplier_name) AS supplier_name
+        FROM \`${BQ_PROJECT}.${BQ_PUR_DATASET}.${BQ_PURCHASE}\`
+        WHERE status != 'VOIDED'
+          AND sku IS NOT NULL
+          AND supplier_name IS NOT NULL
+        GROUP BY sku
+      ),
+      sal AS (
+        SELECT
+          SKU AS sku,
+          MAX(COALESCE(NULLIF(Brand_Clean,''), NULLIF(Brand,''))) AS brand
+        FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_SALES}\`
+        WHERE SKU IS NOT NULL
+        GROUP BY SKU
+      )
       SELECT
-        sku,
-        MAX(product_name)  AS product_name,
-        MAX(supplier_name) AS supplier_name
-      FROM \`${BQ_PROJECT}.${BQ_PUR_DATASET}.${BQ_PURCHASE}\`
-      WHERE status != 'VOIDED'
-        AND sku IS NOT NULL
-        AND supplier_name IS NOT NULL
-      GROUP BY sku
+        p.sku,
+        p.product_name,
+        p.supplier_name,
+        COALESCE(s.brand, '—') AS brand
+      FROM pur p
+      LEFT JOIN sal s USING(sku)
     `;
 
     // ── ADU 쿼리: SKU별 최근 90일 일별 판매량
@@ -1414,15 +1431,18 @@ async function loadSalesDataFromBQ(){
       const sup = r.supplier_name || r.SUPPLIER_NAME || '';
       const nm  = r.product_name  || r.PRODUCT_NAME  || '';
       if (!sku || !sup) return;
+      const br = r.brand || r.BRAND || '—';
       if (!MASTER[sku]) {
         // 완전 신규 SKU
-        MASTER[sku] = { name: nm, brand: '—', supplier: sup };
+        MASTER[sku] = { name: nm, brand: br, supplier: sup };
         masterPatchCount++;
-      } else if (!MASTER[sku].supplier || MASTER[sku].supplier === '—') {
-        // supplier 누락된 기존 SKU 보완
-        MASTER[sku].supplier = sup;
-        if (!MASTER[sku].name && nm) MASTER[sku].name = nm;
-        masterPatchCount++;
+      } else {
+        // 기존 SKU: supplier/brand 누락 시 보완
+        let changed = false;
+        if (!MASTER[sku].supplier || MASTER[sku].supplier === '—') { MASTER[sku].supplier = sup; changed = true; }
+        if (!MASTER[sku].brand   || MASTER[sku].brand    === '—') { MASTER[sku].brand    = br;  changed = true; }
+        if (!MASTER[sku].name && nm) { MASTER[sku].name = nm; changed = true; }
+        if (changed) masterPatchCount++;
       }
     });
     if (masterPatchCount > 0) {
