@@ -565,6 +565,9 @@ body.hide-bo6090 [data-col-id="bo6090"]{display:none!important}
               <option value="3y">최근 3년</option>
               <option value="2y">최근 2년</option>
               <option value="1y">최근 1년</option>
+              <option value="9m">최근 9개월</option>
+              <option value="6m">최근 6개월</option>
+              <option value="3m">최근 3개월</option>
             </select>
             <!-- CSV 다운로드 -->
             <button onclick="dlSkuAnalysisCSV()" class="btn"
@@ -3017,7 +3020,10 @@ async function loadSupplierIntelligence(supplier){
   document.getElementById('si-status').textContent='⟳ 데이터 로딩 중...';
   document.getElementById('si-status').style.color='var(--accent)';
 
-  const dateFilter = period==='1y' ? `AND order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR)`
+  const dateFilter = period==='3m' ? `AND order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 MONTH)`
+                   : period==='6m' ? `AND order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 6 MONTH)`
+                   : period==='9m' ? `AND order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 9 MONTH)`
+                   : period==='1y' ? `AND order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR)`
                    : period==='2y' ? `AND order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 2 YEAR)`
                    : period==='3y' ? `AND order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 YEAR)`
                    : '';
@@ -3090,16 +3096,19 @@ async function loadSupplierIntelligence(supplier){
     //    → 기간 선택과 무관하게 분기별 추이 비교 가능
     // 3. backorders: 현재 미처리 전체 (기간 무관)
     // 4. 비율: period 선택 기간 기준 received vs 판매로 계산
+    // period에 맞는 판매 기간 컬럼 결정
+    const soldPeriodCol = period==='3y' ? 'sold_1y'  // 3y는 최대 1y 판매로 비교 (BQ 스캔 제한)
+                        : period==='2y' ? 'sold_1y'
+                        : period==='1y' ? 'sold_1y'
+                        : 'sold_1y';  // 전체기간도 1y 기준
     const skuCompareSQL = `
       WITH
-      -- ── 실입고 기준 발주 집계 (COMPLETED/RECEIVED/INVOICED만)
+      -- ── 실입고 기준 발주 집계 (VOIDED 제외, received_quantity > 0)
       purchase AS (
         SELECT
           sku,
           MAX(product_name)          AS product_name,
-          -- dateFilter 기간 내 실입고량 (period 선택과 동일)
           SUM(received_quantity)     AS total_received,
-          SUM(received_quantity)     AS period_received,
           SUM(line_total)            AS total_amount,
           MIN(order_date)            AS first_order,
           MAX(order_date)            AS last_order,
@@ -3112,7 +3121,7 @@ async function loadSupplierIntelligence(supplier){
           ${dateFilter}
         GROUP BY sku
       ),
-      -- ── 판매량: 항상 1년치 스캔, 분기별 CASE로 세분화
+      -- ── 판매량: 이 공급사 SKU만 대상, 분기별 동시 집계
       sales AS (
         SELECT
           SKU AS sku,
@@ -3124,9 +3133,16 @@ async function loadSupplierIntelligence(supplier){
         FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_SALES}\`
         WHERE Quantity > 0
           AND Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR)
+          -- 이 공급사 SKU만 필터 (BQ 스캔 최적화 + 정확도)
+          AND SKU IN (
+            SELECT DISTINCT sku
+            FROM \`${BQ_PROJECT}.${BQ_PUR_DATASET}.${BQ_PURCHASE}\`
+            WHERE supplier_name = '${supEsc}'
+              AND status != 'VOIDED'
+          )
         GROUP BY SKU
       ),
-      -- ── 현재 미처리 백오더 전체 (기간 무관)
+      -- ── 현재 미처리 백오더 (이 공급사 SKU 한정)
       backorders AS (
         SELECT
           SKU AS sku,
@@ -3135,31 +3151,34 @@ async function loadSupplierIntelligence(supplier){
         WHERE Order_Progress NOT IN ('Invoiced','Voided','Void','Cancelled','2.Release to WMS','3.Finalized')
           AND Invoice_Date IS NULL
           AND Quantity > 0
+          AND SKU IN (
+            SELECT DISTINCT sku
+            FROM \`${BQ_PROJECT}.${BQ_PUR_DATASET}.${BQ_PURCHASE}\`
+            WHERE supplier_name = '${supEsc}'
+              AND status != 'VOIDED'
+          )
         GROUP BY SKU
       )
       SELECT
         p.sku,
         p.product_name,
-        p.total_received                          AS total_ordered,
-        p.period_received,
+        p.total_received                                        AS total_ordered,
         p.total_amount,
         p.first_order,
         p.last_order,
         p.po_count,
-        -- 판매 분기별
-        COALESCE(s.sold_3m,  0)                   AS sold_3m,
-        COALESCE(s.sold_6m,  0)                   AS sold_6m,
-        COALESCE(s.sold_9m,  0)                   AS sold_9m,
-        COALESCE(s.sold_1y,  0)                   AS sold_1y,
-        COALESCE(s.sold_90d, 0)                   AS sold_90d,
-        -- 호환성 유지용 (기존 total_sold)
-        COALESCE(s.sold_1y,  0)                   AS total_sold,
-        COALESCE(b.bo_qty,   0)                   AS bo_qty,
-        -- 실질수요 = period 기간 판매 + 현재 백오더
-        COALESCE(s.sold_1y, 0) + COALESCE(b.bo_qty, 0)  AS total_demand,
-        -- 발주/수요 비율: period 실입고 vs 1년 판매+백오더
+        COALESCE(s.sold_3m,  0)                                AS sold_3m,
+        COALESCE(s.sold_6m,  0)                                AS sold_6m,
+        COALESCE(s.sold_9m,  0)                                AS sold_9m,
+        COALESCE(s.sold_1y,  0)                                AS sold_1y,
+        COALESCE(s.sold_90d, 0)                                AS sold_90d,
+        COALESCE(s.sold_1y,  0)                                AS total_sold,
+        COALESCE(b.bo_qty,   0)                                AS bo_qty,
+        -- 실질수요 = 1년 판매 + 현재 백오더
+        COALESCE(s.sold_1y, 0) + COALESCE(b.bo_qty, 0)        AS total_demand,
+        -- 발주/수요 비율 (JS에서 period에 맞게 재계산)
         SAFE_DIVIDE(
-          p.period_received,
+          p.total_received,
           NULLIF(COALESCE(s.sold_1y,0) + COALESCE(b.bo_qty,0), 0)
         ) AS order_to_sales_ratio
       FROM purchase p
@@ -3376,7 +3395,9 @@ function renderSupplierIntelligence(){
       if(S.siRatioFilter !== 'all'){
         filtered = filtered.filter(r=>{
           const ordered = parseFloat(r.total_ordered||0);
-          const demand  = parseFloat(r.total_demand||0) || (parseFloat(r.sold_1y||0) + parseFloat(r.bo_qty||0));
+          const cp = document.getElementById('si-period')?.value||'1y';
+          const ps = cp==='3m'?parseFloat(r.sold_3m||0):cp==='6m'?parseFloat(r.sold_6m||0):cp==='9m'?parseFloat(r.sold_9m||0):parseFloat(r.sold_1y||0);
+          const demand  = ps + parseFloat(r.bo_qty||0);
           const ratio   = demand>0 ? ordered/demand : null;
           if(S.siRatioFilter === 'over')   return ratio !== null && ratio > 2;
           if(S.siRatioFilter === 'under')  return ratio !== null && ratio < 0.8;
@@ -3412,34 +3433,36 @@ function renderSupplierIntelligence(){
 
       const rows = page.map(r=>{
         const ordered  = parseFloat(r.total_ordered||0);
-        const sold     = parseFloat(r.total_sold||0);
         const sold3m   = parseFloat(r.sold_3m||0);
         const sold6m   = parseFloat(r.sold_6m||0);
         const sold9m   = parseFloat(r.sold_9m||0);
         const sold1y   = parseFloat(r.sold_1y||0);
         const boQty    = parseFloat(r.bo_qty||0);
-        const demand   = parseFloat(r.total_demand||0) || (sold + boQty);
+        // period에 맞는 판매 기간 선택
+        const curPeriod = document.getElementById('si-period')?.value || '1y';
+        const periodSold = curPeriod==='3m' ? sold3m
+                         : curPeriod==='6m' ? sold6m
+                         : curPeriod==='9m' ? sold9m
+                         : sold1y;  // 1y / 2y / 3y / all → 1y 판매 기준
+        const periodLabel = curPeriod==='3m'?'3개월'
+                          : curPeriod==='6m'?'6개월'
+                          : curPeriod==='9m'?'9개월':'1년';
+        const demand   = periodSold + boQty;
         const ratio    = demand>0 ? ordered/demand : null;
         const ratioTxt   = ratio===null?'—':ratio.toFixed(2)+'×';
         const ratioColor = ratio===null?'var(--text3)':ratio>2?'var(--red)':ratio<0.8?'var(--yellow)':'var(--green)';
         const barW = 160;
-        const oW = maxQty>0?Math.round((ordered/maxQty)*barW):0;
-        const sW = maxQty>0?Math.round((sold/maxQty)*barW):0;
+        const maxBar = Math.max(ordered, demand, 1);
+        const oW = Math.round((ordered/maxBar)*barW);
+        const sW = Math.round((periodSold/maxBar)*barW);
         const skuEsc = jse(r.sku);
         const nmEsc  = jse(r.product_name||'');
-        // 분기별 비율: 연환산 입고량 vs 판매량
-        const qr3m = sold3m>0  ? (ordered/sold3m*3/12) : null;
-        const qr6m = sold6m>0  ? (ordered/sold6m*6/12) : null;
-        const qr9m = sold9m>0  ? (ordered/sold9m*9/12) : null;
-        const qr1y = sold1y>0  ? (ordered/sold1y)      : null;
-        const qColor = v => v===null?'var(--text3)':v>2?'var(--red)':v<0.8?'var(--yellow)':'var(--green)';
-        const qTxt   = v => v===null?'—':v.toFixed(1)+'×';
         return `<tr style="border-bottom:1px solid var(--border)"
-          onmouseenter="showSkuTooltip('${skuEsc}','${nmEsc}',${ordered},${sold},${sold1y},${parseFloat(r.sold_90d||0)},${boQty},${demand},${sold3m},${sold6m},${sold9m},event)"
+          onmouseenter="showSkuTooltip('${skuEsc}','${nmEsc}',${ordered},${periodSold},${sold1y},${parseFloat(r.sold_90d||0)},${boQty},${demand},${sold3m},${sold6m},${sold9m},event)"
           onmouseleave="hideSkuTooltip()">
           <td style="padding:6px 8px;color:var(--accent);font-size:11px;white-space:nowrap">${xe(r.sku)}</td>
           <td style="padding:6px 8px;font-family:var(--sans);font-size:11px;color:var(--text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${xe(r.product_name||'')}">${xe(r.product_name||'')}</td>
-          <td style="padding:6px 8px;text-align:right;color:var(--accent)" title="실입고 기준 (COMPLETED/RECEIVED/INVOICED)">${fmt0(ordered)}</td>
+          <td style="padding:6px 8px;text-align:right;color:var(--accent)" title="실입고 기준 (수령완료만)">${fmt0(ordered)}</td>
           <td style="padding:6px 8px;min-width:160px">
             <div style="height:5px;background:rgba(79,142,247,.25);border-radius:2px;margin-bottom:3px">
               <div style="height:5px;width:${oW}px;background:rgba(79,142,247,.8);border-radius:2px"></div>
@@ -3448,17 +3471,8 @@ function renderSupplierIntelligence(){
               <div style="height:5px;width:${sW}px;background:rgba(62,207,142,.8);border-radius:2px"></div>
             </div>
           </td>
-          <td style="padding:6px 8px;text-align:right;color:var(--green)" title="인보이스 ${fmt0(sold)} + 백오더 ${fmt0(boQty)}">${fmt0(demand)}</td>
-          <td style="padding:6px 8px;text-align:right;color:${ratioColor};font-weight:600">${ratioTxt}</td>
-          <td style="padding:6px 8px;text-align:center;min-width:130px">
-            <div style="display:flex;gap:3px;justify-content:center">
-              <span title="3개월 연환산" style="font-size:9px;padding:2px 4px;border-radius:3px;background:rgba(0,0,0,.25);color:${qColor(qr3m)}">${qTxt(qr3m)}</span>
-              <span title="6개월 연환산" style="font-size:9px;padding:2px 4px;border-radius:3px;background:rgba(0,0,0,.25);color:${qColor(qr6m)}">${qTxt(qr6m)}</span>
-              <span title="9개월 연환산" style="font-size:9px;padding:2px 4px;border-radius:3px;background:rgba(0,0,0,.25);color:${qColor(qr9m)}">${qTxt(qr9m)}</span>
-              <span title="12개월" style="font-size:9px;padding:2px 4px;border-radius:3px;background:rgba(0,0,0,.25);color:${qColor(qr1y)}">${qTxt(qr1y)}</span>
-            </div>
-            <div style="font-size:8px;color:var(--text3);margin-top:2px">3M · 6M · 9M · 1Y</div>
-          </td>
+          <td style="padding:6px 8px;text-align:right;color:var(--green)" title="${periodLabel} 판매 ${fmt0(periodSold)} + 백오더 ${fmt0(boQty)}">${fmt0(demand)}</td>
+          <td style="padding:6px 8px;text-align:right;color:${ratioColor};font-weight:600" title="실입고(${fmt0(ordered)}) ÷ ${periodLabel}판매+백오더(${fmt0(demand)})">${ratioTxt}</td>
           <td style="padding:6px 8px;text-align:right;color:var(--text2)">${fmt0(sold1y)}</td>
           <td style="padding:6px 8px;text-align:right;color:var(--text3)">${fmt0(parseFloat(r.sold_90d||0))}</td>
         </tr>`;
@@ -3476,11 +3490,10 @@ function renderSupplierIntelligence(){
           <thead><tr style="background:var(--bg3)">
             <th style="${thStyle('left')}" ${thClick('sku')}>SKU${sortArrow('sku')}</th>
             <th style="${thStyle('left')}" ${thClick('product_name')}>상품명${sortArrow('product_name')}</th>
-            <th style="${thStyle('right')};color:rgba(79,142,247,.9)" ${thClick('total_ordered')} title="실입고 기준 (COMPLETED/RECEIVED/INVOICED)">실입고량${sortArrow('total_ordered')}</th>
+            <th style="${thStyle('right')};color:rgba(79,142,247,.9)" ${thClick('total_ordered')} title="실입고 기준 (수령완료 PO만)">실입고량${sortArrow('total_ordered')}</th>
             <th style="${thStyle('left')};min-width:160px">발주 vs 판매</th>
             <th style="${thStyle('right')};color:rgba(62,207,142,.9)" ${thClick('total_demand')}>실질수요${sortArrow('total_demand')}</th>
-            <th style="${thStyle('right')}" ${thClick('order_to_sales_ratio')}>발주/수요비율${sortArrow('order_to_sales_ratio')}</th>
-            <th style="${thStyle('center')};min-width:140px" title="분기별 연환산 입고/판매 비율 (3M·6M·9M·1Y)">분기별 비율</th>
+            <th style="${thStyle('right')}" ${thClick('order_to_sales_ratio')} title="실입고량 ÷ (선택기간 판매+백오더)">발주/수요비율${sortArrow('order_to_sales_ratio')}</th>
             <th style="${thStyle('right')}" ${thClick('sold_1y')}>1년판매${sortArrow('sold_1y')}</th>
             <th style="${thStyle('right')}" ${thClick('sold_90d')}>90일판매${sortArrow('sold_90d')}</th>
           </tr></thead>
