@@ -3096,23 +3096,19 @@ async function loadSupplierIntelligence(supplier){
       purchase AS (
         SELECT
           sku,
-          MAX(product_name)                                                      AS product_name,
-          -- 전체 기간 실입고량
-          SUM(received_quantity)                                                 AS total_received,
-          -- period 선택 기간 내 실입고량 (발주일 기준)
-          SUM(CASE WHEN ${period === '1y' ? "order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR)" :
-                        period === '2y' ? "order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 2 YEAR)" :
-                                         "order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 YEAR)"}
-                   THEN received_quantity ELSE 0 END)                           AS period_received,
-          SUM(line_total)                                                        AS total_amount,
-          MIN(order_date)                                                        AS first_order,
-          MAX(order_date)                                                        AS last_order,
-          COUNT(DISTINCT po_number)                                              AS po_count
+          MAX(product_name)          AS product_name,
+          -- dateFilter 기간 내 실입고량 (period 선택과 동일)
+          SUM(received_quantity)     AS total_received,
+          SUM(received_quantity)     AS period_received,
+          SUM(line_total)            AS total_amount,
+          MIN(order_date)            AS first_order,
+          MAX(order_date)            AS last_order,
+          COUNT(DISTINCT po_number)  AS po_count
         FROM \`${BQ_PROJECT}.${BQ_PUR_DATASET}.${BQ_PURCHASE}\`
         WHERE supplier_name = '${supEsc}'
-          AND status IN ('COMPLETED','RECEIVED','INVOICED')
-          AND order_date IS NOT NULL
+          AND status != 'VOIDED'
           AND received_quantity > 0
+          AND order_date IS NOT NULL
           ${dateFilter}
         GROUP BY sku
       ),
