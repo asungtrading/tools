@@ -623,7 +623,7 @@ const USED_REFS = new Set([744, 747, 748, 751, 752, 754, 755, 758, 770, 771, 774
 
 // ── CONFIG ──────────────────────────────────────────────
 const PASSWORD_HASH = '002298';
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw1VrWjl2dystaW_A6vxudImlZOZxzJXOQDqsk2bMcpa_ONt4LznoG1iq-DjxUli0nfzQ/exec'; // 배포 후 여기에 URL 입력
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw1wpnhNFuCf5ZFhjvdgkvHMYBaU78ipioKZaGV6lquSSZph0PPcuf-k7uN9fT6SdR1Hg/exec'; // 배포 후 여기에 URL 입력
 const COMPANY_PREFIX = '829534';
 
 // ── PASSWORD GATE ────────────────────────────────────────
@@ -1119,88 +1119,105 @@ async function initLookupTab() {
 }
 
 async function loadLookupProducts() {
+  // BarcodeLogger search API는 최대 100개 제한이 있어 전체 로드가 불가능.
+  // 대신 syncFromBarcodeLogger()가 이미 로드한 existingSkus를 재활용하고,
+  // 실시간 검색은 입력값으로 BarcodeLogger API를 직접 호출하는 방식으로 동작.
   const status = document.getElementById('lookupSrcStatus');
-  status.textContent = '⏳ BarcodeLogger 로딩 중...';
-  lookupProducts = [];
 
-  // ── BarcodeLogger search (전체 로드) ──────────────────
-  try {
-    const res  = await fetch(APPS_SCRIPT_URL + '?action=search&q=');
-    const data = await res.json();
-    if (data.status === 'ok' && Array.isArray(data.results)) {
-      for (const r of data.results) {
-        if (!r['SKU']) continue;
-        // BC_MASTER_HEADERS 순서에 맞게 필드 추출
-        const gtin12 = String(r['GTIN-12'] || '').trim();
-        const ref5   = gtin12.length === 12 ? gtin12.slice(6, 11) : (String(r['Item Ref'] || '')).padStart(5,'0');
-        const existing = new Set();
-        if (r['GTIN-14 Dozen'] || r['gtin14_dozen']) existing.add('pack');
-        if (r['GTIN-14 Box']   || r['gtin14_box'])   existing.add('box');
-        if (r['GTIN-14 Case']  || r['gtin14_case'])  existing.add('case');
-        if (r['GTIN-14 Pallet']|| r['gtin14_pallet'])existing.add('pallet');
-        lookupProducts.push({
-          sku       : r['SKU'],
-          name      : r['Product Name'] || r['name'] || '',
-          variation : r['Variation']    || r['variation'] || '',
-          gtin12,
-          ref5,
-          existingTypes: existing,
-        });
-      }
-    }
-  } catch(e) { console.error('[lookup] BarcodeLogger 실패:', e); }
+  // sync 완료 대기
+  let waited = 0;
+  while (syncStatus === 'loading' && waited < 15000) {
+    status.textContent = '⏳ 중복 체크 데이터 대기 중...';
+    await new Promise(r => setTimeout(r, 500));
+    waited += 500;
+  }
 
-  // ── Barcode Log 시트에서 이미 저장된 pack/box/case/pallet 파악 ──
-  // (search API가 GTIN-14 컬럼을 직접 반환하지 않는 경우 대비)
-  // log 탭에서 type 별로 매칭
-  try {
-    const res  = await fetch(APPS_SCRIPT_URL + '?action=getLog');
-    const data = await res.json();
-    if (data.status === 'ok' && Array.isArray(data.log)) {
-      for (const row of data.log) {
-        const baseSku = String(row.sku || '').replace(/-\d+$/, ''); // "-12" 등 suffix 제거
-        const type    = String(row.type || '').toLowerCase();
-        const prod    = lookupProducts.find(p => p.sku === baseSku);
-        if (prod && ['pack','box','case','pallet'].includes(type)) {
-          prod.existingTypes.add(type);
-        }
-      }
-    }
-  } catch(e) { /* getLog 없으면 무시 */ }
-
-  status.innerHTML = `✅ <strong>${lookupProducts.length}</strong>개 SKU 로드됨`;
+  if (syncStatus === 'done') {
+    status.innerHTML = `✅ 준비 완료 — BarcodeLogger SKU: <strong>${existingSkus.size}</strong>개 · SKU 입력 시 실시간 조회`;
+  } else {
+    status.innerHTML = `⚠️ 동기화 미완료 — 직접 검색은 가능합니다`;
+  }
 }
 
-// ── 검색 자동완성 ─────────────────────────────────────────
+// BarcodeLogger API 실시간 조회 (입력값 기반)
+async function fetchFromBarcodeLogger(q) {
+  const url = APPS_SCRIPT_URL + '?action=search&q=' + encodeURIComponent(q.trim().toUpperCase());
+  const res  = await fetch(url);
+  const data = await res.json();
+  if (data.status !== 'ok' || !Array.isArray(data.results)) return [];
+
+  return data.results.map(r => {
+    // BC_MASTER_HEADERS: 'GTIN-12','SKU','Product Name','Variation','Item Ref',
+    //   'Company Prefix','Check Digit','GTIN-14 Dozen','GTIN-14 Box','GTIN-14 Case','GTIN-14 Pallet',...
+    const sku   = String(r['SKU'] || '').trim();
+    const gtin12 = String(r['GTIN-12'] || '').trim().padStart(12, '0');
+    // Item Ref: 5자리 숫자 (시트 저장값 그대로)
+    let ref5 = String(r['Item Ref'] || '').trim();
+    if (!ref5 && gtin12.length === 12) ref5 = gtin12.slice(6, 11);
+    ref5 = ref5.padStart(5, '0');
+
+    const existing = new Set();
+    if (r['GTIN-14 Dozen'] && String(r['GTIN-14 Dozen']).trim()) existing.add('pack');
+    if (r['GTIN-14 Box']   && String(r['GTIN-14 Box']).trim())   existing.add('box');
+    if (r['GTIN-14 Case']  && String(r['GTIN-14 Case']).trim())  existing.add('case');
+    if (r['GTIN-14 Pallet']&& String(r['GTIN-14 Pallet']).trim())existing.add('pallet');
+
+    return {
+      sku,
+      name     : String(r['Product Name'] || '').trim(),
+      variation: String(r['Variation']    || '').trim(),
+      gtin12,
+      ref5,
+      existingTypes: existing,
+      _raw: r,  // 디버그용
+    };
+  }).filter(p => p.sku);
+}
+
+// ── 검색 자동완성 (실시간 BarcodeLogger API 호출) ─────────
 let lookupSearchTimer = null;
 function onLookupSearch(q) {
+  const box = document.getElementById('lookupDropdown');
+  if (!q || q.trim().length < 2) { box.style.display = 'none'; return; }
+  // 로딩 표시
+  box.innerHTML = '<div style="padding:10px 12px;font-size:11px;color:var(--muted);">🔍 검색 중...</div>';
+  box.style.display = 'block';
   clearTimeout(lookupSearchTimer);
-  lookupSearchTimer = setTimeout(() => doLookupSearch(q), 180);
+  lookupSearchTimer = setTimeout(() => doLookupSearch(q), 350);
 }
 
-function doLookupSearch(q) {
+async function doLookupSearch(q) {
   const box = document.getElementById('lookupDropdown');
-  if (!q || q.length < 1) { box.style.display = 'none'; return; }
-  const lq = q.toLowerCase();
-  const matches = lookupProducts.filter(p =>
-    p.sku.toLowerCase().includes(lq) ||
-    p.name.toLowerCase().includes(lq) ||
-    (p.variation || '').toLowerCase().includes(lq)
-  ).slice(0, 40);
+  if (!q || q.trim().length < 2) { box.style.display = 'none'; return; }
 
-  if (!matches.length) {
+  let results = [];
+  try {
+    results = await fetchFromBarcodeLogger(q);
+  } catch(e) {
+    box.innerHTML = `<div style="padding:12px;font-size:12px;color:var(--red);">오류: ${e.message}</div>`;
+    box.style.display = 'block'; return;
+  }
+
+  // lookupProducts 캐시에 병합 (중복 제거)
+  for (const p of results) {
+    if (!lookupProducts.find(x => x.sku === p.sku && x.variation === p.variation)) {
+      lookupProducts.push(p);
+    }
+  }
+
+  if (!results.length) {
     box.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--muted);text-align:center;">검색 결과 없음</div>';
     box.style.display = 'block'; return;
   }
 
-  box.innerHTML = matches.map((p, i) => {
-    const types  = [...p.existingTypes].join(', ') || '—';
-    const idx    = lookupProducts.indexOf(p);
+  box.innerHTML = results.map(p => {
+    const idx = lookupProducts.indexOf(lookupProducts.find(x => x.sku === p.sku && x.variation === p.variation));
     const alreadySel = lookupSelected.some(s => s.sku === p.sku && s.variation === p.variation);
+    const typeList   = [...p.existingTypes].join(', ') || '없음';
     return `<div class="search-result-item" onclick="addLookupSel(${idx})" style="${alreadySel ? 'opacity:.45;pointer-events:none;' : ''}">
       <div class="res-sku">${p.sku}${p.variation ? ' <span style="color:var(--muted);font-weight:400;">/ ' + p.variation + '</span>' : ''}</div>
       <div class="res-name">${p.name || '—'}</div>
-      <div class="res-meta">GTIN-12: ${p.gtin12 || '없음'} · 기존타입: ${types}</div>
+      <div class="res-meta">GTIN-12: ${p.gtin12 || '없음'} · 기존타입: ${typeList || '—'}</div>
     </div>`;
   }).join('');
   box.style.display = 'block';
