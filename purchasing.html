@@ -3081,12 +3081,14 @@ async function loadSupplierIntelligence(supplier){
   document.getElementById('si-status').textContent='⟳ 데이터 로딩 중...';
   document.getElementById('si-status').style.color='var(--accent)';
 
-  const dateFilter = period==='3m' ? `AND order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 MONTH)`
-                   : period==='6m' ? `AND order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 6 MONTH)`
-                   : period==='9m' ? `AND order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 9 MONTH)`
-                   : period==='1y' ? `AND order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR)`
-                   : period==='2y' ? `AND order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 2 YEAR)`
-                   : period==='3y' ? `AND order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 YEAR)`
+  // 실입고 기준: received_date (실제 입고일) 기준으로 필터
+  // 전체기간('')은 received_date 필터 없이 전체 입고 수량
+  const dateFilter = period==='3m' ? `AND received_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 MONTH)`
+                   : period==='6m' ? `AND received_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 6 MONTH)`
+                   : period==='9m' ? `AND received_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 9 MONTH)`
+                   : period==='1y' ? `AND received_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR)`
+                   : period==='2y' ? `AND received_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 2 YEAR)`
+                   : period==='3y' ? `AND received_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 YEAR)`
                    : '';
   // skuMonthlySQL sales 쪽 날짜 필터 (period 무관, 최대 3년치만 조회해 스캔량 제한)
   const saleDateFilter = `AND sale_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 YEAR)`;
@@ -3164,7 +3166,7 @@ async function loadSupplierIntelligence(supplier){
                         : 'sold_1y';  // 전체기간도 1y 기준
     const skuCompareSQL = `
       WITH
-      -- ── 실입고 기준 발주 집계 (VOIDED 제외, received_quantity > 0)
+      -- ── 실입고 기준 발주 집계 (received_date 기준, VOIDED 제외, received_quantity > 0)
       purchase AS (
         SELECT
           sku,
@@ -3178,7 +3180,7 @@ async function loadSupplierIntelligence(supplier){
         WHERE supplier_name = '${supEsc}'
           AND status != 'VOIDED'
           AND received_quantity > 0
-          AND order_date IS NOT NULL
+          AND received_date IS NOT NULL
           ${dateFilter}
         GROUP BY sku
       ),
@@ -3192,6 +3194,7 @@ async function loadSupplierIntelligence(supplier){
       ),
       -- sales: asung_sales_unified 뷰 사용 (Omni+Core 통합)
       -- 컬럼: SKU, sale_date, Quantity (뷰에서 통일된 이름)
+      -- 기간별 판매량: received_date 기준 실입고와 동일 기간으로 맞춤
       sales AS (
         SELECT
           SKU AS sku,
@@ -3199,6 +3202,9 @@ async function loadSupplierIntelligence(supplier){
           SUM(CASE WHEN sale_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 6  MONTH) THEN Quantity ELSE 0 END) AS sold_6m,
           SUM(CASE WHEN sale_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 9  MONTH) THEN Quantity ELSE 0 END) AS sold_9m,
           SUM(CASE WHEN sale_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 12 MONTH) THEN Quantity ELSE 0 END) AS sold_1y,
+          SUM(CASE WHEN sale_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 24 MONTH) THEN Quantity ELSE 0 END) AS sold_2y,
+          SUM(CASE WHEN sale_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 36 MONTH) THEN Quantity ELSE 0 END) AS sold_3y,
+          SUM(Quantity)                                                                                      AS sold_all,
           SUM(CASE WHEN sale_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)   THEN Quantity ELSE 0 END) AS sold_90d
         FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_SALES}\`
         WHERE Quantity > 0
@@ -3230,16 +3236,22 @@ async function loadSupplierIntelligence(supplier){
         COALESCE(s.sold_6m,  0)                                AS sold_6m,
         COALESCE(s.sold_9m,  0)                                AS sold_9m,
         COALESCE(s.sold_1y,  0)                                AS sold_1y,
+        COALESCE(s.sold_2y,  0)                                AS sold_2y,
+        COALESCE(s.sold_3y,  0)                                AS sold_3y,
+        COALESCE(s.sold_all, 0)                                AS sold_all,
         COALESCE(s.sold_90d, 0)                                AS sold_90d,
         COALESCE(s.sold_1y,  0)                                AS total_sold,
         COALESCE(b.bo_qty,   0)                                AS bo_qty,
-        -- 실질수요 (period별 동적 계산용 — JS에서 period에 맞게 재계산)
-        COALESCE(s.sold_3m, 0) + COALESCE(b.bo_qty, 0)        AS total_demand_3m,
-        COALESCE(s.sold_6m, 0) + COALESCE(b.bo_qty, 0)        AS total_demand_6m,
-        COALESCE(s.sold_9m, 0) + COALESCE(b.bo_qty, 0)        AS total_demand_9m,
-        COALESCE(s.sold_1y, 0) + COALESCE(b.bo_qty, 0)        AS total_demand_1y,
+        -- 실질수요 = 해당 기간 판매 + 현재 백오더 (period별 동적)
+        COALESCE(s.sold_3m,  0) + COALESCE(b.bo_qty, 0)       AS total_demand_3m,
+        COALESCE(s.sold_6m,  0) + COALESCE(b.bo_qty, 0)       AS total_demand_6m,
+        COALESCE(s.sold_9m,  0) + COALESCE(b.bo_qty, 0)       AS total_demand_9m,
+        COALESCE(s.sold_1y,  0) + COALESCE(b.bo_qty, 0)       AS total_demand_1y,
+        COALESCE(s.sold_2y,  0) + COALESCE(b.bo_qty, 0)       AS total_demand_2y,
+        COALESCE(s.sold_3y,  0) + COALESCE(b.bo_qty, 0)       AS total_demand_3y,
+        COALESCE(s.sold_all, 0) + COALESCE(b.bo_qty, 0)       AS total_demand_all,
         -- 기본 total_demand (1y 기준, 하위 호환)
-        COALESCE(s.sold_1y, 0) + COALESCE(b.bo_qty, 0)        AS total_demand,
+        COALESCE(s.sold_1y,  0) + COALESCE(b.bo_qty, 0)       AS total_demand,
         -- 발주/수요 비율 (기본 1y 기준, JS에서 period에 맞게 재계산)
         SAFE_DIVIDE(
           p.total_received,
@@ -3465,7 +3477,10 @@ function renderSupplierIntelligence(){
           const demand = cp==='3m' ? parseFloat(r.total_demand_3m||0)
                        : cp==='6m' ? parseFloat(r.total_demand_6m||0)
                        : cp==='9m' ? parseFloat(r.total_demand_9m||0)
-                       : parseFloat(r.total_demand_1y||0);
+                       : cp==='1y' ? parseFloat(r.total_demand_1y||0)
+                       : cp==='2y' ? parseFloat(r.total_demand_2y||0)
+                       : cp==='3y' ? parseFloat(r.total_demand_3y||0)
+                       : parseFloat(r.total_demand_all||0);
           const ratio   = demand>0 ? ordered/demand : null;
           if(S.siRatioFilter === 'over')   return ratio !== null && ratio > 2;
           if(S.siRatioFilter === 'under')  return ratio !== null && ratio < 0.8;
@@ -3492,7 +3507,10 @@ function renderSupplierIntelligence(){
         const d = _cp2==='3m' ? parseFloat(r.total_demand_3m||0)
                 : _cp2==='6m' ? parseFloat(r.total_demand_6m||0)
                 : _cp2==='9m' ? parseFloat(r.total_demand_9m||0)
-                : parseFloat(r.total_demand_1y||0);
+                : _cp2==='1y' ? parseFloat(r.total_demand_1y||0)
+                : _cp2==='2y' ? parseFloat(r.total_demand_2y||0)
+                : _cp2==='3y' ? parseFloat(r.total_demand_3y||0)
+                : parseFloat(r.total_demand_all||0);
         return Math.max(parseFloat(r.total_ordered||0), d||parseFloat(r.sold_1y||0));
       }), 1);
 
@@ -3512,21 +3530,34 @@ function renderSupplierIntelligence(){
         const sold6m   = parseFloat(r.sold_6m||0);
         const sold9m   = parseFloat(r.sold_9m||0);
         const sold1y   = parseFloat(r.sold_1y||0);
+        const sold2y   = parseFloat(r.sold_2y||0);
+        const sold3y   = parseFloat(r.sold_3y||0);
+        const soldAll  = parseFloat(r.sold_all||0);
         const boQty    = parseFloat(r.bo_qty||0);
         // period에 맞는 판매 기간 선택 + 동적 demand
         const curPeriod = document.getElementById('si-period')?.value || '1y';
         const periodSold = curPeriod==='3m' ? sold3m
                          : curPeriod==='6m' ? sold6m
                          : curPeriod==='9m' ? sold9m
-                         : sold1y;  // 1y / 2y / 3y / all → 1y 판매 기준
+                         : curPeriod==='1y' ? sold1y
+                         : curPeriod==='2y' ? sold2y
+                         : curPeriod==='3y' ? sold3y
+                         : soldAll;
         const periodLabel = curPeriod==='3m'?'3개월'
                           : curPeriod==='6m'?'6개월'
-                          : curPeriod==='9m'?'9개월':'1년';
-        // period에 맞는 total_demand 동적 선택 (BQ에서 각 기간별로 가져옴)
+                          : curPeriod==='9m'?'9개월'
+                          : curPeriod==='1y'?'1년'
+                          : curPeriod==='2y'?'2년'
+                          : curPeriod==='3y'?'3년'
+                          : '전체';
+        // period에 맞는 total_demand 동적 선택 (해당 기간 판매 + 백오더)
         const demand = curPeriod==='3m' ? parseFloat(r.total_demand_3m||0)
                      : curPeriod==='6m' ? parseFloat(r.total_demand_6m||0)
                      : curPeriod==='9m' ? parseFloat(r.total_demand_9m||0)
-                     : parseFloat(r.total_demand_1y||0);
+                     : curPeriod==='1y' ? parseFloat(r.total_demand_1y||0)
+                     : curPeriod==='2y' ? parseFloat(r.total_demand_2y||0)
+                     : curPeriod==='3y' ? parseFloat(r.total_demand_3y||0)
+                     : parseFloat(r.total_demand_all||0);
         const ratio    = demand>0 ? ordered/demand : null;
         const ratioTxt   = ratio===null?'—':ratio.toFixed(2)+'×';
         const ratioColor = ratio===null?'var(--text3)':ratio>2?'var(--red)':ratio<0.8?'var(--yellow)':'var(--green)';
