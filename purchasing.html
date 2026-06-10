@@ -722,7 +722,7 @@ const STOCK_DATE = '2026-04-20';
 // ═══════════════════════════════════════════════════════
 const BQ_PROJECT = 'geometric-rock-487814-k4';
 const BQ_DATASET = 'Cin7_Sales_Data';
-const BQ_SALES   = 'asung_sales_historical_data';
+const BQ_SALES   = 'asung_sales_unified';
 const BQ_ORDERS  = 'asung_order_details_historical';
 const BQ_STOCK   = 'asung_stock_daily';
 const CLIENT_ID  = '105948904172-t1fvd0e8t2tl3ki6u17a4ok9vp0catp2';
@@ -1098,7 +1098,7 @@ async function loadSalesDataFromBQ(){
       sal AS (
         SELECT
           SKU AS sku,
-          MAX(COALESCE(NULLIF(Brand_Clean,''), NULLIF(Brand,''))) AS brand
+          MAX(COALESCE(NULLIF(Brand,''), '—')) AS brand
         FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_SALES}\`
         WHERE SKU IS NOT NULL
         GROUP BY SKU
@@ -1117,14 +1117,14 @@ async function loadSalesDataFromBQ(){
     const aduSQL = `
       SELECT
         SKU,
-        CAST(Date AS STRING) AS sale_date,
+        CAST(sale_date AS STRING) AS sale_date,
         SUM(Quantity) AS qty
       FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_SALES}\`
-      WHERE Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
-        AND Date < CURRENT_DATE()
+      WHERE sale_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
+        AND sale_date < CURRENT_DATE()
         AND Quantity > 0
-      GROUP BY SKU, Date
-      ORDER BY SKU, Date
+      GROUP BY SKU, sale_date
+      ORDER BY SKU, sale_date
     `;
 
     // ── 계절성 쿼리 [개선 A]: 미래 기준점 (발주 도착일 기준 향후 90일)
@@ -1137,10 +1137,10 @@ async function loadSalesDataFromBQ(){
         SKU,
         SUM(Quantity) AS qty_ly
       FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_SALES}\`
-      WHERE Date >= DATE_SUB(
+      WHERE sale_date >= DATE_SUB(
               DATE_ADD(CURRENT_DATE(), INTERVAL ${SEA_LT} DAY),
               INTERVAL 1 YEAR)
-        AND Date < DATE_SUB(
+        AND sale_date < DATE_SUB(
               DATE_ADD(DATE_ADD(CURRENT_DATE(), INTERVAL ${SEA_LT} DAY), INTERVAL 90 DAY),
               INTERVAL 1 YEAR)
         AND Quantity > 0
@@ -1226,8 +1226,8 @@ async function loadSalesDataFromBQ(){
           MAX(Quantity) AS qty,
           MAX(Order_Date) AS last_order_date
         FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_ORDERS}\`
-        WHERE Order_Progress = 'Backordered'
-          AND Status = 'Ordered'
+        WHERE Order_Progress NOT IN ('Invoiced','Voided','Void','Cancelled','2.Release to WMS','3.Finalized')
+          AND Invoice_Date IS NULL
           AND Order_Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
           AND Quantity > 0
         GROUP BY SKU, Customer
@@ -1255,9 +1255,9 @@ async function loadSalesDataFromBQ(){
     const deadSQL = `
       SELECT
         SKU,
-        FORMAT_DATE('%Y-%m-%d', MAX(Date)) AS last_sale_date,
-        SUM(CASE WHEN Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90  DAY) THEN Quantity ELSE 0 END) AS qty_90d,
-        SUM(CASE WHEN Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY) THEN Quantity ELSE 0 END) AS qty_365d
+        FORMAT_DATE('%Y-%m-%d', MAX(sale_date)) AS last_sale_date,
+        SUM(CASE WHEN sale_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90  DAY) THEN Quantity ELSE 0 END) AS qty_90d,
+        SUM(CASE WHEN sale_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY) THEN Quantity ELSE 0 END) AS qty_365d
       FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_SALES}\`
       WHERE Quantity > 0
       GROUP BY SKU
@@ -3211,8 +3211,8 @@ async function loadSupplierIntelligence(supplier){
           SKU AS sku,
           SUM(Quantity) AS bo_qty
         FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_ORDERS}\`
-        WHERE Order_Progress = 'Backordered'
-          AND Status = 'Ordered'
+        WHERE Order_Progress NOT IN ('Invoiced','Voided','Void','Cancelled','2.Release to WMS','3.Finalized')
+          AND Invoice_Date IS NULL
           AND Quantity > 0
           AND SKU IN (SELECT sku FROM supplier_skus)
         GROUP BY SKU
