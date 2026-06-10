@@ -1226,8 +1226,8 @@ async function loadSalesDataFromBQ(){
           MAX(Quantity) AS qty,
           MAX(Order_Date) AS last_order_date
         FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_ORDERS}\`
-        WHERE Order_Progress NOT IN ('Invoiced','Voided','Void','Cancelled','2.Release to WMS','3.Finalized')
-          AND Invoice_Date IS NULL
+        WHERE Order_Progress = 'Backordered'
+          AND Status = 'Ordered'
           AND Order_Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
           AND Quantity > 0
         GROUP BY SKU, Customer
@@ -3211,8 +3211,8 @@ async function loadSupplierIntelligence(supplier){
           SKU AS sku,
           SUM(Quantity) AS bo_qty
         FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_ORDERS}\`
-        WHERE Order_Progress NOT IN ('Invoiced','Voided','Void','Cancelled','2.Release to WMS','3.Finalized')
-          AND Invoice_Date IS NULL
+        WHERE Order_Progress = 'Backordered'
+          AND Status = 'Ordered'
           AND Quantity > 0
           AND SKU IN (SELECT sku FROM supplier_skus)
         GROUP BY SKU
