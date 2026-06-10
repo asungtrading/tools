@@ -215,11 +215,26 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
 .stat-value{font-weight:600;font-family:var(--mono);}
 .divider-row td{background:rgba(99,102,241,.05);color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:6px 10px;}
 .alert{padding:9px 12px;border-radius:8px;font-size:12px;margin-bottom:12px;display:none;}
+
+/* ── SUPPLEMENT PANEL ── */
+.supp-panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;margin-top:16px;display:none;}
+.supp-title{font-size:12px;font-weight:700;color:var(--text);margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+.supp-title span{font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);border-radius:4px;padding:2px 7px;}
+.supp-sku-list{background:var(--surface2);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--muted);max-height:120px;overflow-y:auto;margin-bottom:14px;font-family:var(--mono);}
+.supp-pack-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;}
+.supp-pack-card{background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;}
+.supp-pack-card label{font-size:10px;font-weight:700;color:var(--muted);display:block;margin-bottom:6px;}
+.supp-pack-card input{width:100%;background:var(--surface);border:none;border-bottom:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:13px;padding:3px 0;outline:none;}
+.supp-pack-card input:focus{border-bottom-color:var(--accent);}
+.supp-note{font-size:10px;color:var(--muted);margin-bottom:12px;line-height:1.6;}
+.supp-btn{background:var(--yellow);border:none;border-radius:8px;color:#000;cursor:pointer;font-family:var(--sans);font-size:13px;font-weight:700;padding:10px 20px;transition:all .15s;}
+.supp-btn:hover{opacity:.85;}
 .alert-error  {background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#fca5a5;}
 .alert-success{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:#86efac;}
 
 @media(max-width:900px){
   .print-layout{grid-template-columns:1fr;}
+  #lookupLayout{grid-template-columns:1fr!important;}
 }
 @media(max-width:640px){
   .input-grid{grid-template-columns:1fr;}
@@ -252,6 +267,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
 
 <div class="tab-nav">
   <button class="tab-btn active" onclick="switchTab('generate',this)">🔢 바코드 생성</button>
+  <button class="tab-btn" onclick="switchTab('lookup',this)">🔍 SKU 조회 & 보완</button>
   <button class="tab-btn" onclick="switchTab('print',this)">🖨️ 바코드 프린트</button>
 </div>
 
@@ -324,8 +340,135 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
     </div>
   </div>
 
+  <!-- ── 누락 타입 보완 패널 (CSV 복원 후 표시됨) ── -->
+  <div id="suppPanel" class="supp-panel">
+    <div class="supp-title">📦 누락된 박스 / 팔렛 바코드 추가 <span>CSV 복원 후 보완</span></div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">복원된 CSV의 unit 바코드에서 Item Ref를 자동 추출합니다.<br>추가할 포장 단위 수량을 입력하세요 — 이미 있는 타입은 중복 추가되지 않습니다.</div>
+    <div class="supp-note" id="suppSkuSummary" style="font-size:11px;line-height:1.8;color:var(--text);margin-bottom:12px;"></div>
+    <div class="supp-pack-grid">
+      <div class="supp-pack-card">
+        <label>📦 Pack (Ind.1) — 소박스</label>
+        <input type="number" id="supp-pack" placeholder="예: 6" min="1">
+      </div>
+      <div class="supp-pack-card">
+        <label>🗃️ Box (Ind.2) — 중박스</label>
+        <input type="number" id="supp-box" placeholder="예: 24" min="1">
+      </div>
+      <div class="supp-pack-card">
+        <label>📫 Case (Ind.3) — 케이스</label>
+        <input type="number" id="supp-case" placeholder="예: 48" min="1">
+      </div>
+      <div class="supp-pack-card">
+        <label>🚛 Pallet (Ind.8) — 팔렛</label>
+        <input type="number" id="supp-pallet" placeholder="예: 144" min="1">
+      </div>
+    </div>
+    <button class="supp-btn" onclick="supplementPackTypes()">➕ 바코드 추가 생성</button>
+  </div>
+
 </div><!-- /main inner generate -->
 </div><!-- /tab-generate -->
+
+<!-- ══ TAB: LOOKUP ═══════════════════════════════════════ -->
+<div id="tab-lookup" class="tab-pane">
+<div class="main">
+
+  <div style="display:grid;grid-template-columns:380px 1fr;gap:20px;align-items:start;" id="lookupLayout">
+
+    <!-- 왼쪽: 검색 -->
+    <div>
+      <div class="section">
+        <div class="sec-title">SKU 검색</div>
+        <div class="card" style="padding:14px;">
+          <div class="search-box" style="position:relative;">
+            <span class="search-icon" style="position:absolute;left:11px;top:50%;transform:translateY(-50%);pointer-events:none;">🔍</span>
+            <input type="text" id="lookupSearch"
+              placeholder="SKU 또는 제품명 입력…"
+              style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--sans);font-size:13px;padding:10px 14px 10px 36px;outline:none;transition:border-color .15s;"
+              oninput="onLookupSearch(this.value)"
+              onkeydown="if(event.key==='Enter')onLookupSearch(this.value)"
+              autocomplete="off">
+          </div>
+          <div id="lookupDropdown" class="search-results" style="display:none;"></div>
+          <div style="margin-top:10px;font-size:11px;color:var(--muted);" id="lookupSrcStatus">⏳ 데이터 로딩 중...</div>
+        </div>
+      </div>
+
+      <!-- 선택된 SKU 목록 -->
+      <div class="section">
+        <div class="sec-title" style="display:flex;justify-content:space-between;align-items:center;">
+          <span>선택된 SKU <span id="lookupSelCount" style="font-family:var(--mono);color:var(--accent);">0</span>개</span>
+          <button onclick="clearLookupSel()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px;">모두 제거</button>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div id="lookupSelList" style="max-height:320px;overflow-y:auto;">
+            <div style="padding:20px;text-align:center;font-size:12px;color:var(--muted);">검색해서 SKU를 추가하세요</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 오른쪽: 보완 설정 + 결과 -->
+    <div>
+      <div class="section">
+        <div class="sec-title">추가 생성할 포장 단위</div>
+        <div class="card" style="padding:16px;">
+          <p style="font-size:11px;color:var(--muted);margin-bottom:14px;">수량을 입력한 타입만 생성됩니다. 이미 존재하는 타입은 건너뜁니다.</p>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">
+            <div class="supp-pack-card">
+              <label>📦 Pack (Ind.1)</label>
+              <input type="number" id="lk-pack" placeholder="예: 6" min="1">
+            </div>
+            <div class="supp-pack-card">
+              <label>🗃️ Box (Ind.2)</label>
+              <input type="number" id="lk-box" placeholder="예: 24" min="1">
+            </div>
+            <div class="supp-pack-card">
+              <label>📫 Case (Ind.3)</label>
+              <input type="number" id="lk-case" placeholder="예: 48" min="1">
+            </div>
+            <div class="supp-pack-card">
+              <label>🚛 Pallet (Ind.8)</label>
+              <input type="number" id="lk-pallet" placeholder="예: 144" min="1">
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="supp-btn" onclick="lookupGenerate()">➕ 선택된 SKU에 바코드 추가</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 결과 -->
+      <div class="section" id="lookupResultSection" style="display:none;">
+        <div class="sec-title">생성 결과</div>
+        <div class="stats-bar" id="lookupStatsBar"></div>
+        <div class="action-bar">
+          <button class="act-btn" onclick="lookupDownloadCSV()">⬇️ CSV 다운로드</button>
+          <button class="act-btn" onclick="lookupDownloadZip()">🖼️ 이미지 ZIP</button>
+          <button class="act-btn save-btn" id="lookupSaveBtn" onclick="lookupSaveToSheets()">💾 Google Sheets에 저장</button>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div style="overflow-x:auto;">
+            <table class="results-table">
+              <thead>
+                <tr>
+                  <th>타입</th><th>SKU</th><th>제품명</th><th>베리에이션</th>
+                  <th>바코드</th><th>수량</th><th>미리보기</th>
+                </tr>
+              </thead>
+              <tbody id="lookupResultBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /lookupLayout -->
+
+  <div id="lookupAlertBox" class="alert" style="margin-top:12px;"></div>
+
+</div>
+</div><!-- /tab-lookup -->
 
 <!-- ══ TAB: PRINT ════════════════════════════════════════ -->
 <div id="tab-print" class="tab-pane">
@@ -799,6 +942,8 @@ async function generateBarcodes(){
   if(refs.length < totalUnits){ showAlert('사용 가능한 번호가 부족합니다.'); return; }
 
   generatedRows = [];
+  // 새 생성 시 보완 패널 숨김
+  document.getElementById('suppPanel').style.display = 'none';
   const date = new Date().toISOString().slice(0,10);
   let refIdx = 0;
 
@@ -954,7 +1099,351 @@ function switchTab(name, btn) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   btn.classList.add('active');
-  if (name === 'print') initPrintTab();
+  if (name === 'print')  initPrintTab();
+  if (name === 'lookup') initLookupTab();
+}
+
+// ══════════════════════════════════════════════════════════
+//  LOOKUP TAB  —  SKU 조회 & 박스/팔렛 바코드 추가
+// ══════════════════════════════════════════════════════════
+
+let lookupProducts  = [];   // BarcodeLogger + master.json 로드된 전체 unit 목록
+let lookupSelected  = [];   // 사용자가 선택한 항목 [{ sku, name, variation, gtin12, ref5, existingTypes }]
+let lookupGenRows   = [];   // 생성된 rows
+let lookupTabInited = false;
+
+async function initLookupTab() {
+  if (lookupTabInited) return;
+  lookupTabInited = true;
+  await loadLookupProducts();
+}
+
+async function loadLookupProducts() {
+  const status = document.getElementById('lookupSrcStatus');
+  status.textContent = '⏳ BarcodeLogger 로딩 중...';
+  lookupProducts = [];
+
+  // ── BarcodeLogger search (전체 로드) ──────────────────
+  try {
+    const res  = await fetch(APPS_SCRIPT_URL + '?action=search&q=');
+    const data = await res.json();
+    if (data.status === 'ok' && Array.isArray(data.results)) {
+      for (const r of data.results) {
+        if (!r['SKU']) continue;
+        // BC_MASTER_HEADERS 순서에 맞게 필드 추출
+        const gtin12 = String(r['GTIN-12'] || '').trim();
+        const ref5   = gtin12.length === 12 ? gtin12.slice(6, 11) : (String(r['Item Ref'] || '')).padStart(5,'0');
+        const existing = new Set();
+        if (r['GTIN-14 Dozen'] || r['gtin14_dozen']) existing.add('pack');
+        if (r['GTIN-14 Box']   || r['gtin14_box'])   existing.add('box');
+        if (r['GTIN-14 Case']  || r['gtin14_case'])  existing.add('case');
+        if (r['GTIN-14 Pallet']|| r['gtin14_pallet'])existing.add('pallet');
+        lookupProducts.push({
+          sku       : r['SKU'],
+          name      : r['Product Name'] || r['name'] || '',
+          variation : r['Variation']    || r['variation'] || '',
+          gtin12,
+          ref5,
+          existingTypes: existing,
+        });
+      }
+    }
+  } catch(e) { console.error('[lookup] BarcodeLogger 실패:', e); }
+
+  // ── Barcode Log 시트에서 이미 저장된 pack/box/case/pallet 파악 ──
+  // (search API가 GTIN-14 컬럼을 직접 반환하지 않는 경우 대비)
+  // log 탭에서 type 별로 매칭
+  try {
+    const res  = await fetch(APPS_SCRIPT_URL + '?action=getLog');
+    const data = await res.json();
+    if (data.status === 'ok' && Array.isArray(data.log)) {
+      for (const row of data.log) {
+        const baseSku = String(row.sku || '').replace(/-\d+$/, ''); // "-12" 등 suffix 제거
+        const type    = String(row.type || '').toLowerCase();
+        const prod    = lookupProducts.find(p => p.sku === baseSku);
+        if (prod && ['pack','box','case','pallet'].includes(type)) {
+          prod.existingTypes.add(type);
+        }
+      }
+    }
+  } catch(e) { /* getLog 없으면 무시 */ }
+
+  status.innerHTML = `✅ <strong>${lookupProducts.length}</strong>개 SKU 로드됨`;
+}
+
+// ── 검색 자동완성 ─────────────────────────────────────────
+let lookupSearchTimer = null;
+function onLookupSearch(q) {
+  clearTimeout(lookupSearchTimer);
+  lookupSearchTimer = setTimeout(() => doLookupSearch(q), 180);
+}
+
+function doLookupSearch(q) {
+  const box = document.getElementById('lookupDropdown');
+  if (!q || q.length < 1) { box.style.display = 'none'; return; }
+  const lq = q.toLowerCase();
+  const matches = lookupProducts.filter(p =>
+    p.sku.toLowerCase().includes(lq) ||
+    p.name.toLowerCase().includes(lq) ||
+    (p.variation || '').toLowerCase().includes(lq)
+  ).slice(0, 40);
+
+  if (!matches.length) {
+    box.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--muted);text-align:center;">검색 결과 없음</div>';
+    box.style.display = 'block'; return;
+  }
+
+  box.innerHTML = matches.map((p, i) => {
+    const types  = [...p.existingTypes].join(', ') || '—';
+    const idx    = lookupProducts.indexOf(p);
+    const alreadySel = lookupSelected.some(s => s.sku === p.sku && s.variation === p.variation);
+    return `<div class="search-result-item" onclick="addLookupSel(${idx})" style="${alreadySel ? 'opacity:.45;pointer-events:none;' : ''}">
+      <div class="res-sku">${p.sku}${p.variation ? ' <span style="color:var(--muted);font-weight:400;">/ ' + p.variation + '</span>' : ''}</div>
+      <div class="res-name">${p.name || '—'}</div>
+      <div class="res-meta">GTIN-12: ${p.gtin12 || '없음'} · 기존타입: ${types}</div>
+    </div>`;
+  }).join('');
+  box.style.display = 'block';
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#lookupSearch') && !e.target.closest('#lookupDropdown')) {
+    const box = document.getElementById('lookupDropdown');
+    if (box) box.style.display = 'none';
+  }
+});
+
+function addLookupSel(idx) {
+  const p = lookupProducts[idx];
+  if (!p) return;
+  if (lookupSelected.some(s => s.sku === p.sku && s.variation === p.variation)) return;
+  lookupSelected.push({ ...p, existingTypes: new Set(p.existingTypes) });
+  document.getElementById('lookupSearch').value = '';
+  document.getElementById('lookupDropdown').style.display = 'none';
+  renderLookupSelList();
+}
+
+function removeLookupSel(idx) {
+  lookupSelected.splice(idx, 1);
+  renderLookupSelList();
+}
+
+function clearLookupSel() {
+  lookupSelected = [];
+  renderLookupSelList();
+}
+
+function renderLookupSelList() {
+  const list  = document.getElementById('lookupSelList');
+  const count = document.getElementById('lookupSelCount');
+  count.textContent = lookupSelected.length;
+
+  if (!lookupSelected.length) {
+    list.innerHTML = '<div style="padding:20px;text-align:center;font-size:12px;color:var(--muted);">검색해서 SKU를 추가하세요</div>';
+    return;
+  }
+
+  list.innerHTML = lookupSelected.map((p, i) => {
+    const types = [...p.existingTypes];
+    const badges = ['unit','pack','box','case','pallet'].map(t => {
+      const has  = t === 'unit' ? !!p.gtin12 : types.includes(t);
+      const cfg  = PACK_CONFIG[t] || {emoji:'🏷️', label:'Unit'};
+      const emoji= t === 'unit' ? '🏷️' : cfg.emoji;
+      const lbl  = t === 'unit' ? 'Unit' : cfg.label;
+      return `<span style="font-size:9px;padding:2px 5px;border-radius:3px;background:${has?'rgba(34,197,94,.15)':'rgba(100,116,139,.12)'};color:${has?'var(--green)':'var(--muted)'};">${emoji} ${lbl}</span>`;
+    }).join('');
+    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(42,42,58,.4);">
+      <div style="flex:1;min-width:0;">
+        <div style="font-family:var(--mono);font-size:11px;color:var(--accent2);font-weight:600;">${p.sku}${p.variation ? ' / ' + p.variation : ''}</div>
+        <div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.name || '—'}</div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">${badges}</div>
+      </div>
+      <button onclick="removeLookupSel(${i})" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0 4px;flex-shrink:0;" title="제거">×</button>
+    </div>`;
+  }).join('');
+}
+
+// ── 생성 ─────────────────────────────────────────────────
+async function lookupGenerate() {
+  const packQtys = {
+    pack  : parseInt(document.getElementById('lk-pack')?.value)   || 0,
+    box   : parseInt(document.getElementById('lk-box')?.value)    || 0,
+    case  : parseInt(document.getElementById('lk-case')?.value)   || 0,
+    pallet: parseInt(document.getElementById('lk-pallet')?.value) || 0,
+  };
+  const typesToAdd = Object.entries(packQtys).filter(([,v]) => v > 0);
+  if (!lookupSelected.length) { showLookupAlert('❌ SKU를 1개 이상 선택하세요.', 'error'); return; }
+  if (!typesToAdd.length)      { showLookupAlert('❌ 포장 단위 수량을 입력하세요.', 'error'); return; }
+
+  lookupGenRows = [];
+  const today = new Date().toISOString().slice(0, 10);
+  let added = 0, skipped = 0;
+
+  for (const sel of lookupSelected) {
+    const ref5   = sel.ref5;
+    const refNum = ref5 ? parseInt(ref5) : null;
+
+    if (!refNum) {
+      // GTIN-12에서 직접 ref 추출 시도
+      if (sel.gtin12 && sel.gtin12.length === 12) {
+        const extractedRef = parseInt(sel.gtin12.slice(6, 11));
+        if (extractedRef) {
+          sel.ref5   = String(extractedRef).padStart(5, '0');
+        }
+      }
+      if (!sel.ref5) { skipped++; continue; }
+    }
+
+    for (const [packKey, qty] of typesToAdd) {
+      if (sel.existingTypes.has(packKey)) { skipped++; continue; }
+      const cfg    = PACK_CONFIG[packKey];
+      const gtin14 = buildGTIN14(parseInt(sel.ref5), cfg.indicator);
+      lookupGenRows.push({
+        type      : packKey,
+        sku       : sel.sku,
+        displaySku: sel.sku + '-' + qty,
+        name      : sel.name,
+        variation : sel.variation,
+        barcode   : gtin14,
+        qty,
+        ref5      : sel.ref5,
+        format    : 'ITF14',
+        date      : today,
+        packLabel : cfg.label,
+        packEmoji : cfg.emoji,
+        gtinCls   : cfg.gtinCls,
+      });
+      // 로컬에서 existingTypes 업데이트 (중복 방지)
+      sel.existingTypes.add(packKey);
+      added++;
+    }
+  }
+
+  if (!lookupGenRows.length) {
+    showLookupAlert(`ℹ️ 추가 내용 없음 — 선택한 타입이 이미 모두 존재하거나 Item Ref가 없습니다. (건너뜀: ${skipped}개)`, 'error');
+    return;
+  }
+
+  await renderLookupResults();
+  renderLookupSelList(); // 배지 업데이트
+  const saveBtn = document.getElementById('lookupSaveBtn');
+  if (saveBtn) { saveBtn.textContent = '💾 Google Sheets에 저장'; saveBtn.classList.remove('saved'); }
+  showLookupAlert(`✅ ${added}개 바코드 생성 완료${skipped ? ' (건너뜀: ' + skipped + '개)' : ''} — CSV 다운로드 또는 Google Sheets에 저장하세요.`, 'success');
+}
+
+async function renderLookupResults() {
+  const section = document.getElementById('lookupResultSection');
+  const tbody   = document.getElementById('lookupResultBody');
+  const stats   = document.getElementById('lookupStatsBar');
+  section.style.display = 'block';
+  setTimeout(() => section.scrollIntoView({ behavior:'smooth', block:'start' }), 100);
+
+  const byType = {};
+  for (const r of lookupGenRows) {
+    if (!byType[r.type]) byType[r.type] = 0;
+    byType[r.type]++;
+  }
+  stats.innerHTML = Object.entries(byType).map(([t,n]) => {
+    const cfg = PACK_CONFIG[t] || {};
+    return `<div class="stat-item"><span class="stat-label">${cfg.emoji||''} ${cfg.label||t}</span><span class="stat-value" style="margin-left:4px;">${n}</span></div>`;
+  }).join('');
+
+  let html = '';
+  for (const r of lookupGenRows) {
+    const cfg = PACK_CONFIG[r.type] || {};
+    html += `<tr>
+      <td><span class="type-badge ${cfg.cls||''}">${cfg.emoji||''} ${cfg.label||r.type}</span></td>
+      <td><span class="tag-sku">${r.displaySku||r.sku}</span></td>
+      <td style="font-size:11px;color:var(--muted)">${r.name}</td>
+      <td style="font-size:11px;color:var(--muted);font-style:italic">${r.variation||'—'}</td>
+      <td><span class="tag-gtin ${r.gtinCls||'gtin14'}">${r.barcode}</span></td>
+      <td style="font-size:11px;font-family:var(--mono);color:var(--muted)">${r.qty}</td>
+      <td>
+        <div id="lksvg_${r.barcode}" style="background:#fff;border-radius:4px;padding:4px;display:inline-block;min-width:120px;"></div>
+        <button class="dl-btn" onclick="downloadSingleImage('${r.barcode}','ITF14','${r.sku}_${r.type}')">⬇ PNG 저장</button>
+      </td>
+    </tr>`;
+  }
+  tbody.innerHTML = html;
+
+  for (const r of lookupGenRows) {
+    const el = document.getElementById(`lksvg_${r.barcode}`);
+    if (el) el.appendChild(renderBarcodeSVG(r.barcode, 'ITF14'));
+  }
+}
+
+// ── 다운로드 / 저장 ───────────────────────────────────────
+function lookupDownloadCSV() {
+  if (!lookupGenRows.length) { showLookupAlert('먼저 바코드를 생성하세요.', 'error'); return; }
+  const header = 'Date,Type,SKU,Product Name,Variation,Barcode,Qty/Pack,Company Prefix,Item Ref,Format\n';
+  const rows   = lookupGenRows.map(r =>
+    `${r.date},${r.type},${r.displaySku||r.sku},"${r.name}","${r.variation||''}",${r.barcode},${r.qty},${COMPANY_PREFIX},${r.ref5},${r.format}`
+  ).join('\n');
+  const blob = new Blob(['\uFEFF' + header + rows], { type:'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `asung_barcodes_supplement_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  showLookupAlert('✅ CSV 다운로드 완료', 'success');
+}
+
+async function lookupDownloadZip() {
+  if (!lookupGenRows.length) { showLookupAlert('먼저 바코드를 생성하세요.', 'error'); return; }
+  showLookupAlert('ZIP 생성 중...', 'success');
+  const zip    = new JSZip();
+  const folder = zip.folder('asung_barcodes_supplement');
+  for (const r of lookupGenRows) {
+    const svg    = renderBarcodeSVG(r.barcode, 'ITF14');
+    const dataURL= await svgToPngDataURL(svg);
+    folder.file(`${r.sku}_${r.type}_${r.barcode}.png`, dataURL.split(',')[1], { base64:true });
+  }
+  const blob = await zip.generateAsync({ type:'blob' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `asung_barcodes_supplement_${new Date().toISOString().slice(0,10)}.zip`;
+  a.click();
+  showLookupAlert(`✅ ${lookupGenRows.length}개 ZIP 다운로드 완료`, 'success');
+}
+
+async function lookupSaveToSheets() {
+  if (!lookupGenRows.length) { showLookupAlert('먼저 바코드를 생성하세요.', 'error'); return; }
+  const btn = document.getElementById('lookupSaveBtn');
+  btn.textContent = '저장 중...';
+  btn.style.pointerEvents = 'none';
+  try {
+    const BATCH = 10;
+    const all   = lookupGenRows.map(r => ({
+      date: r.date, type: r.type, sku: r.displaySku || r.sku,
+      name: r.name, variation: r.variation || '',
+      barcode: r.barcode, qty: r.qty,
+      companyPrefix: COMPANY_PREFIX, ref: r.ref5, format: r.format,
+    }));
+    let saved = 0;
+    for (let b = 0; b < Math.ceil(all.length / BATCH); b++) {
+      const chunk  = all.slice(b * BATCH, (b+1) * BATCH);
+      const params = new URLSearchParams({ action:'saveRows', data: JSON.stringify(chunk) });
+      const res    = await fetch(APPS_SCRIPT_URL + '?' + params.toString());
+      const data   = await res.json();
+      if (data.status !== 'ok') throw new Error(data.message);
+      saved += data.saved || chunk.length;
+      if (b < Math.ceil(all.length/BATCH)-1) await new Promise(r=>setTimeout(r,1000));
+    }
+    btn.textContent = '✓ 저장됨';
+    btn.classList.add('saved');
+    showLookupAlert(`✅ Google Sheets에 ${saved}행 저장 완료`, 'success');
+  } catch(e) {
+    btn.textContent = '💾 Google Sheets에 저장';
+    btn.style.pointerEvents = 'auto';
+    showLookupAlert('저장 실패: ' + e.message, 'error');
+  }
+}
+
+function showLookupAlert(msg, type='error') {
+  const b = document.getElementById('lookupAlertBox');
+  b.className = 'alert alert-' + type;
+  b.textContent = msg;
+  b.style.display = 'block';
+  setTimeout(() => b.style.display = 'none', 5000);
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1508,8 +1997,113 @@ async function loadFromCSV(event) {
   }
 
   renderResults();
-  showAlert(`✅ CSV에서 ${generatedRows.length}행 복원 완료 — Google Sheets에 저장 버튼을 눌러주세요.`, 'success');
+
+  // ── 보완 패널 표시 ────────────────────────────────────────
+  showSuppPanel();
+
+  showAlert(`✅ CSV에서 ${generatedRows.length}행 복원 완료 — 아래에서 누락된 박스/팔렛 바코드를 추가하거나, Google Sheets에 저장하세요.`, 'success');
   event.target.value = '';
+}
+
+// ── 보완 패널 표시/요약 업데이트 ─────────────────────────────
+function showSuppPanel() {
+  const panel = document.getElementById('suppPanel');
+  const summary = document.getElementById('suppSkuSummary');
+  panel.style.display = 'block';
+
+  const unitRows  = generatedRows.filter(r => r.type === 'unit');
+  const existTypes = {};
+  for (const r of generatedRows) {
+    if (r.type === 'unit') continue;
+    if (!existTypes[r.sku]) existTypes[r.sku] = new Set();
+    existTypes[r.sku].add(r.type);
+  }
+
+  const typeCount = {pack:0,box:0,case:0,pallet:0};
+  for (const r of generatedRows) {
+    if (r.type !== 'unit' && typeCount[r.type] !== undefined) typeCount[r.type]++;
+  }
+
+  const lines = [
+    `Unit SKU: ${unitRows.length}개`,
+    `Pack: ${typeCount.pack}개`,
+    `Box: ${typeCount.box}개`,
+    `Case: ${typeCount.case}개`,
+    `Pallet: ${typeCount.pallet}개`,
+    `(0개인 타입이 누락된 타입입니다)`,
+  ];
+  summary.innerHTML = lines.map(l => `<span style="margin-right:14px;">${l}</span>`).join('');
+}
+
+// ── 누락 타입 보완 ────────────────────────────────────────────
+function supplementPackTypes() {
+  const packQtys = {
+    pack  : parseInt(document.getElementById('supp-pack')?.value)  || 0,
+    box   : parseInt(document.getElementById('supp-box')?.value)   || 0,
+    case  : parseInt(document.getElementById('supp-case')?.value)  || 0,
+    pallet: parseInt(document.getElementById('supp-pallet')?.value)|| 0,
+  };
+
+  const typesToAdd = Object.entries(packQtys).filter(([,v]) => v > 0);
+  if (typesToAdd.length === 0) {
+    showAlert('❌ 추가할 포장 단위를 1개 이상 입력해주세요.', 'error'); return;
+  }
+
+  const unitRows = generatedRows.filter(r => r.type === 'unit');
+  if (unitRows.length === 0) {
+    showAlert('❌ 복원된 unit 바코드가 없습니다.', 'error'); return;
+  }
+
+  // 이미 있는 (sku + type) 조합 파악
+  const existing = new Set(generatedRows.filter(r => r.type !== 'unit').map(r => r.sku + '|' + r.type));
+
+  const today = new Date().toISOString().slice(0, 10);
+  let added = 0;
+
+  for (const unitRow of unitRows) {
+    const ref5 = unitRow.ref5 || unitRow.ref;
+    if (!ref5) continue;
+    const refNum = parseInt(ref5);
+
+    for (const [packKey, qty] of typesToAdd) {
+      const key = unitRow.sku + '|' + packKey;
+      if (existing.has(key)) continue; // 이미 있으면 스킵
+
+      const cfg    = PACK_CONFIG[packKey];
+      const gtin14 = buildGTIN14(refNum, cfg.indicator);
+
+      generatedRows.push({
+        type      : packKey,
+        sku       : unitRow.sku,
+        displaySku: unitRow.sku + '-' + qty,
+        name      : unitRow.name,
+        variation : unitRow.variation,
+        barcode   : gtin14,
+        qty,
+        ref5,
+        ref       : ref5,
+        format    : 'ITF14',
+        date      : today,
+        packLabel : cfg.label,
+        packEmoji : cfg.emoji,
+        gtinCls   : cfg.gtinCls,
+      });
+      existing.add(key);
+      added++;
+    }
+  }
+
+  if (added === 0) {
+    showAlert('ℹ️ 추가할 내용이 없습니다 — 선택한 타입이 이미 모두 존재합니다.', 'error');
+    return;
+  }
+
+  renderResults();
+  showSuppPanel();
+  // 저장 버튼 리셋
+  const btn = document.getElementById('saveBtn');
+  if (btn) { btn.textContent = '💾 Google Sheets에 저장'; btn.classList.remove('saved'); }
+  showAlert(`✅ ${added}개 바코드 추가 완료 (${typesToAdd.map(([k,v])=>k+'×'+v).join(', ')}) — CSV 다운로드 또는 Google Sheets에 저장하세요.`, 'success');
 }
 
 async function saveToSheets(){
