@@ -391,6 +391,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
           </div>
           <div id="lookupDropdown" class="search-results" style="display:none;"></div>
           <div style="margin-top:10px;font-size:11px;color:var(--muted);" id="lookupSrcStatus">⏳ 데이터 로딩 중...</div>
+          <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+            <button onclick="debugBarcodeLogger()" style="background:rgba(100,116,139,.2);border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;font-size:10px;padding:4px 10px;">🔧 API 연결 테스트</button>
+            <button onclick="loadAllSkusForBulk()" style="background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);border-radius:6px;color:#818cf8;cursor:pointer;font-size:10px;padding:4px 10px;">📥 전체 SKU 불러오기 (일괄 작업용)</button>
+          </div>
         </div>
       </div>
 
@@ -1139,39 +1143,97 @@ async function loadLookupProducts() {
   }
 }
 
+// ── 공통 파서 ─────────────────────────────────────────────────
+function parseBLResult(r) {
+  const sku = String(r['SKU'] || '').trim();
+  if (!sku) return null;
+  const gtin12 = String(r['GTIN-12'] || '').trim().padStart(12, '0');
+  let ref5 = String(r['Item Ref'] || '').trim();
+  if (!ref5 && gtin12.length === 12) ref5 = gtin12.slice(6, 11);
+  ref5 = ref5.padStart(5, '0');
+  const existing = new Set();
+  if (r['GTIN-14 Dozen'] && String(r['GTIN-14 Dozen']).trim()) existing.add('pack');
+  if (r['GTIN-14 Box']   && String(r['GTIN-14 Box']).trim())   existing.add('box');
+  if (r['GTIN-14 Case']  && String(r['GTIN-14 Case']).trim())  existing.add('case');
+  if (r['GTIN-14 Pallet']&& String(r['GTIN-14 Pallet']).trim())existing.add('pallet');
+  return {
+    sku,
+    name     : String(r['Product Name'] || '').trim(),
+    variation: String(r['Variation']    || '').trim(),
+    gtin12, ref5, existingTypes: existing,
+  };
+}
+
 // BarcodeLogger API 실시간 조회 (입력값 기반)
 async function fetchFromBarcodeLogger(q) {
-  const url = APPS_SCRIPT_URL + '?action=search&q=' + encodeURIComponent(q.trim().toUpperCase());
+  const url  = APPS_SCRIPT_URL + '?action=search&q=' + encodeURIComponent(q.trim().toUpperCase());
   const res  = await fetch(url);
   const data = await res.json();
   if (data.status !== 'ok' || !Array.isArray(data.results)) return [];
+  return data.results.map(parseBLResult).filter(Boolean);
+}
 
-  return data.results.map(r => {
-    // BC_MASTER_HEADERS: 'GTIN-12','SKU','Product Name','Variation','Item Ref',
-    //   'Company Prefix','Check Digit','GTIN-14 Dozen','GTIN-14 Box','GTIN-14 Case','GTIN-14 Pallet',...
-    const sku   = String(r['SKU'] || '').trim();
-    const gtin12 = String(r['GTIN-12'] || '').trim().padStart(12, '0');
-    // Item Ref: 5자리 숫자 (시트 저장값 그대로)
-    let ref5 = String(r['Item Ref'] || '').trim();
-    if (!ref5 && gtin12.length === 12) ref5 = gtin12.slice(6, 11);
-    ref5 = ref5.padStart(5, '0');
+// ── API 연결 테스트 ───────────────────────────────────────────
+async function debugBarcodeLogger() {
+  const status = document.getElementById('lookupSrcStatus');
+  status.innerHTML = '🔧 테스트 중...';
+  try {
+    const [r1, r2, r3] = await Promise.all([
+      fetch(APPS_SCRIPT_URL).then(r => r.json()),
+      fetch(APPS_SCRIPT_URL + '?action=search&q=AS').then(r => r.json()),
+      fetch(APPS_SCRIPT_URL + '?action=getDuplicateCheckData').then(r => r.json()),
+    ]);
+    const lines = [
+      `✅ 헬스체크: master=${r1.master_count ?? '?'}개, log=${r1.log_count ?? '?'}개`,
+      `🔍 search(q=AS): status=${r2.status}, 결과=${r2.total ?? r2.results?.length ?? '?'}개`,
+      `📋 getDuplicateCheckData: status=${r3.status}, refs=${r3.refs?.length ?? '?'}개`,
+    ];
+    status.innerHTML = lines.map(l => `<div style="margin:2px 0;">${l}</div>`).join('');
 
-    const existing = new Set();
-    if (r['GTIN-14 Dozen'] && String(r['GTIN-14 Dozen']).trim()) existing.add('pack');
-    if (r['GTIN-14 Box']   && String(r['GTIN-14 Box']).trim())   existing.add('box');
-    if (r['GTIN-14 Case']  && String(r['GTIN-14 Case']).trim())  existing.add('case');
-    if (r['GTIN-14 Pallet']&& String(r['GTIN-14 Pallet']).trim())existing.add('pallet');
+    if (r2.status === 'ok' && r2.results?.length > 0) {
+      for (const r of r2.results) {
+        const p = parseBLResult(r);
+        if (p && !lookupProducts.find(x => x.sku === p.sku && x.variation === p.variation)) lookupProducts.push(p);
+      }
+      status.innerHTML += `<div style="margin-top:4px;color:var(--green);">✅ ${lookupProducts.length}개 캐시됨</div>`;
+    } else if (r2.status === 'ok' && !r2.results?.length) {
+      status.innerHTML += `<div style="margin-top:4px;color:var(--yellow);">⚠️ search 결과 0개 — BarcodeLogger.gs가 아직 이전 버전입니다. Apps Script에서 새 버전으로 재배포 필요.</div>`;
+    }
+  } catch(e) {
+    status.innerHTML = `❌ 연결 실패: ${e.message}`;
+  }
+}
 
-    return {
-      sku,
-      name     : String(r['Product Name'] || '').trim(),
-      variation: String(r['Variation']    || '').trim(),
-      gtin12,
-      ref5,
-      existingTypes: existing,
-      _raw: r,  // 디버그용
-    };
-  }).filter(p => p.sku);
+// ── 전체 SKU 일괄 로드 (prefix 분할 순차 fetch) ──────────────
+async function loadAllSkusForBulk() {
+  const status = document.getElementById('lookupSrcStatus');
+  lookupProducts = [];
+
+  // AS0~AS9 + ASA~ASZ 36개 prefix로 분할 (100개 제한 우회)
+  const prefixes = [];
+  for (let i = 0; i <= 9; i++) prefixes.push('AS' + i);
+  for (let c = 65; c <= 90; c++) prefixes.push('AS' + String.fromCharCode(c));
+
+  let total = 0;
+  for (let i = 0; i < prefixes.length; i++) {
+    status.innerHTML = `⏳ 전체 로드 중... (${i+1}/${prefixes.length}) — ${total}개 완료`;
+    try {
+      const res  = await fetch(APPS_SCRIPT_URL + '?action=search&q=' + encodeURIComponent(prefixes[i]));
+      const data = await res.json();
+      if (data.status === 'ok' && Array.isArray(data.results)) {
+        for (const r of data.results) {
+          const p = parseBLResult(r);
+          if (p && !lookupProducts.find(x => x.sku === p.sku && x.variation === p.variation)) {
+            lookupProducts.push(p); total++;
+          }
+        }
+      }
+    } catch(e) { /* 개별 실패 무시 */ }
+    await new Promise(r => setTimeout(r, 120));
+  }
+
+  status.innerHTML = `✅ 전체 로드 완료 — <strong>${total}개</strong> SKU 캐시됨`;
+  showLookupAlert(`✅ ${total}개 SKU 로드 완료 — 이제 검색창에서 바로 선택 가능합니다.`, 'success');
 }
 
 // ── 검색 자동완성 (실시간 BarcodeLogger API 호출) ─────────
