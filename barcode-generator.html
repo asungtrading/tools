@@ -442,6 +442,34 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
         </div>
       </div>
 
+      <!-- 수량 수정 -->
+      <div class="section">
+        <div class="sec-title">📝 기존 바코드 수량 수정</div>
+        <div class="card" style="padding:16px;">
+          <p style="font-size:11px;color:var(--muted);margin-bottom:14px;">바코드는 그대로 유지되고 Barcode Log의 수량(SKU suffix)만 업데이트됩니다.</p>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">
+            <div class="supp-pack-card">
+              <label>📦 Pack (Ind.1)</label>
+              <input type="number" id="lk-edit-pack" placeholder="현재 수량" min="1">
+            </div>
+            <div class="supp-pack-card">
+              <label>🗃️ Box (Ind.2)</label>
+              <input type="number" id="lk-edit-box" placeholder="현재 수량" min="1">
+            </div>
+            <div class="supp-pack-card">
+              <label>📫 Case (Ind.3)</label>
+              <input type="number" id="lk-edit-case" placeholder="현재 수량" min="1">
+            </div>
+            <div class="supp-pack-card">
+              <label>🚛 Pallet (Ind.8)</label>
+              <input type="number" id="lk-edit-pallet" placeholder="현재 수량" min="1">
+            </div>
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:10px;">입력한 타입만 수정됩니다. 비워두면 해당 타입은 변경 없음.</div>
+          <button class="supp-btn" style="background:var(--accent2);" onclick="lookupUpdateQty()">✏️ 수량 업데이트</button>
+        </div>
+      </div>
+
       <!-- 결과 -->
       <div class="section" id="lookupResultSection" style="display:none;">
         <div class="sec-title">생성 결과</div>
@@ -1451,7 +1479,89 @@ async function renderLookupResults() {
   }
 }
 
-// ── 다운로드 / 저장 ───────────────────────────────────────
+// ── 수량 수정 ─────────────────────────────────────────────────
+async function lookupUpdateQty() {
+  const newQtys = {
+    pack  : parseInt(document.getElementById('lk-edit-pack')?.value)   || 0,
+    box   : parseInt(document.getElementById('lk-edit-box')?.value)    || 0,
+    case  : parseInt(document.getElementById('lk-edit-case')?.value)   || 0,
+    pallet: parseInt(document.getElementById('lk-edit-pallet')?.value) || 0,
+  };
+  const typesToUpdate = Object.entries(newQtys).filter(([,v]) => v > 0);
+
+  if (!lookupSelected.length) { showLookupAlert('❌ SKU를 1개 이상 선택하세요.', 'error'); return; }
+  if (!typesToUpdate.length)  { showLookupAlert('❌ 수정할 수량을 1개 이상 입력하세요.', 'error'); return; }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const rows  = [];
+
+  for (const sel of lookupSelected) {
+    for (const [packKey, qty] of typesToUpdate) {
+      // 해당 타입의 바코드가 존재해야 수정 가능
+      if (!sel.existingTypes.has(packKey)) continue;
+
+      const cfg    = PACK_CONFIG[packKey];
+      const refNum = parseInt(sel.ref5);
+      if (!refNum) continue;
+
+      const gtin14 = buildGTIN14(refNum, cfg.indicator);
+
+      rows.push({
+        date         : today,
+        type         : packKey,
+        sku          : sel.sku + '-' + qty,   // 새 수량으로 suffix 업데이트
+        name         : sel.name,
+        variation    : sel.variation || '',
+        barcode      : gtin14,                 // 바코드 동일
+        qty,
+        companyPrefix: COMPANY_PREFIX,
+        ref          : sel.ref5,
+        format       : 'ITF14',
+      });
+    }
+  }
+
+  if (!rows.length) {
+    showLookupAlert('ℹ️ 수정 가능한 항목이 없습니다 — 선택된 SKU에 해당 타입 바코드가 존재하지 않습니다.', 'error');
+    return;
+  }
+
+  // saveRows로 Barcode Log에 수정 이력 기록
+  // (type이 pack/box/case/pallet이므로 Master Barcodes는 변경 없음)
+  const btn = document.querySelector('[onclick="lookupUpdateQty()"]');
+  if (btn) { btn.textContent = '저장 중...'; btn.style.pointerEvents = 'none'; }
+
+  try {
+    const BATCH = 10;
+    let saved = 0;
+    for (let b = 0; b < Math.ceil(rows.length / BATCH); b++) {
+      const chunk  = rows.slice(b * BATCH, (b+1) * BATCH);
+      const params = new URLSearchParams({ action: 'saveRows', data: JSON.stringify(chunk) });
+      const res    = await fetch(APPS_SCRIPT_URL + '?' + params.toString());
+      const data   = await res.json();
+      if (data.status !== 'ok') throw new Error(data.message);
+      saved += data.saved || chunk.length;
+      if (b < Math.ceil(rows.length/BATCH)-1) await new Promise(r => setTimeout(r, 800));
+    }
+
+    if (btn) { btn.textContent = '✓ 저장됨'; }
+    showLookupAlert(
+      `✅ ${saved}개 수량 업데이트 완료 — ` +
+      typesToUpdate.map(([k,v]) => {
+        const cfg = PACK_CONFIG[k];
+        return `${cfg.emoji} ${cfg.label}: ${v}개`;
+      }).join(', '),
+      'success'
+    );
+    setTimeout(() => {
+      if (btn) { btn.textContent = '✏️ 수량 업데이트'; btn.style.pointerEvents = 'auto'; }
+    }, 3000);
+
+  } catch(e) {
+    if (btn) { btn.textContent = '✏️ 수량 업데이트'; btn.style.pointerEvents = 'auto'; }
+    showLookupAlert('저장 실패: ' + e.message, 'error');
+  }
+}
 function lookupDownloadCSV() {
   if (!lookupGenRows.length) { showLookupAlert('먼저 바코드를 생성하세요.', 'error'); return; }
   const header = 'Date,Type,SKU,Product Name,Variation,Barcode,Qty/Pack,Company Prefix,Item Ref,Format\n';
