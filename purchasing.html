@@ -1091,7 +1091,7 @@ async function loadSalesDataFromBQ(){
         m.product_name,
         m.supplier_name,
         COALESCE(NULLIF(m.brand,''), '—') AS brand
-      FROM \`${BQ_PROJECT}.${BQ_PUR_DATASET}.asung_product_master\` m
+      FROM \`${BQ_PROJECT}.Cin7_Master_Data.asung_product_master\` m
       WHERE m.sku IS NOT NULL
         AND m.supplier_name IS NOT NULL
         AND m.supplier_name != ''
@@ -4101,14 +4101,13 @@ loadSettings();
 loadWMASettings();
 (async () => {
   try {
-    const [m, s] = await Promise.all([
-      fetch('master.json').then(r=>r.json()),
-      fetch('stock.json').then(r=>r.json())
-    ]);
-    MASTER = m; STOCK = s;
+    // master.json 제거 — 제품 마스터는 BQ asung_product_master에서 직접 로딩
+    // MASTER는 BQ 연결 후 supplierSkuSQL 결과로 채워짐
+    const s = await fetch('stock.json').then(r=>r.json());
+    MASTER = {}; STOCK = s;
   } catch(e) {
     console.error('데이터 로드 실패:', e);
-    alert('master.json / stock.json 로드 실패. purchasing.html과 같은 폴더에 있어야 합니다.');
+    alert('stock.json 로드 실패. purchasing.html과 같은 폴더에 있어야 합니다.');
     return;
   }
   buildNav();
