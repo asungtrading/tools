@@ -1083,33 +1083,19 @@ async function loadSalesDataFromBQ(){
 
     // ── Supplier SKU 마스터 쿼리: purchase_history + sales brand 조인
     // master.json에 없는 SKU도 발주추천에 포함, brand는 판매 테이블에서 보완
+    // asung_product_master: Cin7 /product API 전체 제품 마스터 (발주이력 무관)
+    // master.json 대체 — supplier/brand/product_name 최신 정보 제공
     const supplierSkuSQL = `
-      WITH pur AS (
-        SELECT
-          sku,
-          MAX(product_name)  AS product_name,
-          MAX(supplier_name) AS supplier_name
-        FROM \`${BQ_PROJECT}.${BQ_PUR_DATASET}.${BQ_PURCHASE}\`
-        WHERE status != 'VOIDED'
-          AND sku IS NOT NULL
-          AND supplier_name IS NOT NULL
-        GROUP BY sku
-      ),
-      sal AS (
-        SELECT
-          SKU AS sku,
-          MAX(COALESCE(NULLIF(Brand,''), '—')) AS brand
-        FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_SALES}\`
-        WHERE SKU IS NOT NULL
-        GROUP BY SKU
-      )
       SELECT
-        p.sku,
-        p.product_name,
-        p.supplier_name,
-        COALESCE(s.brand, '—') AS brand
-      FROM pur p
-      LEFT JOIN sal s USING(sku)
+        m.sku,
+        m.product_name,
+        m.supplier_name,
+        COALESCE(NULLIF(m.brand,''), '—') AS brand
+      FROM \`${BQ_PROJECT}.${BQ_PUR_DATASET}.asung_product_master\` m
+      WHERE m.sku IS NOT NULL
+        AND m.supplier_name IS NOT NULL
+        AND m.supplier_name != ''
+        AND m.is_active = true
     `;
 
     // ── ADU 쿼리: SKU별 최근 90일 일별 판매량
@@ -1437,11 +1423,11 @@ async function loadSalesDataFromBQ(){
         MASTER[sku] = { name: nm, brand: br, supplier: sup };
         masterPatchCount++;
       } else {
-        // 기존 SKU: supplier/brand 누락 시 보완
+        // 기존 SKU: BQ 데이터 항상 우선 적용 (master.json 덮어씀)
         let changed = false;
-        if (!MASTER[sku].supplier || MASTER[sku].supplier === '—') { MASTER[sku].supplier = sup; changed = true; }
-        if (!MASTER[sku].brand   || MASTER[sku].brand    === '—') { MASTER[sku].brand    = br;  changed = true; }
-        if (!MASTER[sku].name && nm) { MASTER[sku].name = nm; changed = true; }
+        if (sup && sup !== '—') { MASTER[sku].supplier = sup; changed = true; }
+        if (br  && br  !== '—') { MASTER[sku].brand    = br;  changed = true; }
+        if (nm && !MASTER[sku].name) { MASTER[sku].name = nm; changed = true; }
         if (changed) masterPatchCount++;
       }
     });
