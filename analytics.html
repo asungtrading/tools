@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Asung Analytics</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="https://accounts.google.com/gsi/client"></script>
 <style>
 :root {
   --bg: #080a0f;
@@ -287,6 +286,7 @@ html, body { overflow-x: hidden; max-width: 100vw; }
     <button class="tab-btn" onclick="switchTab('brand')">🏷 Brand Performance</button>
     <button class="tab-btn" onclick="switchTab('customer')">👤 Customer Performance</button>
     <button class="tab-btn" onclick="switchTab('monthly')">📅 Monthly Comparison</button>
+    <button class="tab-btn" onclick="switchTab('dropoff')">🔔 Customer Dropoff</button>
   </div>
 
   <!-- TAB: SALES (existing content) -->
@@ -581,23 +581,86 @@ html, body { overflow-x: hidden; max-width: 100vw; }
     </div>
   </div><!-- /tab-monthly -->
 
+  <!-- TAB: CUSTOMER DROPOFF -->
+  <div class="tab-panel" id="tab-dropoff">
+    <div class="price-search" style="flex-wrap:wrap;gap:12px;align-items:flex-end">
+      <div class="field">
+        <label class="field-label">분석 기간</label>
+        <select id="doAnalysisDays">
+          <option value="365" selected>최근 1년</option>
+          <option value="730">최근 2년</option>
+          <option value="547">최근 1.5년</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label">구매 중단 감지 기준</label>
+        <select id="doMultiplier">
+          <option value="2">평균간격 × 2배</option>
+          <option value="2.5" selected>평균간격 × 2.5배</option>
+          <option value="3">평균간격 × 3배</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label">최소 구매 횟수</label>
+        <select id="doMinCount">
+          <option value="2">2회 이상</option>
+          <option value="3" selected>3회 이상</option>
+          <option value="4">4회 이상</option>
+          <option value="5">5회 이상</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label">Branch</label>
+        <select id="doBranch">
+          <option value="">전체</option>
+          <option value="Asung Trading Inc.">Toronto</option>
+          <option value="Asung - Edmonton">Edmonton</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label">특정 고객 (선택)</label>
+        <div class="ac-wrap">
+          <input type="text" id="doCustomer" placeholder="전체 고객 분석" autocomplete="off"
+            oninput="acInput(this,'doCustomer')" onkeydown="acKey(event,'doCustomer')" onfocus="acInput(this,'doCustomer')">
+          <div class="ac-list" id="ac-doCustomer" style="display:none"></div>
+        </div>
+      </div>
+      <div>
+        <button class="search-btn" id="doSearchBtn" onclick="runDropoffAnalysis()">🔍 분석</button>
+      </div>
+    </div>
+    <!-- 설명 배너 -->
+    <div style="background:rgba(59,130,246,.06);border-bottom:1px solid rgba(59,130,246,.15);padding:10px 24px;font-size:11px;color:var(--mid);display:flex;align-items:center;gap:8px">
+      <span>💡</span>
+      <span>평균 구매 간격 대비 비정상적으로 오래 구매가 없는 고객-SKU 조합을 감지합니다. <strong style="color:var(--yellow)">재고 0인 SKU는 자동 제외</strong>됩니다 (품절로 인한 중단은 알림 불필요).</span>
+    </div>
+    <div class="content" id="dropoffContent">
+      <div class="empty-state">
+        <div class="empty-icon">🔔</div>
+        <div class="empty-title">구매 중단 감지 분석</div>
+        <div class="empty-desc">조건을 설정하고 분석 버튼을 눌러주세요.<br>분석 기간이 길수록 시간이 걸릴 수 있습니다.</div>
+      </div>
+    </div>
+  </div><!-- /tab-dropoff -->
+
 </div><!-- /mainApp -->
 
 <script>
 // ══════════════════════════════════════
 // CONFIG
 // ══════════════════════════════════════
-const CLIENT_ID = '105948904172-t1fvd0e8t2tl3ki6u17a4ok9vp0catp2.apps.googleusercontent.com';
+const CLIENT_ID  = '105948904172-t1fvd0e8t2tl3ki6u17a4ok9vp0catp2';
 const PROJECT_ID = 'geometric-rock-487814-k4';
-const DATASET = 'Cin7_Sales_Data';
-const TABLE = 'asung_sales_historical_data';
+const DATASET    = 'Cin7_Sales_Data';
+const TABLE      = 'asung_sales_unified';
+const BQ_STOCK   = 'asung_stock_daily';
 const ALLOWED_DOMAIN = 'asung.ca';
 
 let accessToken = null;
 let currentUser = null;
 let sortCol = null, sortAsc = true;
 const charts = {};
-const exportData = {}; // cache rendered data for CSV export
+const exportData = {};
 
 // ══════════════════════════════════════
 // TABS
@@ -610,77 +673,57 @@ function switchTab(tab) {
 }
 
 // ══════════════════════════════════════
-// AUTH  (Google Identity Services)
+// AUTH  (Implicit flow — purchasing 방식)
 // ══════════════════════════════════════
-let tokenClient = null;
-
-function initGIS() {
-  if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
-    setTimeout(initGIS, 100);
-    return;
-  }
-  tokenClient = window.google.accounts.oauth2.initTokenClient({
-    client_id: CLIENT_ID,
-    scope: 'https://www.googleapis.com/auth/bigquery.readonly https://www.googleapis.com/auth/userinfo.email openid',
-    callback: async (resp) => {
-      if (resp.error) {
-        document.getElementById('authErr').textContent = '로그인 오류: ' + resp.error;
-        return;
-      }
-      accessToken = resp.access_token;
-      sessionStorage.setItem('asung_token', accessToken);
-      sessionStorage.setItem('asung_token_exp', Date.now() + 55 * 60 * 1000);
-      await loadUser();
-    },
-    error_callback: (err) => {
-      if (err.type !== 'popup_closed') {
-        document.getElementById('authErr').textContent = '오류: ' + (err.message || err.type);
-      }
-    }
-  });
-}
+const SCOPES = 'https://www.googleapis.com/auth/bigquery.readonly https://www.googleapis.com/auth/userinfo.email openid';
 
 function signIn() {
-  if (!tokenClient) {
-    setTimeout(signIn, 200);
-    return;
-  }
-  document.getElementById('authErr').textContent = '';
-  tokenClient.requestAccessToken({ prompt: 'select_account' });
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    redirect_uri: window.location.origin + window.location.pathname,
+    response_type: 'token',
+    scope: SCOPES,
+    prompt: 'select_account',
+  });
+  window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params;
 }
 
 function signOut() {
-  if (accessToken && window.google && window.google.accounts && window.google.accounts.oauth2) {
+  if (accessToken && window.google?.accounts?.oauth2) {
     window.google.accounts.oauth2.revoke(accessToken, () => {});
   }
   accessToken = null; currentUser = null;
-  sessionStorage.removeItem('asung_token');
-  sessionStorage.removeItem('asung_token_exp');
+  localStorage.removeItem('asung_an_token');
+  localStorage.removeItem('asung_an_token_exp');
   document.getElementById('mainApp').style.display = 'none';
   document.getElementById('authScreen').style.display = 'flex';
   document.getElementById('authErr').textContent = '';
 }
 
 async function checkAuth() {
+  // 1) URL hash에서 토큰
   const hash = new URLSearchParams(window.location.hash.slice(1));
   const hashToken = hash.get('access_token');
+  const expiresIn = parseInt(hash.get('expires_in') || '3600');
   if (hashToken) {
     accessToken = hashToken;
-    sessionStorage.setItem('asung_token', accessToken);
-    sessionStorage.setItem('asung_token_exp', Date.now() + 55 * 60 * 1000);
+    const expAt = Date.now() + expiresIn * 1000;
+    localStorage.setItem('asung_an_token', accessToken);
+    localStorage.setItem('asung_an_token_exp', String(expAt));
     window.history.replaceState(null, '', window.location.pathname);
     await loadUser();
     return;
   }
-  const saved = sessionStorage.getItem('asung_token');
-  const exp   = parseInt(sessionStorage.getItem('asung_token_exp') || '0');
+  // 2) localStorage 캐시
+  const saved = localStorage.getItem('asung_an_token');
+  const exp   = parseInt(localStorage.getItem('asung_an_token_exp') || '0');
   if (saved && Date.now() < exp) {
     accessToken = saved;
     await loadUser();
     return;
   }
-  sessionStorage.removeItem('asung_token');
-  sessionStorage.removeItem('asung_token_exp');
+  localStorage.removeItem('asung_an_token');
+  localStorage.removeItem('asung_an_token_exp');
   document.getElementById('authScreen').style.display = 'flex';
 }
 async function loadUser() {
@@ -698,7 +741,7 @@ async function loadUser() {
     }
 
     currentUser = user;
-    sessionStorage.setItem('asung_token', accessToken);
+    localStorage.setItem('asung_an_token', accessToken);
 
     document.getElementById('userAvatar').src = user.picture || '';
     document.getElementById('userName').textContent = user.name || user.email;
@@ -721,8 +764,8 @@ async function loadUser() {
     loadCustomerList(); // preload for autocomplete
     loadBrandList();    // preload for autocomplete
   } catch(e) {
-    sessionStorage.removeItem('asung_token');
-    sessionStorage.removeItem('asung_token_exp');
+    localStorage.removeItem('asung_an_token');
+    localStorage.removeItem('asung_an_token_exp');
     accessToken = null;
     document.getElementById('authErr').textContent = '로그인 오류: ' + e.message;
     document.getElementById('authScreen').style.display = 'flex';
@@ -737,28 +780,43 @@ async function bqQuery(sql) {
   const res = await fetch(url, {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query: sql, useLegacySql: false, timeoutMs: 30000, location: 'US' })
+    body: JSON.stringify({ query: sql, useLegacySql: false, timeoutMs: 60000, maxResults: 100000 })
   });
-  if (res.status === 401) { signOut(); throw new Error('Session expired'); }
+  if (res.status === 401) {
+    localStorage.removeItem('asung_an_token');
+    localStorage.removeItem('asung_an_token_exp');
+    signOut();
+    throw new Error('Session expired — 다시 로그인하세요');
+  }
   const data = await res.json();
   if (data.error) throw new Error(data.error.message);
 
+  // Pagination
+  let rows = data.rows || [];
+  let pageToken = data.pageToken;
+  const jobId = data.jobReference?.jobId;
+  while (pageToken && jobId) {
+    const pageUrl = `https://bigquery.googleapis.com/bigquery/v2/projects/${PROJECT_ID}/queries/${jobId}?pageToken=${pageToken}&maxResults=100000`;
+    const pageRes = await fetch(pageUrl, { headers: { Authorization: 'Bearer ' + accessToken } });
+    const pageData = await pageRes.json();
+    rows = rows.concat(pageData.rows || []);
+    pageToken = pageData.pageToken;
+  }
   const fields = data.schema?.fields || [];
-  const rows = (data.rows || []).map(row =>
-    Object.fromEntries(fields.map((f,i) => [f.name, row.f[i]?.v ?? null]))
+  return rows.map(row =>
+    Object.fromEntries(fields.map((f, i) => [f.name, row.f[i]?.v ?? null]))
   );
-  return rows;
 }
 
 function buildWhere(params) {
   const conds = [];
-  if (params.dateFrom) conds.push(`Date >= '${params.dateFrom}'`);
-  if (params.dateTo)   conds.push(`Date <= '${params.dateTo}'`);
-  if (params.brand)    conds.push(`LOWER(Brand_Clean) LIKE LOWER('%${params.brand.replace(/'/g,"''")}%')`);
-  if (params.customer) conds.push(`LOWER(Customer_Clean) LIKE LOWER('%${params.customer.replace(/'/g,"''")}%')`);
-  if (params.sku)      conds.push(`(LOWER(SKU) LIKE LOWER('%${params.sku.replace(/'/g,"''")}%') OR LOWER(Product_Name) LIKE LOWER('%${params.sku.replace(/'/g,"''")}%'))`);
+  if (params.dateFrom) conds.push(`sale_date >= '${params.dateFrom}'`);
+  if (params.dateTo)   conds.push(`sale_date <= '${params.dateTo}'`);
+  if (params.brand)    conds.push(`LOWER(Brand) LIKE LOWER('%${params.brand.replace(/'/g,"''")}%')`);
+  if (params.customer) conds.push(`LOWER(customer) LIKE LOWER('%${params.customer.replace(/'/g,"''")}%')`);
+  if (params.sku)      conds.push(`(LOWER(SKU) LIKE LOWER('%${params.sku.replace(/'/g,"''")}%') OR LOWER(product) LIKE LOWER('%${params.sku.replace(/'/g,"''")}%'))`);
   if (params.branch)   conds.push(`Location = '${params.branch.replace(/'/g,"''")}'`);
-  if (params.source)   conds.push(`Source_Clean = '${params.source.replace(/'/g,"''")}'`);
+  if (params.source)   conds.push(`data_source = '${params.source.replace(/'/g,"''")}'`);
   return conds.length ? 'WHERE ' + conds.join(' AND ') : '';
 }
 
@@ -790,19 +848,19 @@ async function runSearch() {
 
     const [kpiRows, trendRows, brandRows, custRows, sourceRows, locationRows, detailRows] = await Promise.all([
       // KPI
-      bqQuery(`SELECT COUNT(DISTINCT OrderNumber) as orders, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(COGS) as cogs, SUM(Gross_Profit) as gp, COUNT(DISTINCT Customer_Clean) as customers FROM ${fullTable} ${where}`),
+      bqQuery(`SELECT COUNT(DISTINCT order_number) as orders, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(COGS) as cogs, SUM(Gross_Profit) as gp, COUNT(DISTINCT customer) as customers FROM ${fullTable} ${where}`),
       // Monthly trend
-      bqQuery(`SELECT FORMAT_DATE('%Y-%m', Date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY month ORDER BY month`),
+      bqQuery(`SELECT FORMAT_DATE('%Y-%m', sale_date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT order_number) as orders FROM ${fullTable} ${where} GROUP BY month ORDER BY month`),
       // Brand top 15
-      bqQuery(`SELECT Brand_Clean as brand, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY brand ORDER BY revenue DESC LIMIT 15`),
+      bqQuery(`SELECT Brand as brand, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT order_number) as orders FROM ${fullTable} ${where} GROUP BY brand ORDER BY revenue DESC LIMIT 15`),
       // Customer top 15
-      bqQuery(`SELECT Customer_Clean as customer, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY customer ORDER BY revenue DESC LIMIT 15`),
+      bqQuery(`SELECT customer, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT order_number) as orders FROM ${fullTable} ${where} GROUP BY customer ORDER BY revenue DESC LIMIT 15`),
       // Source
-      bqQuery(`SELECT Source_Clean as source, SUM(Total) as revenue, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY source ORDER BY revenue DESC`),
+      bqQuery(`SELECT data_source as source, SUM(Total) as revenue, COUNT(DISTINCT order_number) as orders FROM ${fullTable} ${where} GROUP BY source ORDER BY revenue DESC`),
       // Location
       bqQuery(`SELECT Location as location, SUM(Total) as revenue, SUM(Gross_Profit) as gp FROM ${fullTable} ${where} GROUP BY location ORDER BY revenue DESC`),
       // Detail rows (top 200)
-      bqQuery(`SELECT Date, OrderNumber, Customer_Clean as customer, Brand_Clean as brand, SKU, Product_Name as product, Quantity as qty, Unit_Price as price, Total as total, Gross_Profit as gp, Location as location, Source_Clean as source FROM ${fullTable} ${where} ORDER BY Date DESC LIMIT 200`),
+      bqQuery(`SELECT sale_date as Date, order_number as OrderNumber, customer, Brand as brand, SKU, product, Quantity as qty, Unit_Price as price, Total as total, Gross_Profit as gp, Location as location, data_source as source FROM ${fullTable} ${where} ORDER BY sale_date DESC LIMIT 200`),
     ]);
 
     document.getElementById('queryInfo').textContent = `${detailRows.length}+ rows`;
@@ -1076,11 +1134,11 @@ async function runPriceSearch() {
 
   const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
   const conds = [`LOWER(SKU) = LOWER('${sku.replace(/'/g,"''")}' )`];
-  if (customer) conds.push(`LOWER(Customer_Clean) LIKE LOWER('%${customer.replace(/'/g,"''")}%')`);
-  if (brand)    conds.push(`LOWER(Brand_Clean) LIKE LOWER('%${brand.replace(/'/g,"''")}%')`);
+  if (customer) conds.push(`LOWER(customer) LIKE LOWER('%${customer.replace(/'/g,"''")}%')`);
+  if (brand)    conds.push(`LOWER(Brand) LIKE LOWER('%${brand.replace(/'/g,"''")}%')`);
   if (branch)   conds.push(`Location = '${branch.replace(/'/g,"''")}'`);
-  if (dateFrom) conds.push(`Date >= '${dateFrom}'`);
-  if (dateTo)   conds.push(`Date <= '${dateTo}'`);
+  if (dateFrom) conds.push(`sale_date >= '${dateFrom}'`);
+  if (dateTo)   conds.push(`sale_date <= '${dateTo}'`);
   const where = 'WHERE ' + conds.join(' AND ');
 
   try {
@@ -1089,13 +1147,13 @@ async function runPriceSearch() {
       bqQuery(`
         SELECT
           ROUND(Unit_Price, 2) as price,
-          MIN(CAST(Date AS STRING)) as first_date,
-          MAX(CAST(Date AS STRING)) as last_date,
+          MIN(CAST(sale_date AS STRING)) as first_date,
+          MAX(CAST(sale_date AS STRING)) as last_date,
           SUM(Quantity) as qty,
           SUM(Total) as revenue,
           SUM(Gross_Profit) as gp,
-          COUNT(DISTINCT OrderNumber) as orders,
-          COUNT(DISTINCT Customer_Clean) as customers
+          COUNT(DISTINCT order_number) as orders,
+          COUNT(DISTINCT customer) as customers
         FROM ${fullTable} ${where}
         GROUP BY price
         ORDER BY price
@@ -1103,9 +1161,9 @@ async function runPriceSearch() {
       // Overall summary
       bqQuery(`
         SELECT
-          SKU, MAX(Product_Name) as product, MAX(Brand_Clean) as brand,
+          SKU, MAX(product) as product, MAX(Brand) as brand,
           SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp,
-          COUNT(DISTINCT OrderNumber) as orders,
+          COUNT(DISTINCT order_number) as orders,
           MIN(Unit_Price) as min_price, MAX(Unit_Price) as max_price,
           ROUND(SUM(Total)/NULLIF(SUM(Quantity),0),2) as avg_price
         FROM ${fullTable} ${where}
@@ -1113,9 +1171,9 @@ async function runPriceSearch() {
       `),
       // Top customers at each common price — with date range
       bqQuery(`
-        SELECT Customer_Clean as customer, ROUND(Unit_Price,2) as price,
-          MIN(CAST(Date AS STRING)) as first_date,
-          MAX(CAST(Date AS STRING)) as last_date,
+        SELECT customer, ROUND(Unit_Price,2) as price,
+          MIN(CAST(sale_date AS STRING)) as first_date,
+          MAX(CAST(sale_date AS STRING)) as last_date,
           SUM(Quantity) as qty, SUM(Total) as revenue
         FROM ${fullTable} ${where}
         GROUP BY customer, price
@@ -1389,12 +1447,12 @@ async function runBrandSearch() {
   const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
   // Each brand uses LIKE for fuzzy match, joined by OR (apostrophes escaped as \u0027)
   const sqlStrW = s => "'" + s.replace(/\\/g,'\\\\').replace(/'/g,'\\u0027').replace(/\n/g,'\\n') + "'";
-  const brandClauses = brands.map(b => `LOWER(Brand_Clean) LIKE LOWER(${sqlStrW('%'+b.toLowerCase()+'%')})`);
+  const brandClauses = brands.map(b => `LOWER(Brand) LIKE LOWER(${sqlStrW('%'+b.toLowerCase()+'%')})`);
   const conds = ['(' + brandClauses.join(' OR ') + ')'];
   if (branch)   conds.push(`Location = '${branch.replace(/'/g,"''")}'`);
-  if (source)   conds.push(`Source_Clean = '${source.replace(/'/g,"''")}'`);
-  if (dateFrom) conds.push(`Date >= '${dateFrom}'`);
-  if (dateTo)   conds.push(`Date <= '${dateTo}'`);
+  if (source)   conds.push(`data_source = '${source.replace(/'/g,"''")}'`);
+  if (dateFrom) conds.push(`sale_date >= '${dateFrom}'`);
+  if (dateTo)   conds.push(`sale_date <= '${dateTo}'`);
   const where = 'WHERE ' + conds.join(' AND ');
 
   // Build a CASE expression to bucket rows into the user-typed brand label.
@@ -1407,21 +1465,21 @@ async function runBrandSearch() {
     .replace(/'/g, '\\u0027')
     .replace(/\n/g, '\\n') + "'";
   const caseExpr = 'CASE ' + brands.map(b =>
-    `WHEN LOWER(Brand_Clean) LIKE LOWER(${sqlStr('%'+b.toLowerCase()+'%')}) THEN ${sqlStr(b)}`
+    `WHEN LOWER(Brand) LIKE LOWER(${sqlStr('%'+b.toLowerCase()+'%')}) THEN ${sqlStr(b)}`
   ).join(' ') + ' ELSE NULL END';
 
   try {
     const queries = [
       // Summary per brand bucket
-      bqQuery(`SELECT ${caseExpr} as brand_label, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders, COUNT(DISTINCT Customer_Clean) as customers, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY brand_label HAVING brand_label IS NOT NULL`),
+      bqQuery(`SELECT ${caseExpr} as brand_label, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT order_number) as orders, COUNT(DISTINCT customer) as customers, MIN(CAST(sale_date AS STRING)) as first_date, MAX(CAST(sale_date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY brand_label HAVING brand_label IS NOT NULL`),
       // Monthly trend per brand bucket
-      bqQuery(`SELECT ${caseExpr} as brand_label, FORMAT_DATE('%Y-%m', Date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty FROM ${fullTable} ${where} GROUP BY brand_label, month HAVING brand_label IS NOT NULL ORDER BY month`),
+      bqQuery(`SELECT ${caseExpr} as brand_label, FORMAT_DATE('%Y-%m', sale_date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty FROM ${fullTable} ${where} GROUP BY brand_label, month HAVING brand_label IS NOT NULL ORDER BY month`),
     ];
     // Single-brand mode also loads SKU / Customer deep dive
     if (brands.length === 1) {
       queries.push(
-        bqQuery(`SELECT SKU, MAX(Product_Name) as product, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY SKU ORDER BY revenue DESC LIMIT 50`),
-        bqQuery(`SELECT Customer_Clean as customer, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY customer ORDER BY revenue DESC LIMIT 50`)
+        bqQuery(`SELECT SKU, MAX(product) as product, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT order_number) as orders, MIN(CAST(sale_date AS STRING)) as first_date, MAX(CAST(sale_date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY SKU ORDER BY revenue DESC LIMIT 50`),
+        bqQuery(`SELECT customer, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT order_number) as orders, MIN(CAST(sale_date AS STRING)) as first_date, MAX(CAST(sale_date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY customer ORDER BY revenue DESC LIMIT 50`)
       );
     }
     const results = await Promise.all(queries);
@@ -1726,27 +1784,27 @@ async function runCustomerSearch() {
   const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
   // Apostrophe-safe literal encoder (same pattern as brand tab)
   const sqlStr = s => "'" + s.replace(/\\/g,'\\\\').replace(/'/g,'\\u0027').replace(/\n/g,'\\n') + "'";
-  const custClauses = customers.map(c => `LOWER(Customer_Clean) LIKE LOWER(${sqlStr('%'+c.toLowerCase()+'%')})`);
+  const custClauses = customers.map(c => `LOWER(customer) LIKE LOWER(${sqlStr('%'+c.toLowerCase()+'%')})`);
   const conds = ['(' + custClauses.join(' OR ') + ')'];
   if (branch)   conds.push(`Location = ${sqlStr(branch)}`);
-  if (source)   conds.push(`Source_Clean = ${sqlStr(source)}`);
-  if (dateFrom) conds.push(`Date >= '${dateFrom}'`);
-  if (dateTo)   conds.push(`Date <= '${dateTo}'`);
+  if (source)   conds.push(`data_source = ${sqlStr(source)}`);
+  if (dateFrom) conds.push(`sale_date >= '${dateFrom}'`);
+  if (dateTo)   conds.push(`sale_date <= '${dateTo}'`);
   const where = 'WHERE ' + conds.join(' AND ');
 
   const caseExpr = 'CASE ' + customers.map(c =>
-    `WHEN LOWER(Customer_Clean) LIKE LOWER(${sqlStr('%'+c.toLowerCase()+'%')}) THEN ${sqlStr(c)}`
+    `WHEN LOWER(customer) LIKE LOWER(${sqlStr('%'+c.toLowerCase()+'%')}) THEN ${sqlStr(c)}`
   ).join(' ') + ' ELSE NULL END';
 
   try {
     const queries = [
-      bqQuery(`SELECT ${caseExpr} as cust_label, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders, COUNT(DISTINCT Brand_Clean) as brands, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY cust_label HAVING cust_label IS NOT NULL`),
-      bqQuery(`SELECT ${caseExpr} as cust_label, FORMAT_DATE('%Y-%m', Date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders FROM ${fullTable} ${where} GROUP BY cust_label, month HAVING cust_label IS NOT NULL ORDER BY month`),
+      bqQuery(`SELECT ${caseExpr} as cust_label, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT order_number) as orders, COUNT(DISTINCT Brand) as brands, MIN(CAST(sale_date AS STRING)) as first_date, MAX(CAST(sale_date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY cust_label HAVING cust_label IS NOT NULL`),
+      bqQuery(`SELECT ${caseExpr} as cust_label, FORMAT_DATE('%Y-%m', sale_date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT order_number) as orders FROM ${fullTable} ${where} GROUP BY cust_label, month HAVING cust_label IS NOT NULL ORDER BY month`),
     ];
     if (customers.length === 1) {
       queries.push(
-        bqQuery(`SELECT Brand_Clean as brand, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY brand ORDER BY revenue DESC LIMIT 30`),
-        bqQuery(`SELECT SKU, MAX(Product_Name) as product, MAX(Brand_Clean) as brand, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT OrderNumber) as orders, ROUND(SUM(Total)/NULLIF(SUM(Quantity),0),2) as avg_price, MIN(CAST(Date AS STRING)) as first_date, MAX(CAST(Date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY SKU ORDER BY revenue DESC LIMIT 50`)
+        bqQuery(`SELECT Brand as brand, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT order_number) as orders, MIN(CAST(sale_date AS STRING)) as first_date, MAX(CAST(sale_date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY brand ORDER BY revenue DESC LIMIT 30`),
+        bqQuery(`SELECT SKU, MAX(product) as product, MAX(Brand) as brand, SUM(Quantity) as qty, SUM(Total) as revenue, SUM(Gross_Profit) as gp, COUNT(DISTINCT order_number) as orders, ROUND(SUM(Total)/NULLIF(SUM(Quantity),0),2) as avg_price, MIN(CAST(sale_date AS STRING)) as first_date, MAX(CAST(sale_date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY SKU ORDER BY revenue DESC LIMIT 50`)
       );
     }
     const results = await Promise.all(queries);
@@ -2001,7 +2059,7 @@ async function loadCustomerList() {
   if (customerList.length) return;
   try {
     const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
-    const rows = await bqQuery(`SELECT DISTINCT Customer_Clean as name FROM ${fullTable} WHERE Customer_Clean IS NOT NULL ORDER BY name LIMIT 20000`);
+    const rows = await bqQuery(`SELECT DISTINCT customer as name FROM ${fullTable} WHERE customer IS NOT NULL ORDER BY name LIMIT 20000`);
     customerList = rows.map(r => r.name).filter(Boolean);
   } catch(e) { console.warn('Customer list load failed:', e.message); }
 }
@@ -2010,7 +2068,7 @@ async function loadBrandList() {
   if (brandList.length) return;
   try {
     const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
-    const rows = await bqQuery(`SELECT DISTINCT Brand_Clean as name FROM ${fullTable} WHERE Brand_Clean IS NOT NULL ORDER BY name LIMIT 2000`);
+    const rows = await bqQuery(`SELECT DISTINCT Brand as name FROM ${fullTable} WHERE Brand IS NOT NULL ORDER BY name LIMIT 2000`);
     brandList = rows.map(r => r.name).filter(Boolean);
   } catch(e) { console.warn('Brand list load failed:', e.message); }
 }
@@ -2221,14 +2279,14 @@ async function runMonthlyComparison(mode='year', custom=null) {
   const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
   const conds = [];
   if (branch)   conds.push(`Location = '${branch.replace(/'/g,"''")}'`);
-  if (brand)    conds.push(`LOWER(Brand_Clean) LIKE LOWER('%${brand.replace(/'/g,"''")}%')`);
-  if (customer) conds.push(`LOWER(Customer_Clean) LIKE LOWER('%${customer.replace(/'/g,"''")}%')`);
+  if (brand)    conds.push(`LOWER(Brand) LIKE LOWER('%${brand.replace(/'/g,"''")}%')`);
+  if (customer) conds.push(`LOWER(customer) LIKE LOWER('%${customer.replace(/'/g,"''")}%')`);
   const baseWhere = conds.length ? 'AND ' + conds.join(' AND ') : '';
 
   try {
     const [rows1, rows2] = await Promise.all([
-      bqQuery(`SELECT FORMAT_DATE('%Y-%m', Date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders, COUNT(DISTINCT Customer_Clean) as customers FROM ${fullTable} WHERE Date >= '${from1}' AND Date <= '${to1}' ${baseWhere} GROUP BY month ORDER BY month`),
-      bqQuery(`SELECT FORMAT_DATE('%Y-%m', Date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT OrderNumber) as orders, COUNT(DISTINCT Customer_Clean) as customers FROM ${fullTable} WHERE Date >= '${from2}' AND Date <= '${to2}' ${baseWhere} GROUP BY month ORDER BY month`)
+      bqQuery(`SELECT FORMAT_DATE('%Y-%m', sale_date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT order_number) as orders, COUNT(DISTINCT customer) as customers FROM ${fullTable} WHERE sale_date >= '${from1}' AND sale_date <= '${to1}' ${baseWhere} GROUP BY month ORDER BY month`),
+      bqQuery(`SELECT FORMAT_DATE('%Y-%m', sale_date) as month, SUM(Total) as revenue, SUM(Gross_Profit) as gp, SUM(Quantity) as qty, COUNT(DISTINCT order_number) as orders, COUNT(DISTINCT customer) as customers FROM ${fullTable} WHERE sale_date >= '${from2}' AND sale_date <= '${to2}' ${baseWhere} GROUP BY month ORDER BY month`)
     ]);
     btn.disabled = false; btn.textContent = '🔍 연도 비교';
     renderMonthlyComparison({ rows1, rows2, label1, label2 });
@@ -2386,8 +2444,284 @@ function renderMonthlyComparison({ rows1, rows2, label1, label2 }) {
   ]}, options:{...baseOpts(45), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,mode:'index'}}}});
 }
 
+// ══════════════════════════════════════
+// CUSTOMER DROPOFF ANALYSIS
+// ══════════════════════════════════════
+async function runDropoffAnalysis() {
+  const analysisDays  = parseInt(document.getElementById('doAnalysisDays').value);
+  const multiplier    = parseFloat(document.getElementById('doMultiplier').value);
+  const minCount      = parseInt(document.getElementById('doMinCount').value);
+  const branch        = document.getElementById('doBranch').value;
+  const targetCustomer = document.getElementById('doCustomer').value.trim();
+
+  const btn = document.getElementById('doSearchBtn');
+  btn.disabled = true; btn.textContent = '⏳ 분석 중...';
+  document.getElementById('dropoffContent').innerHTML = '<div class="loading"><div class="spinner"></div> BigQuery 분석 중...</div>';
+
+  const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
+  const stockTable = `\`${PROJECT_ID}.${DATASET}.${BQ_STOCK}\``;
+  const since = new Date(Date.now() - analysisDays * 86400000).toISOString().slice(0,10);
+
+  // 고객/브랜치 필터
+  const extraConds = [];
+  if (branch)         extraConds.push(`Location = '${branch.replace(/'/g,"''")}'`);
+  if (targetCustomer) extraConds.push(`LOWER(customer) LIKE LOWER('%${targetCustomer.replace(/'/g,"''")}%')`);
+  const extraWhere = extraConds.length ? 'AND ' + extraConds.join(' AND ') : '';
+
+  try {
+    // ── 1. 고객-SKU별 구매 이력 집계 (BQ에서 한방에)
+    const purchaseSQL = `
+      WITH purchase_history AS (
+        SELECT
+          customer,
+          SKU,
+          MAX(product) as product_name,
+          MAX(Brand) as brand,
+          COUNT(*) as purchase_count,
+          MIN(sale_date) as first_purchase,
+          MAX(sale_date) as last_purchase,
+          -- 구매일 배열 (간격 계산용)
+          ARRAY_AGG(sale_date ORDER BY sale_date) as purchase_dates
+        FROM ${fullTable}
+        WHERE sale_date >= '${since}'
+          AND status NOT IN ('VOIDED')
+          AND invoice_number IS NOT NULL
+          ${extraWhere}
+        GROUP BY customer, SKU
+        HAVING COUNT(*) >= ${minCount}
+      ),
+      intervals AS (
+        SELECT
+          customer, SKU, product_name, brand,
+          purchase_count, first_purchase, last_purchase,
+          -- 평균 구매 간격 계산 (날짜 배열에서)
+          DATE_DIFF(last_purchase, first_purchase, DAY) / NULLIF(purchase_count - 1, 0) as avg_interval_days,
+          DATE_DIFF(CURRENT_DATE(), last_purchase, DAY) as days_since_last
+        FROM purchase_history
+        WHERE purchase_count >= 2  -- 간격 계산에 최소 2회 필요
+      ),
+      -- 재고 0 SKU (OnHand=0 AND OnOrder=0) — 최신 snapshot
+      zero_stock AS (
+        SELECT DISTINCT sku
+        FROM ${stockTable}
+        WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM ${stockTable})
+        GROUP BY sku
+        HAVING SUM(qty_on_hand) = 0 AND SUM(on_order) = 0
+      )
+      SELECT
+        i.customer,
+        i.SKU,
+        i.product_name,
+        i.brand,
+        i.purchase_count,
+        CAST(i.first_purchase AS STRING) as first_purchase,
+        CAST(i.last_purchase AS STRING) as last_purchase,
+        ROUND(i.avg_interval_days, 1) as avg_interval_days,
+        i.days_since_last,
+        ROUND(i.days_since_last / NULLIF(i.avg_interval_days, 0), 2) as overdue_multiple,
+        CASE WHEN z.sku IS NOT NULL THEN 'OUT_OF_STOCK' ELSE 'IN_STOCK' END as stock_status
+      FROM intervals i
+      LEFT JOIN zero_stock z ON LOWER(i.SKU) = LOWER(z.sku)
+      WHERE i.avg_interval_days >= 7  -- 최소 7일 간격 이상인 패턴만
+        AND i.days_since_last > i.avg_interval_days * ${multiplier}
+        AND z.sku IS NULL  -- 재고 0 SKU 제외
+      ORDER BY i.days_since_last DESC
+      LIMIT 500
+    `;
+
+    const dropoffRows = await bqQuery(purchaseSQL);
+
+    btn.disabled = false; btn.textContent = '🔍 분석';
+
+    if (!dropoffRows.length) {
+      document.getElementById('dropoffContent').innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">✅</div>
+          <div class="empty-title">감지된 구매 중단 없음</div>
+          <div class="empty-desc">설정한 조건에 해당하는 구매 중단이 없습니다.<br>기준을 낮추거나 분석 기간을 늘려보세요.</div>
+        </div>`;
+      return;
+    }
+    renderDropoffResults(dropoffRows, { analysisDays, multiplier, minCount });
+
+  } catch(e) {
+    btn.disabled = false; btn.textContent = '🔍 분석';
+    document.getElementById('dropoffContent').innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">⚠️</div>
+        <div class="empty-title">쿼리 오류</div>
+        <div class="empty-desc">${e.message}</div>
+      </div>`;
+  }
+}
+
+function renderDropoffResults(rows, config) {
+  exportData.dropoff = rows.map(r => ({
+    Customer: r.customer, SKU: r.SKU, Product: r.product_name, Brand: r.brand,
+    Purchase_Count: r.purchase_count, First_Purchase: r.first_purchase, Last_Purchase: r.last_purchase,
+    Avg_Interval_Days: r.avg_interval_days, Days_Since_Last: r.days_since_last,
+    Overdue_Multiple: r.overdue_multiple, Stock_Status: r.stock_status,
+  }));
+
+  // 고객별 집계
+  const customerMap = {};
+  rows.forEach(r => {
+    if (!customerMap[r.customer]) customerMap[r.customer] = 0;
+    customerMap[r.customer]++;
+  });
+  const topCustomers = Object.entries(customerMap)
+    .sort((a,b) => b[1] - a[1]).slice(0,8);
+
+  // 연체 배수 분포
+  const bands = { '2~3x': 0, '3~5x': 0, '5x+': 0 };
+  rows.forEach(r => {
+    const m = parseFloat(r.overdue_multiple)||0;
+    if (m >= 5) bands['5x+']++;
+    else if (m >= 3) bands['3~5x']++;
+    else bands['2~3x']++;
+  });
+
+  // 행 색상
+  const rowColor = m => {
+    m = parseFloat(m)||0;
+    if (m >= 5) return 'rgba(239,68,68,.08)';
+    if (m >= 3) return 'rgba(249,115,22,.08)';
+    return 'rgba(234,179,8,.05)';
+  };
+  const multipleColor = m => {
+    m = parseFloat(m)||0;
+    if (m >= 5) return 'var(--red)';
+    if (m >= 3) return 'var(--orange)';
+    return 'var(--yellow)';
+  };
+
+  document.getElementById('dropoffContent').innerHTML = `
+    <div style="padding:20px 24px 0">
+
+      <!-- KPI 스트립 -->
+      <div class="kpi-strip" style="margin-bottom:20px">
+        <div class="kpi red">
+          <div class="kpi-lbl">감지된 케이스</div>
+          <div class="kpi-val">${rows.length}</div>
+          <div class="kpi-sub">고객-SKU 조합</div>
+        </div>
+        <div class="kpi yellow">
+          <div class="kpi-lbl">영향 받는 고객</div>
+          <div class="kpi-val">${Object.keys(customerMap).length}</div>
+          <div class="kpi-sub">명</div>
+        </div>
+        <div class="kpi red">
+          <div class="kpi-lbl">5배+ 연체 (심각)</div>
+          <div class="kpi-val">${bands['5x+']}</div>
+          <div class="kpi-sub">즉시 확인 필요</div>
+        </div>
+        <div class="kpi orange" style="--orange:#f97316">
+          <div class="kpi-lbl" style="color:var(--dim)">3~5배 연체</div>
+          <div class="kpi-val" style="color:#f97316">${bands['3~5x']}</div>
+          <div class="kpi-sub">주의</div>
+        </div>
+        <div class="kpi yellow">
+          <div class="kpi-lbl">2~3배 연체</div>
+          <div class="kpi-val">${bands['2~3x']}</div>
+          <div class="kpi-sub">모니터링</div>
+        </div>
+        <div class="kpi blue">
+          <div class="kpi-lbl">분석 기간</div>
+          <div class="kpi-val">${config.analysisDays}일</div>
+          <div class="kpi-sub">기준: ${config.multiplier}배 / 최소 ${config.minCount}회</div>
+        </div>
+      </div>
+
+      <!-- 차트 -->
+      <div class="charts-grid" style="margin-bottom:16px">
+        <div class="card">
+          <div class="card-hdr">
+            <span class="card-title">고객별 중단 SKU 수</span>
+            <span class="card-badge">Top 8</span>
+          </div>
+          <div class="chart-box tall"><canvas id="cDoCustomer"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">연체 배수 분포</span></div>
+          <div class="chart-box tall"><canvas id="cDoBands"></canvas></div>
+        </div>
+      </div>
+
+      <!-- 결과 테이블 -->
+      <div class="tbl-card" style="margin-bottom:24px">
+        <div class="tbl-hdr">
+          <span class="tbl-title">구매 중단 감지 목록</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="tbl-count">${rows.length}건 (재고 0 제외됨)</span>
+            <button class="export-btn" onclick="exportCSV(exportData.dropoff,'customer_dropoff.csv')">⬇ CSV</button>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr>
+              <th>고객명</th>
+              <th>SKU</th>
+              <th>제품명</th>
+              <th>브랜드</th>
+              <th class="num">구매횟수</th>
+              <th>마지막 구매일</th>
+              <th class="num">평균간격(일)</th>
+              <th class="num">경과(일)</th>
+              <th class="num">연체배수</th>
+            </tr></thead>
+            <tbody>
+              ${rows.map(r => `
+                <tr style="background:${rowColor(r.overdue_multiple)}">
+                  <td style="font-weight:600">${r.customer||'—'}</td>
+                  <td style="font-family:monospace;font-size:11px">${r.SKU||'—'}</td>
+                  <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.product_name||''}">${r.product_name||'—'}</td>
+                  <td style="font-size:11px;color:var(--mid)">${r.brand||'—'}</td>
+                  <td class="num">${r.purchase_count||0}</td>
+                  <td style="font-size:11px;white-space:nowrap">${r.last_purchase||'—'}</td>
+                  <td class="num">${r.avg_interval_days||'—'}</td>
+                  <td class="num" style="font-weight:600">${r.days_since_last||0}</td>
+                  <td class="num" style="font-weight:700;color:${multipleColor(r.overdue_multiple)}">
+                    ${parseFloat(r.overdue_multiple||0).toFixed(1)}x
+                  </td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // 고객별 차트
+  mkChart('cDoCustomer', {
+    type: 'bar', indexAxis: 'y',
+    data: {
+      labels: topCustomers.map(([c]) => c.length > 22 ? c.slice(0,22)+'…' : c),
+      datasets: [{ label: '중단 SKU 수', data: topCustomers.map(([,v]) => v),
+        backgroundColor: 'rgba(239,68,68,0.7)', borderRadius: 3 }]
+    },
+    options: { responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+ctx.raw+' SKUs'}} },
+      scales:{ x:{grid:{color:'#1a2233'},ticks:{color:'#475569',font:{size:9}}}, y:{grid:{color:'#1a2233'},ticks:{color:'#94a3b8',font:{size:9}}} }
+    }
+  });
+
+  // 연체 배수 분포 도넛
+  mkChart('cDoBands', {
+    type: 'doughnut',
+    data: {
+      labels: ['2~3배', '3~5배', '5배+'],
+      datasets: [{ data: [bands['2~3x'], bands['3~5x'], bands['5x+']],
+        backgroundColor: ['rgba(234,179,8,0.8)', 'rgba(249,115,22,0.8)', 'rgba(239,68,68,0.8)'],
+        borderWidth: 1, borderColor: '#080a0f' }]
+    },
+    options: { responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:11},boxWidth:12}},
+        tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+ctx.raw+'건 ('+ctx.label+')'}} }
+    }
+  });
+}
+
 // ── INIT ──
-initGIS();
 checkAuth();
 </script>
 </body>
