@@ -809,7 +809,7 @@ async function bqQuery(sql) {
 }
 
 function buildWhere(params) {
-  const conds = [`Order_Progress IN ('5.Fulfilled', '4.Invoiced')`];
+  const conds = [`UPPER(Status) IN ('CLOSED', 'COMPLETED')`];
   if (params.dateFrom) conds.push(`invoice_date >= '${params.dateFrom}'`);
   if (params.dateTo)   conds.push(`invoice_date <= '${params.dateTo}'`);
   if (params.brand)    conds.push(`LOWER(Brand) LIKE LOWER('%${params.brand.replace(/'/g,"''")}%')`);
@@ -1133,7 +1133,7 @@ async function runPriceSearch() {
   document.getElementById('priceContent').innerHTML = '<div class="loading"><div class="spinner"></div> BigQuery 쿼리 중...</div>';
 
   const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
-  const conds = [`Order_Progress IN ('5.Fulfilled', '4.Invoiced')`, `LOWER(SKU) = LOWER('${sku.replace(/'/g,"''")}' )`];
+  const conds = [`UPPER(Status) IN ('CLOSED', 'COMPLETED')`, `LOWER(SKU) = LOWER('${sku.replace(/'/g,"''")}' )`];
   if (customer) conds.push(`LOWER(customer) LIKE LOWER('%${customer.replace(/'/g,"''")}%')`);
   if (brand)    conds.push(`LOWER(Brand) LIKE LOWER('%${brand.replace(/'/g,"''")}%')`);
   if (branch)   conds.push(`location = '${branch.replace(/'/g,"''")}'`);
@@ -1448,7 +1448,7 @@ async function runBrandSearch() {
   // Each brand uses LIKE for fuzzy match, joined by OR (apostrophes escaped as \u0027)
   const sqlStrW = s => "'" + s.replace(/\\/g,'\\\\').replace(/'/g,'\\u0027').replace(/\n/g,'\\n') + "'";
   const brandClauses = brands.map(b => `LOWER(Brand) LIKE LOWER(${sqlStrW('%'+b.toLowerCase()+'%')})`);
-  const conds = [`Order_Progress IN ('5.Fulfilled', '4.Invoiced')`, '(' + brandClauses.join(' OR ') + ')'];
+  const conds = [`UPPER(Status) IN ('CLOSED', 'COMPLETED')`, '(' + brandClauses.join(' OR ') + ')'];
   if (branch)   conds.push(`location = '${branch.replace(/'/g,"''")}'`);
   if (source)   conds.push(`data_source = '${source.replace(/'/g,"''")}'`);
   if (dateFrom) conds.push(`invoice_date >= '${dateFrom}'`);
@@ -1785,7 +1785,7 @@ async function runCustomerSearch() {
   // Apostrophe-safe literal encoder (same pattern as brand tab)
   const sqlStr = s => "'" + s.replace(/\\/g,'\\\\').replace(/'/g,'\\u0027').replace(/\n/g,'\\n') + "'";
   const custClauses = customers.map(c => `LOWER(customer) LIKE LOWER(${sqlStr('%'+c.toLowerCase()+'%')})`);
-  const conds = [`Order_Progress IN ('5.Fulfilled', '4.Invoiced')`, '(' + custClauses.join(' OR ') + ')'];
+  const conds = [`UPPER(Status) IN ('CLOSED', 'COMPLETED')`, '(' + custClauses.join(' OR ') + ')'];
   if (branch)   conds.push(`location = ${sqlStr(branch)}`);
   if (source)   conds.push(`data_source = ${sqlStr(source)}`);
   if (dateFrom) conds.push(`invoice_date >= '${dateFrom}'`);
@@ -2277,7 +2277,7 @@ async function runMonthlyComparison(mode='year', custom=null) {
   document.getElementById('monthlyContent').innerHTML = '<div class="loading"><div class="spinner"></div> BigQuery 쿼리 중...</div>';
 
   const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
-  const conds = [`Order_Progress IN ('5.Fulfilled', '4.Invoiced')`];
+  const conds = [`UPPER(Status) IN ('CLOSED', 'COMPLETED')`];
   if (branch)   conds.push(`location = '${branch.replace(/'/g,"''")}'`);
   if (brand)    conds.push(`LOWER(Brand) LIKE LOWER('%${brand.replace(/'/g,"''")}%')`);
   if (customer) conds.push(`LOWER(customer) LIKE LOWER('%${customer.replace(/'/g,"''")}%')`);
@@ -2484,7 +2484,7 @@ async function runDropoffAnalysis() {
           ARRAY_AGG(sale_date ORDER BY sale_date) as purchase_dates
         FROM ${fullTable}
         WHERE sale_date >= '${since}'
-          AND Order_Progress IN ('5.Fulfilled', '4.Invoiced')
+          AND UPPER(Status) IN ('CLOSED', 'COMPLETED')
           ${extraWhere}
         GROUP BY customer, SKU
         HAVING COUNT(*) >= ${minCount}
