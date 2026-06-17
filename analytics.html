@@ -810,8 +810,8 @@ async function bqQuery(sql) {
 
 function buildWhere(params) {
   const conds = [`Order_Progress IN ('5.Fulfilled', '4.Invoiced')`];
-  if (params.dateFrom) conds.push(`sale_date >= '${params.dateFrom}'`);
-  if (params.dateTo)   conds.push(`sale_date <= '${params.dateTo}'`);
+  if (params.dateFrom) conds.push(`invoice_date >= '${params.dateFrom}'`);
+  if (params.dateTo)   conds.push(`invoice_date <= '${params.dateTo}'`);
   if (params.brand)    conds.push(`LOWER(Brand) LIKE LOWER('%${params.brand.replace(/'/g,"''")}%')`);
   if (params.customer) conds.push(`LOWER(customer) LIKE LOWER('%${params.customer.replace(/'/g,"''")}%')`);
   if (params.sku)      conds.push(`(LOWER(SKU) LIKE LOWER('%${params.sku.replace(/'/g,"''")}%') OR LOWER(product) LIKE LOWER('%${params.sku.replace(/'/g,"''")}%'))`);
@@ -848,19 +848,19 @@ async function runSearch() {
 
     const [kpiRows, trendRows, brandRows, custRows, sourceRows, locationRows, detailRows] = await Promise.all([
       // KPI
-      bqQuery(`SELECT COUNT(DISTINCT order_number) as orders, SUM(quantity) as qty, SUM(total) as revenue, 0 as cogs, 0 as gp, COUNT(DISTINCT customer) as customers FROM ${fullTable} ${where}`),
+      bqQuery(`SELECT COUNT(DISTINCT order_number) as orders, SUM(quantity) as qty, SUM(total) as revenue, SUM(COALESCE(cogs,0)) as cogs, SUM(COALESCE(gp,0)) as gp, COUNT(DISTINCT customer) as customers FROM ${fullTable} ${where}`),
       // Monthly trend
-      bqQuery(`SELECT FORMAT_DATE('%Y-%m', sale_date) as month, SUM(total) as revenue, 0 as gp, SUM(quantity) as qty, COUNT(DISTINCT order_number) as orders FROM ${fullTable} ${where} GROUP BY month ORDER BY month`),
+      bqQuery(`SELECT FORMAT_DATE('%Y-%m', invoice_date) as month, SUM(total) as revenue, SUM(COALESCE(gp,0)) as gp, SUM(quantity) as qty, COUNT(DISTINCT order_number) as orders FROM ${fullTable} ${where} GROUP BY month ORDER BY month`),
       // Brand top 15
-      bqQuery(`SELECT Brand as brand, SUM(total) as revenue, 0 as gp, SUM(quantity) as qty, COUNT(DISTINCT order_number) as orders FROM ${fullTable} ${where} GROUP BY brand ORDER BY revenue DESC LIMIT 15`),
+      bqQuery(`SELECT Brand as brand, SUM(total) as revenue, SUM(COALESCE(gp,0)) as gp, SUM(quantity) as qty, COUNT(DISTINCT order_number) as orders FROM ${fullTable} ${where} GROUP BY brand ORDER BY revenue DESC LIMIT 15`),
       // Customer top 15
-      bqQuery(`SELECT customer, SUM(total) as revenue, 0 as gp, SUM(quantity) as qty, COUNT(DISTINCT order_number) as orders FROM ${fullTable} ${where} GROUP BY customer ORDER BY revenue DESC LIMIT 15`),
+      bqQuery(`SELECT customer, SUM(total) as revenue, SUM(COALESCE(gp,0)) as gp, SUM(quantity) as qty, COUNT(DISTINCT order_number) as orders FROM ${fullTable} ${where} GROUP BY customer ORDER BY revenue DESC LIMIT 15`),
       // Source
       bqQuery(`SELECT data_source as source, SUM(total) as revenue, COUNT(DISTINCT order_number) as orders FROM ${fullTable} ${where} GROUP BY source ORDER BY revenue DESC`),
       // Location
-      bqQuery(`SELECT location as location, SUM(total) as revenue, 0 as gp FROM ${fullTable} ${where} GROUP BY location ORDER BY revenue DESC`),
+      bqQuery(`SELECT location as location, SUM(total) as revenue, SUM(COALESCE(gp,0)) as gp FROM ${fullTable} ${where} GROUP BY location ORDER BY revenue DESC`),
       // Detail rows (top 200)
-      bqQuery(`SELECT sale_date as Date, order_number as OrderNumber, customer, Brand as brand, SKU, product, quantity as qty, sale as price, total as total, 0 as gp, location as location, data_source as source FROM ${fullTable} ${where} ORDER BY sale_date DESC LIMIT 200`),
+      bqQuery(`SELECT invoice_date as Date, order_number as OrderNumber, customer, Brand as brand, SKU, product, quantity as qty, sale as price, total as total, COALESCE(gp,0) as gp, location as location, data_source as source FROM ${fullTable} ${where} ORDER BY invoice_date DESC LIMIT 200`),
     ]);
 
     document.getElementById('queryInfo').textContent = `${detailRows.length}+ rows`;
@@ -1137,8 +1137,8 @@ async function runPriceSearch() {
   if (customer) conds.push(`LOWER(customer) LIKE LOWER('%${customer.replace(/'/g,"''")}%')`);
   if (brand)    conds.push(`LOWER(Brand) LIKE LOWER('%${brand.replace(/'/g,"''")}%')`);
   if (branch)   conds.push(`location = '${branch.replace(/'/g,"''")}'`);
-  if (dateFrom) conds.push(`sale_date >= '${dateFrom}'`);
-  if (dateTo)   conds.push(`sale_date <= '${dateTo}'`);
+  if (dateFrom) conds.push(`invoice_date >= '${dateFrom}'`);
+  if (dateTo)   conds.push(`invoice_date <= '${dateTo}'`);
   const where = 'WHERE ' + conds.join(' AND ');
 
   try {
@@ -1151,7 +1151,7 @@ async function runPriceSearch() {
           MAX(CAST(sale_date AS STRING)) as last_date,
           SUM(quantity) as qty,
           SUM(total) as revenue,
-          0 as gp,
+          SUM(COALESCE(gp,0)) as gp,
           COUNT(DISTINCT order_number) as orders,
           COUNT(DISTINCT customer) as customers
         FROM ${fullTable} ${where}
@@ -1162,7 +1162,7 @@ async function runPriceSearch() {
       bqQuery(`
         SELECT
           SKU, MAX(product) as product, MAX(Brand) as brand,
-          SUM(quantity) as qty, SUM(total) as revenue, 0 as gp,
+          SUM(quantity) as qty, SUM(total) as revenue, SUM(COALESCE(gp,0)) as gp,
           COUNT(DISTINCT order_number) as orders,
           MIN(sale) as min_price, MAX(sale) as max_price,
           ROUND(SUM(total)/NULLIF(SUM(quantity),0),2) as avg_price
@@ -1451,8 +1451,8 @@ async function runBrandSearch() {
   const conds = [`Order_Progress IN ('5.Fulfilled', '4.Invoiced')`, '(' + brandClauses.join(' OR ') + ')'];
   if (branch)   conds.push(`location = '${branch.replace(/'/g,"''")}'`);
   if (source)   conds.push(`data_source = '${source.replace(/'/g,"''")}'`);
-  if (dateFrom) conds.push(`sale_date >= '${dateFrom}'`);
-  if (dateTo)   conds.push(`sale_date <= '${dateTo}'`);
+  if (dateFrom) conds.push(`invoice_date >= '${dateFrom}'`);
+  if (dateTo)   conds.push(`invoice_date <= '${dateTo}'`);
   const where = 'WHERE ' + conds.join(' AND ');
 
   // Build a CASE expression to bucket rows into the user-typed brand label.
@@ -1471,15 +1471,15 @@ async function runBrandSearch() {
   try {
     const queries = [
       // Summary per brand bucket
-      bqQuery(`SELECT ${caseExpr} as brand_label, SUM(total) as revenue, 0 as gp, SUM(quantity) as qty, COUNT(DISTINCT order_number) as orders, COUNT(DISTINCT customer) as customers, MIN(CAST(sale_date AS STRING)) as first_date, MAX(CAST(sale_date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY brand_label HAVING brand_label IS NOT NULL`),
+      bqQuery(`SELECT ${caseExpr} as brand_label, SUM(total) as revenue, SUM(COALESCE(gp,0)) as gp, SUM(quantity) as qty, COUNT(DISTINCT order_number) as orders, COUNT(DISTINCT customer) as customers, MIN(CAST(sale_date AS STRING)) as first_date, MAX(CAST(sale_date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY brand_label HAVING brand_label IS NOT NULL`),
       // Monthly trend per brand bucket
-      bqQuery(`SELECT ${caseExpr} as brand_label, FORMAT_DATE('%Y-%m', sale_date) as month, SUM(total) as revenue, 0 as gp, SUM(quantity) as qty FROM ${fullTable} ${where} GROUP BY brand_label, month HAVING brand_label IS NOT NULL ORDER BY month`),
+      bqQuery(`SELECT ${caseExpr} as brand_label, FORMAT_DATE('%Y-%m', invoice_date) as month, SUM(total) as revenue, SUM(COALESCE(gp,0)) as gp, SUM(quantity) as qty FROM ${fullTable} ${where} GROUP BY brand_label, month HAVING brand_label IS NOT NULL ORDER BY month`),
     ];
     // Single-brand mode also loads SKU / Customer deep dive
     if (brands.length === 1) {
       queries.push(
-        bqQuery(`SELECT SKU, MAX(product) as product, SUM(quantity) as qty, SUM(total) as revenue, 0 as gp, COUNT(DISTINCT order_number) as orders, MIN(CAST(sale_date AS STRING)) as first_date, MAX(CAST(sale_date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY SKU ORDER BY revenue DESC LIMIT 50`),
-        bqQuery(`SELECT customer, SUM(quantity) as qty, SUM(total) as revenue, 0 as gp, COUNT(DISTINCT order_number) as orders, MIN(CAST(sale_date AS STRING)) as first_date, MAX(CAST(sale_date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY customer ORDER BY revenue DESC LIMIT 50`)
+        bqQuery(`SELECT SKU, MAX(product) as product, SUM(quantity) as qty, SUM(total) as revenue, SUM(COALESCE(gp,0)) as gp, COUNT(DISTINCT order_number) as orders, MIN(CAST(sale_date AS STRING)) as first_date, MAX(CAST(sale_date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY SKU ORDER BY revenue DESC LIMIT 50`),
+        bqQuery(`SELECT customer, SUM(quantity) as qty, SUM(total) as revenue, SUM(COALESCE(gp,0)) as gp, COUNT(DISTINCT order_number) as orders, MIN(CAST(sale_date AS STRING)) as first_date, MAX(CAST(sale_date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY customer ORDER BY revenue DESC LIMIT 50`)
       );
     }
     const results = await Promise.all(queries);
@@ -1788,8 +1788,8 @@ async function runCustomerSearch() {
   const conds = [`Order_Progress IN ('5.Fulfilled', '4.Invoiced')`, '(' + custClauses.join(' OR ') + ')'];
   if (branch)   conds.push(`location = ${sqlStr(branch)}`);
   if (source)   conds.push(`data_source = ${sqlStr(source)}`);
-  if (dateFrom) conds.push(`sale_date >= '${dateFrom}'`);
-  if (dateTo)   conds.push(`sale_date <= '${dateTo}'`);
+  if (dateFrom) conds.push(`invoice_date >= '${dateFrom}'`);
+  if (dateTo)   conds.push(`invoice_date <= '${dateTo}'`);
   const where = 'WHERE ' + conds.join(' AND ');
 
   const caseExpr = 'CASE ' + customers.map(c =>
@@ -1798,13 +1798,13 @@ async function runCustomerSearch() {
 
   try {
     const queries = [
-      bqQuery(`SELECT ${caseExpr} as cust_label, SUM(total) as revenue, 0 as gp, SUM(quantity) as qty, COUNT(DISTINCT order_number) as orders, COUNT(DISTINCT Brand) as brands, MIN(CAST(sale_date AS STRING)) as first_date, MAX(CAST(sale_date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY cust_label HAVING cust_label IS NOT NULL`),
-      bqQuery(`SELECT ${caseExpr} as cust_label, FORMAT_DATE('%Y-%m', sale_date) as month, SUM(total) as revenue, 0 as gp, SUM(quantity) as qty, COUNT(DISTINCT order_number) as orders FROM ${fullTable} ${where} GROUP BY cust_label, month HAVING cust_label IS NOT NULL ORDER BY month`),
+      bqQuery(`SELECT ${caseExpr} as cust_label, SUM(total) as revenue, SUM(COALESCE(gp,0)) as gp, SUM(quantity) as qty, COUNT(DISTINCT order_number) as orders, COUNT(DISTINCT Brand) as brands, MIN(CAST(sale_date AS STRING)) as first_date, MAX(CAST(sale_date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY cust_label HAVING cust_label IS NOT NULL`),
+      bqQuery(`SELECT ${caseExpr} as cust_label, FORMAT_DATE('%Y-%m', invoice_date) as month, SUM(total) as revenue, SUM(COALESCE(gp,0)) as gp, SUM(quantity) as qty, COUNT(DISTINCT order_number) as orders FROM ${fullTable} ${where} GROUP BY cust_label, month HAVING cust_label IS NOT NULL ORDER BY month`),
     ];
     if (customers.length === 1) {
       queries.push(
-        bqQuery(`SELECT Brand as brand, SUM(quantity) as qty, SUM(total) as revenue, 0 as gp, COUNT(DISTINCT order_number) as orders, MIN(CAST(sale_date AS STRING)) as first_date, MAX(CAST(sale_date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY brand ORDER BY revenue DESC LIMIT 30`),
-        bqQuery(`SELECT SKU, MAX(product) as product, MAX(Brand) as brand, SUM(quantity) as qty, SUM(total) as revenue, 0 as gp, COUNT(DISTINCT order_number) as orders, ROUND(SUM(total)/NULLIF(SUM(quantity),0),2) as avg_price, MIN(CAST(sale_date AS STRING)) as first_date, MAX(CAST(sale_date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY SKU ORDER BY revenue DESC LIMIT 50`)
+        bqQuery(`SELECT Brand as brand, SUM(quantity) as qty, SUM(total) as revenue, SUM(COALESCE(gp,0)) as gp, COUNT(DISTINCT order_number) as orders, MIN(CAST(sale_date AS STRING)) as first_date, MAX(CAST(sale_date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY brand ORDER BY revenue DESC LIMIT 30`),
+        bqQuery(`SELECT SKU, MAX(product) as product, MAX(Brand) as brand, SUM(quantity) as qty, SUM(total) as revenue, SUM(COALESCE(gp,0)) as gp, COUNT(DISTINCT order_number) as orders, ROUND(SUM(total)/NULLIF(SUM(quantity),0),2) as avg_price, MIN(CAST(sale_date AS STRING)) as first_date, MAX(CAST(sale_date AS STRING)) as last_date FROM ${fullTable} ${where} GROUP BY SKU ORDER BY revenue DESC LIMIT 50`)
       );
     }
     const results = await Promise.all(queries);
@@ -2285,8 +2285,8 @@ async function runMonthlyComparison(mode='year', custom=null) {
 
   try {
     const [rows1, rows2] = await Promise.all([
-      bqQuery(`SELECT FORMAT_DATE('%Y-%m', sale_date) as month, SUM(total) as revenue, 0 as gp, SUM(quantity) as qty, COUNT(DISTINCT order_number) as orders, COUNT(DISTINCT customer) as customers FROM ${fullTable} WHERE sale_date >= '${from1}' AND sale_date <= '${to1}' ${baseWhere} GROUP BY month ORDER BY month`),
-      bqQuery(`SELECT FORMAT_DATE('%Y-%m', sale_date) as month, SUM(total) as revenue, 0 as gp, SUM(quantity) as qty, COUNT(DISTINCT order_number) as orders, COUNT(DISTINCT customer) as customers FROM ${fullTable} WHERE sale_date >= '${from2}' AND sale_date <= '${to2}' ${baseWhere} GROUP BY month ORDER BY month`)
+      bqQuery(`SELECT FORMAT_DATE('%Y-%m', invoice_date) as month, SUM(total) as revenue, SUM(COALESCE(gp,0)) as gp, SUM(quantity) as qty, COUNT(DISTINCT order_number) as orders, COUNT(DISTINCT customer) as customers FROM ${fullTable} WHERE invoice_date >= '${from1}' AND invoice_date <= '${to1}' ${baseWhere} GROUP BY month ORDER BY month`),
+      bqQuery(`SELECT FORMAT_DATE('%Y-%m', invoice_date) as month, SUM(total) as revenue, SUM(COALESCE(gp,0)) as gp, SUM(quantity) as qty, COUNT(DISTINCT order_number) as orders, COUNT(DISTINCT customer) as customers FROM ${fullTable} WHERE invoice_date >= '${from2}' AND invoice_date <= '${to2}' ${baseWhere} GROUP BY month ORDER BY month`)
     ]);
     btn.disabled = false; btn.textContent = '🔍 연도 비교';
     renderMonthlyComparison({ rows1, rows2, label1, label2 });
