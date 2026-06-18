@@ -618,6 +618,14 @@ html, body { overflow-x: hidden; max-width: 100vw; }
         </select>
       </div>
       <div class="field">
+        <label class="field-label">브랜드 (선택)</label>
+        <div class="ac-wrap">
+          <input type="text" id="doBrand" placeholder="전체 브랜드" autocomplete="off"
+            oninput="acInput(this,'doBrand')" onkeydown="acKey(event,'doBrand')" onfocus="acInput(this,'doBrand')">
+          <div class="ac-list" id="ac-doBrand" style="display:none"></div>
+        </div>
+      </div>
+      <div class="field">
         <label class="field-label">특정 고객 (선택)</label>
         <div class="ac-wrap">
           <input type="text" id="doCustomer" placeholder="전체 고객 분석" autocomplete="off"
@@ -632,7 +640,7 @@ html, body { overflow-x: hidden; max-width: 100vw; }
     <!-- 설명 배너 -->
     <div style="background:rgba(59,130,246,.06);border-bottom:1px solid rgba(59,130,246,.15);padding:10px 24px;font-size:11px;color:var(--mid);display:flex;align-items:center;gap:8px">
       <span>💡</span>
-      <span>평균 구매 간격 대비 비정상적으로 오래 구매가 없는 고객-SKU 조합을 감지합니다. <strong style="color:var(--yellow)">재고 0인 SKU는 자동 제외</strong>됩니다 (품절로 인한 중단은 알림 불필요).</span>
+      <span>평균 구매 간격 대비 비정상적으로 오래 구매가 없는 고객-SKU 조합을 감지합니다. <strong style="color:var(--yellow)"><strong style="color:var(--yellow)">재고 0 SKU</strong> 및 <strong style="color:var(--yellow)">Discontinued 제품</strong>은 자동 제외됩니다.</span>
     </div>
     <div class="content" id="dropoffContent">
       <div class="empty-state">
@@ -654,6 +662,8 @@ const PROJECT_ID = 'geometric-rock-487814-k4';
 const DATASET    = 'Cin7_Sales_Data';
 const TABLE      = 'asung_sales_unified';
 const BQ_STOCK   = 'asung_stock_daily';
+const BQ_MASTER_DATASET = 'Cin7_Master_Data';
+const BQ_MASTER  = 'asung_product_master';
 const ALLOWED_DOMAIN = 'asung.ca';
 
 let accessToken = null;
@@ -2444,32 +2454,34 @@ function renderMonthlyComparison({ rows1, rows2, label1, label2 }) {
   ]}, options:{...baseOpts(45), plugins:{...baseOpts().plugins, tooltip:{...TOOLTIP,mode:'index'}}}});
 }
 
+
 // ══════════════════════════════════════
 // CUSTOMER DROPOFF ANALYSIS
 // ══════════════════════════════════════
 async function runDropoffAnalysis() {
-  const analysisDays  = parseInt(document.getElementById('doAnalysisDays').value);
-  const multiplier    = parseFloat(document.getElementById('doMultiplier').value);
-  const minCount      = parseInt(document.getElementById('doMinCount').value);
-  const branch        = document.getElementById('doBranch').value;
+  const analysisDays   = parseInt(document.getElementById('doAnalysisDays').value);
+  const multiplier     = parseFloat(document.getElementById('doMultiplier').value);
+  const minCount       = parseInt(document.getElementById('doMinCount').value);
+  const branch         = document.getElementById('doBranch').value;
   const targetCustomer = document.getElementById('doCustomer').value.trim();
+  const targetBrand    = document.getElementById('doBrand').value.trim();
 
   const btn = document.getElementById('doSearchBtn');
   btn.disabled = true; btn.textContent = '⏳ 분석 중...';
   document.getElementById('dropoffContent').innerHTML = '<div class="loading"><div class="spinner"></div> BigQuery 분석 중...</div>';
 
-  const fullTable = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
+  const fullTable  = `\`${PROJECT_ID}.${DATASET}.${TABLE}\``;
   const stockTable = `\`${PROJECT_ID}.${DATASET}.${BQ_STOCK}\``;
+  const masterTable = `\`${PROJECT_ID}.${BQ_MASTER_DATASET}.${BQ_MASTER}\``;
   const since = new Date(Date.now() - analysisDays * 86400000).toISOString().slice(0,10);
 
-  // 고객/브랜치 필터
   const extraConds = [];
   if (branch)         extraConds.push(`location = '${branch.replace(/'/g,"''")}'`);
   if (targetCustomer) extraConds.push(`LOWER(customer) LIKE LOWER('%${targetCustomer.replace(/'/g,"''")}%')`);
+  if (targetBrand)    extraConds.push(`LOWER(Brand) LIKE LOWER('%${targetBrand.replace(/'/g,"''")}%')`);
   const extraWhere = extraConds.length ? 'AND ' + extraConds.join(' AND ') : '';
 
   try {
-    // ── 1. 고객-SKU별 구매 이력 집계 (BQ에서 한방에)
     const purchaseSQL = `
       WITH purchase_history AS (
         SELECT
@@ -2478,12 +2490,11 @@ async function runDropoffAnalysis() {
           MAX(product) as product_name,
           MAX(Brand) as brand,
           COUNT(*) as purchase_count,
-          MIN(sale_date) as first_purchase,
-          MAX(sale_date) as last_purchase,
-          -- 구매일 배열 (간격 계산용)
-          ARRAY_AGG(sale_date ORDER BY sale_date) as purchase_dates
+          MIN(invoice_date) as first_purchase,
+          MAX(invoice_date) as last_purchase,
+          SUM(sale) as total_revenue
         FROM ${fullTable}
-        WHERE sale_date >= '${since}'
+        WHERE invoice_date >= '${since}'
           AND UPPER(Status) IN ('CLOSED', 'COMPLETED')
           ${extraWhere}
         GROUP BY customer, SKU
@@ -2493,19 +2504,25 @@ async function runDropoffAnalysis() {
         SELECT
           customer, SKU, product_name, brand,
           purchase_count, first_purchase, last_purchase,
-          -- 평균 구매 간격 계산 (날짜 배열에서)
+          total_revenue,
           DATE_DIFF(last_purchase, first_purchase, DAY) / NULLIF(purchase_count - 1, 0) as avg_interval_days,
-          DATE_DIFF(CURRENT_DATE(), last_purchase, DAY) as days_since_last
+          DATE_DIFF(CURRENT_DATE(), last_purchase, DAY) as days_since_last,
+          -- 예상 연간 매출 (평균 구매간격 기반)
+          SAFE_DIVIDE(total_revenue, DATE_DIFF(last_purchase, first_purchase, DAY) / NULLIF(purchase_count - 1, 0)) * 365 as est_annual_revenue
         FROM purchase_history
-        WHERE purchase_count >= 2  -- 간격 계산에 최소 2회 필요
+        WHERE purchase_count >= 2
       ),
-      -- 재고 0 SKU (OnHand=0 AND OnOrder=0) — 최신 snapshot
       zero_stock AS (
         SELECT DISTINCT sku
         FROM ${stockTable}
         WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM ${stockTable})
         GROUP BY sku
         HAVING SUM(qty_on_hand) = 0 AND SUM(on_order) = 0
+      ),
+      discontinued AS (
+        SELECT DISTINCT sku
+        FROM ${masterTable}
+        WHERE LOWER(product_attribute) = 'discontinued'
       )
       SELECT
         i.customer,
@@ -2518,12 +2535,15 @@ async function runDropoffAnalysis() {
         ROUND(i.avg_interval_days, 1) as avg_interval_days,
         i.days_since_last,
         ROUND(i.days_since_last / NULLIF(i.avg_interval_days, 0), 2) as overdue_multiple,
-        CASE WHEN z.sku IS NOT NULL THEN 'OUT_OF_STOCK' ELSE 'IN_STOCK' END as stock_status
+        ROUND(i.total_revenue, 0) as total_revenue,
+        ROUND(i.est_annual_revenue, 0) as est_annual_revenue
       FROM intervals i
-      LEFT JOIN zero_stock z ON LOWER(i.SKU) = LOWER(z.sku)
-      WHERE i.avg_interval_days >= 7  -- 최소 7일 간격 이상인 패턴만
+      LEFT JOIN zero_stock z    ON LOWER(i.SKU) = LOWER(z.sku)
+      LEFT JOIN discontinued d  ON LOWER(i.SKU) = LOWER(d.sku)
+      WHERE i.avg_interval_days >= 7
         AND i.days_since_last > i.avg_interval_days * ${multiplier}
-        AND z.sku IS NULL  -- 재고 0 SKU 제외
+        AND z.sku IS NULL   -- 재고 0 SKU 제외
+        AND d.sku IS NULL   -- Discontinued 제외
       ORDER BY i.days_since_last DESC
       LIMIT 500
     `;
@@ -2559,36 +2579,44 @@ function renderDropoffResults(rows, config) {
     Customer: r.customer, SKU: r.SKU, Product: r.product_name, Brand: r.brand,
     Purchase_Count: r.purchase_count, First_Purchase: r.first_purchase, Last_Purchase: r.last_purchase,
     Avg_Interval_Days: r.avg_interval_days, Days_Since_Last: r.days_since_last,
-    Overdue_Multiple: r.overdue_multiple, Stock_Status: r.stock_status,
+    Overdue_Multiple: r.overdue_multiple,
+    Total_Revenue: r.total_revenue, Est_Annual_Revenue: r.est_annual_revenue,
   }));
 
-  // 고객별 집계
+  // ── 고객별 집계
   const customerMap = {};
   rows.forEach(r => {
-    if (!customerMap[r.customer]) customerMap[r.customer] = 0;
-    customerMap[r.customer]++;
+    const c = r.customer;
+    if (!customerMap[c]) customerMap[c] = { count: 0, revenue: 0, est_annual: 0, skus: [] };
+    customerMap[c].count++;
+    customerMap[c].revenue += parseFloat(r.total_revenue) || 0;
+    customerMap[c].est_annual += parseFloat(r.est_annual_revenue) || 0;
+    customerMap[c].skus.push(r);
   });
-  const topCustomers = Object.entries(customerMap)
-    .sort((a,b) => b[1] - a[1]).slice(0,8);
+  const customerList = Object.entries(customerMap)
+    .sort((a,b) => b[1].est_annual - a[1].est_annual);
+  const topCustomers = customerList.slice(0, 8);
 
-  // 연체 배수 분포
+  // ── 연체 배수 분포
   const bands = { '2~3x': 0, '3~5x': 0, '5x+': 0 };
   rows.forEach(r => {
-    const m = parseFloat(r.overdue_multiple)||0;
+    const m = parseFloat(r.overdue_multiple) || 0;
     if (m >= 5) bands['5x+']++;
     else if (m >= 3) bands['3~5x']++;
     else bands['2~3x']++;
   });
 
-  // 행 색상
+  // ── 총 예상 연간 손실
+  const totalEstLoss = customerList.reduce((s, [,v]) => s + v.est_annual, 0);
+
   const rowColor = m => {
-    m = parseFloat(m)||0;
+    m = parseFloat(m) || 0;
     if (m >= 5) return 'rgba(239,68,68,.08)';
     if (m >= 3) return 'rgba(249,115,22,.08)';
     return 'rgba(234,179,8,.05)';
   };
   const multipleColor = m => {
-    m = parseFloat(m)||0;
+    m = parseFloat(m) || 0;
     if (m >= 5) return 'var(--red)';
     if (m >= 3) return 'var(--orange)';
     return 'var(--yellow)';
@@ -2606,7 +2634,7 @@ function renderDropoffResults(rows, config) {
         </div>
         <div class="kpi yellow">
           <div class="kpi-lbl">영향 받는 고객</div>
-          <div class="kpi-val">${Object.keys(customerMap).length}</div>
+          <div class="kpi-val">${customerList.length}</div>
           <div class="kpi-sub">명</div>
         </div>
         <div class="kpi red">
@@ -2614,8 +2642,8 @@ function renderDropoffResults(rows, config) {
           <div class="kpi-val">${bands['5x+']}</div>
           <div class="kpi-sub">즉시 확인 필요</div>
         </div>
-        <div class="kpi orange" style="--orange:#f97316">
-          <div class="kpi-lbl" style="color:var(--dim)">3~5배 연체</div>
+        <div class="kpi" style="--kpi-color:#f97316">
+          <div class="kpi-lbl">3~5배 연체</div>
           <div class="kpi-val" style="color:#f97316">${bands['3~5x']}</div>
           <div class="kpi-sub">주의</div>
         </div>
@@ -2624,10 +2652,10 @@ function renderDropoffResults(rows, config) {
           <div class="kpi-val">${bands['2~3x']}</div>
           <div class="kpi-sub">모니터링</div>
         </div>
-        <div class="kpi blue">
-          <div class="kpi-lbl">분석 기간</div>
-          <div class="kpi-val">${config.analysisDays}일</div>
-          <div class="kpi-sub">기준: ${config.multiplier}배 / 최소 ${config.minCount}회</div>
+        <div class="kpi teal">
+          <div class="kpi-lbl">예상 연간 손실</div>
+          <div class="kpi-val">${fmtK(totalEstLoss)}</div>
+          <div class="kpi-sub">재구매 시 회복 가능</div>
         </div>
       </div>
 
@@ -2635,7 +2663,7 @@ function renderDropoffResults(rows, config) {
       <div class="charts-grid" style="margin-bottom:16px">
         <div class="card">
           <div class="card-hdr">
-            <span class="card-title">고객별 중단 SKU 수</span>
+            <span class="card-title">고객별 예상 연간 손실</span>
             <span class="card-badge">Top 8</span>
           </div>
           <div class="chart-box tall"><canvas id="cDoCustomer"></canvas></div>
@@ -2646,43 +2674,50 @@ function renderDropoffResults(rows, config) {
         </div>
       </div>
 
-      <!-- 결과 테이블 -->
+      <!-- 고객별 accordion 테이블 -->
       <div class="tbl-card" style="margin-bottom:24px">
         <div class="tbl-hdr">
           <span class="tbl-title">구매 중단 감지 목록</span>
           <div style="display:flex;align-items:center;gap:8px">
-            <span class="tbl-count">${rows.length}건 (재고 0 제외됨)</span>
+            <span class="tbl-count">${rows.length}건 (재고 0 · Discontinued 제외)</span>
             <button class="export-btn" onclick="exportCSV(exportData.dropoff,'customer_dropoff.csv')">⬇ CSV</button>
           </div>
         </div>
         <div class="tbl-wrap">
           <table>
             <thead><tr>
+              <th style="width:28px"></th>
               <th>고객명</th>
-              <th>SKU</th>
-              <th>제품명</th>
-              <th>브랜드</th>
-              <th class="num">구매횟수</th>
-              <th>마지막 구매일</th>
-              <th class="num">평균간격(일)</th>
-              <th class="num">경과(일)</th>
-              <th class="num">연체배수</th>
+              <th class="num">중단 SKU</th>
+              <th class="num">과거 구매액</th>
+              <th class="num">예상 연간 손실</th>
+              <th class="num">최대 연체</th>
             </tr></thead>
-            <tbody>
-              ${rows.map(r => `
-                <tr style="background:${rowColor(r.overdue_multiple)}">
-                  <td style="font-weight:600">${r.customer||'—'}</td>
-                  <td style="font-family:monospace;font-size:11px">${r.SKU||'—'}</td>
-                  <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.product_name||''}">${r.product_name||'—'}</td>
-                  <td style="font-size:11px;color:var(--mid)">${r.brand||'—'}</td>
-                  <td class="num">${r.purchase_count||0}</td>
-                  <td style="font-size:11px;white-space:nowrap">${r.last_purchase||'—'}</td>
-                  <td class="num">${r.avg_interval_days||'—'}</td>
-                  <td class="num" style="font-weight:600">${r.days_since_last||0}</td>
-                  <td class="num" style="font-weight:700;color:${multipleColor(r.overdue_multiple)}">
-                    ${parseFloat(r.overdue_multiple||0).toFixed(1)}x
+            <tbody id="dropoffTbody">
+              ${customerList.map(([cust, cv]) => {
+                const maxMultiple = Math.max(...cv.skus.map(r => parseFloat(r.overdue_multiple)||0));
+                const custId = 'do-' + cust.replace(/[^a-z0-9]/gi,'_');
+                return `
+                <tr class="do-cust-row" onclick="toggleDropoffGroup('${custId}')"
+                  style="cursor:pointer;background:rgba(59,130,246,.04);border-top:1px solid var(--border2)">
+                  <td style="text-align:center;color:var(--dim);font-size:11px">
+                    <span id="${custId}-icon">▶</span>
                   </td>
-                </tr>`).join('')}
+                  <td style="font-weight:700;color:var(--text)">${cust}</td>
+                  <td class="num" style="color:var(--yellow)">${cv.count}</td>
+                  <td class="num">${fmt(cv.revenue)}</td>
+                  <td class="num" style="color:var(--teal);font-weight:700">${fmt(cv.est_annual)}</td>
+                  <td class="num" style="font-weight:700;color:${multipleColor(maxMultiple)}">${maxMultiple.toFixed(1)}x</td>
+                </tr>
+                ${cv.skus.map(r => `
+                <tr id="${custId}-detail" class="do-detail-row" style="display:none;background:${rowColor(r.overdue_multiple)}">
+                  <td></td>
+                  <td style="padding-left:20px;font-family:monospace;font-size:11px;color:var(--mid)">${r.SKU||'—'}</td>
+                  <td colspan="2" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="${r.product_name||''}">${r.product_name||'—'} <span style="color:var(--dim)">${r.brand||''}</span></td>
+                  <td class="num" style="font-size:11px">마지막: ${r.last_purchase||'—'} (${r.days_since_last}일 전)</td>
+                  <td class="num" style="font-weight:700;color:${multipleColor(r.overdue_multiple)}">${parseFloat(r.overdue_multiple||0).toFixed(1)}x</td>
+                </tr>`).join('')}`;
+              }).join('')}
             </tbody>
           </table>
         </div>
@@ -2690,16 +2725,16 @@ function renderDropoffResults(rows, config) {
     </div>
   `;
 
-  // 고객별 차트
+  // 고객별 예상 손실 차트
   mkChart('cDoCustomer', {
     type: 'bar', indexAxis: 'y',
     data: {
       labels: topCustomers.map(([c]) => c.length > 22 ? c.slice(0,22)+'…' : c),
-      datasets: [{ label: '중단 SKU 수', data: topCustomers.map(([,v]) => v),
+      datasets: [{ label: '예상 연간 손실', data: topCustomers.map(([,v]) => Math.round(v.est_annual)),
         backgroundColor: 'rgba(239,68,68,0.7)', borderRadius: 3 }]
     },
     options: { responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:false}, tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+ctx.raw+' SKUs'}} },
+      plugins:{ legend:{display:false}, tooltip:{...TOOLTIP,callbacks:{label:ctx=>' $'+ctx.raw.toLocaleString()}} },
       scales:{ x:{grid:{color:'#1a2233'},ticks:{color:'#475569',font:{size:9}}}, y:{grid:{color:'#1a2233'},ticks:{color:'#94a3b8',font:{size:9}}} }
     }
   });
@@ -2719,6 +2754,15 @@ function renderDropoffResults(rows, config) {
     }
   });
 }
+
+function toggleDropoffGroup(custId) {
+  const rows = document.querySelectorAll(`#${custId}-detail`);
+  const icon = document.getElementById(`${custId}-icon`);
+  const isHidden = rows.length && rows[0].style.display === 'none';
+  rows.forEach(r => r.style.display = isHidden ? '' : 'none');
+  if (icon) icon.textContent = isHidden ? '▼' : '▶';
+}
+
 
 // ── INIT ──
 checkAuth();
