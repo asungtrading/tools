@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Asung — My Account</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/* ══════════════════════════════════════
+   DESIGN TOKENS — same palette as internal apps
+   ══════════════════════════════════════ */
+:root {
+  --bg:       #080a0f;
+  --surface:  #0f1218;
+  --surface2: #161b24;
+  --surface3: #1c2330;
+  --border:   #222a38;
+  --border2:  #2a3446;
+  --blue:     #3b82f6;
+  --blue2:    #60a5fa;
+  --green:    #22c55e;
+  --red:      #ef4444;
+  --yellow:   #eab308;
+  --orange:   #f97316;
+  --purple:   #a855f7;
+  --teal:     #14b8a6;
+  --text:     #f1f5f9;
+  --mid:      #94a3b8;
+  --dim:      #475569;
+  --gold:     #f59e0b;
+  --grid:     #1a2233;
+}
+*  { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  min-height: 100vh;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(59,130,246,.07), transparent);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── LOGIN ── */
+#loginScreen {
+  position: fixed; inset: 0; background: var(--bg); z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+}
+.login-wrap { display: flex; flex-direction: column; align-items: center; gap: 28px; width: 100%; max-width: 400px; padding: 20px; }
+.login-logo-mark {
+  font-size: 42px; font-weight: 900; letter-spacing: -2px;
+  background: linear-gradient(135deg, var(--blue), var(--teal));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.login-logo-sub { font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: var(--dim); margin-top: 2px; text-align: center; }
+.login-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 36px 40px; width: 100%;
+}
+.login-title { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+.login-sub   { font-size: 12px; color: var(--dim); margin-bottom: 28px; line-height: 1.6; }
+.field-group  { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.field-label  { font-size: 11px; color: var(--mid); letter-spacing: .5px; text-transform: uppercase; }
+.field-input  {
+  background: var(--surface2); border: 1px solid var(--border2);
+  color: var(--text); border-radius: 8px; padding: 10px 14px;
+  font-size: 13px; width: 100%; outline: none; font-family: inherit;
+  transition: border-color .2s;
+}
+.field-input:focus { border-color: var(--blue); }
+.login-btn {
+  width: 100%; background: var(--blue); color: #fff; border: none;
+  border-radius: 10px; padding: 13px; font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: all .2s; margin-top: 8px;
+}
+.login-btn:hover   { background: var(--blue2); transform: translateY(-1px); box-shadow: 0 8px 24px rgba(59,130,246,.3); }
+.login-btn:active  { transform: translateY(0); }
+.login-btn:disabled { opacity: .5; cursor: default; transform: none; }
+.login-err { color: var(--red); font-size: 12px; margin-top: 12px; min-height: 16px; text-align: center; }
+.login-note { font-size: 11px; color: var(--dim); text-align: center; }
+
+/* ── MAIN APP ── */
+#mainApp { display: none; position: relative; z-index: 1; }
+
+/* ── HEADER ── */
+.hdr {
+  background: rgba(8,10,15,.92); backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px; display: flex; align-items: center;
+  justify-content: space-between; height: 56px;
+  position: sticky; top: 0; z-index: 100;
+}
+.hdr-brand  { display: flex; align-items: center; gap: 10px; }
+.hdr-logo   { font-size: 16px; font-weight: 800; letter-spacing: -.5px; background: linear-gradient(135deg, var(--blue), var(--teal)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.hdr-sep    { color: var(--border2); font-size: 18px; }
+.hdr-title  { font-size: 13px; color: var(--mid); font-weight: 500; }
+.hdr-right  { display: flex; align-items: center; gap: 12px; }
+.hdr-cust   { font-size: 12px; color: var(--mid); }
+.hdr-cust strong { color: var(--text); }
+.hdr-signout {
+  font-size: 11px; color: var(--dim); cursor: pointer;
+  padding: 4px 10px; border: 1px solid var(--border);
+  border-radius: 6px; transition: all .2s; background: none;
+}
+.hdr-signout:hover { color: var(--text); border-color: var(--border2); }
+
+/* ── TAB NAV ── */
+.tab-nav {
+  display: flex; align-items: center; gap: 4px;
+  padding: 0 24px; background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+}
+.tab-btn {
+  padding: 14px 16px; font-size: 12px; font-weight: 500;
+  color: var(--dim); background: none; border: none;
+  border-bottom: 2px solid transparent; cursor: pointer;
+  white-space: nowrap; transition: all .15s;
+}
+.tab-btn:hover  { color: var(--mid); }
+.tab-btn.active { color: var(--text); border-bottom-color: var(--blue); }
+
+/* ── DATE FILTER BAR ── */
+.filter-bar {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 10px 24px; display: flex; align-items: center;
+  gap: 12px; flex-wrap: wrap;
+}
+.filter-label { font-size: 11px; color: var(--dim); white-space: nowrap; }
+.filter-input {
+  background: var(--surface2); border: 1px solid var(--border2);
+  color: var(--text); border-radius: 6px; padding: 6px 10px;
+  font-size: 12px; outline: none; font-family: inherit;
+  transition: border-color .2s;
+}
+.filter-input:focus { border-color: var(--blue); }
+.filter-btn {
+  background: var(--blue); color: #fff; border: none;
+  border-radius: 6px; padding: 6px 14px; font-size: 12px;
+  font-weight: 600; cursor: pointer; transition: all .15s;
+  white-space: nowrap;
+}
+.filter-btn:hover   { background: var(--blue2); }
+.filter-btn.ghost   { background: none; border: 1px solid var(--border2); color: var(--mid); }
+.filter-btn.ghost:hover { border-color: var(--blue); color: var(--text); }
+.filter-sep { color: var(--border2); }
+.quick-btns { display: flex; gap: 4px; }
+.q-btn {
+  font-size: 11px; padding: 4px 8px; background: var(--surface2);
+  border: 1px solid var(--border); color: var(--dim);
+  border-radius: 4px; cursor: pointer; transition: all .15s;
+}
+.q-btn:hover, .q-btn.active { background: var(--surface3); border-color: var(--blue2); color: var(--text); }
+
+/* ── CONTENT ── */
+.tab-panel { display: none; padding: 24px; }
+.tab-panel.active { display: block; }
+
+/* ── KPI STRIP ── */
+.kpi-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.kpi {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px 18px;
+  border-left: 3px solid transparent;
+}
+.kpi.blue   { border-left-color: var(--blue); }
+.kpi.green  { border-left-color: var(--green); }
+.kpi.yellow { border-left-color: var(--yellow); }
+.kpi.purple { border-left-color: var(--purple); }
+.kpi.teal   { border-left-color: var(--teal); }
+.kpi.orange { border-left-color: var(--orange); }
+.kpi-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); margin-bottom: 6px; }
+.kpi-val { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+.kpi-sub { font-size: 11px; color: var(--dim); margin-top: 4px; }
+
+/* ── CHARTS ── */
+.charts-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 16px; }
+.charts-row  { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 16px; }
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 18px;
+}
+.card-hdr   { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.card-title { font-size: 12px; font-weight: 600; color: var(--text); }
+.card-badge { font-size: 10px; background: var(--surface3); border: 1px solid var(--border2); border-radius: 4px; padding: 2px 6px; color: var(--dim); }
+.chart-box      { height: 200px; }
+.chart-box.tall { height: 240px; }
+
+/* ── BENCHMARK PILL ── */
+.bench-same   { color: var(--dim);   font-size: 10px; }
+
+/* ── TABLES ── */
+.tbl-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; overflow: hidden; margin-bottom: 16px;
+}
+.tbl-hdr {
+  padding: 14px 18px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.tbl-title { font-size: 12px; font-weight: 600; }
+.tbl-count { font-size: 11px; color: var(--dim); }
+.tbl-wrap  { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th {
+  padding: 8px 12px; text-align: left; font-size: 10px;
+  font-weight: 600; text-transform: uppercase; letter-spacing: .6px;
+  color: var(--dim); background: var(--surface2);
+  border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+th.num, td.num { text-align: right; }
+td {
+  padding: 8px 12px; font-size: 12px; border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--surface2); }
+.sku-tag { font-family: monospace; font-size: 11px; color: var(--blue2); }
+.brand-tag { color: var(--mid); font-size: 11px; }
+.loc-tor { color: var(--blue2); }
+.loc-edm { color: var(--orange); }
+
+/* ── SKU DETAIL DRAWER ── */
+.sku-drawer {
+  position: fixed; right: 0; top: 0; bottom: 0; width: 480px;
+  background: var(--surface); border-left: 1px solid var(--border);
+  z-index: 500; overflow-y: auto; transform: translateX(100%);
+  transition: transform .25s ease; padding: 24px;
+}
+.sku-drawer.open { transform: translateX(0); }
+.drawer-close {
+  float: right; background: none; border: none;
+  color: var(--mid); cursor: pointer; font-size: 18px;
+  padding: 4px 8px; margin-top: -4px;
+}
+.drawer-close:hover { color: var(--text); }
+.drawer-title { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.drawer-sku   { font-family: monospace; font-size: 12px; color: var(--blue2); margin-bottom: 20px; }
+.bench-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+.bench-card {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px 14px;
+}
+.bench-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--dim); margin-bottom: 4px; }
+.bench-val { font-size: 18px; font-weight: 700; }
+.bench-val.up   { color: var(--red); }
+.bench-val.down { color: var(--green); }
+.bench-sub { font-size: 10px; color: var(--dim); margin-top: 2px; }
+.drawer-chart-box { height: 180px; margin-bottom: 20px; }
+
+/* ── SEARCH BAR ── */
+.search-row { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
+.search-input {
+  flex: 1; min-width: 200px; background: var(--surface2);
+  border: 1px solid var(--border2); color: var(--text);
+  border-radius: 8px; padding: 8px 12px; font-size: 12px;
+  outline: none; font-family: inherit; transition: border-color .2s;
+}
+.search-input:focus { border-color: var(--blue); }
+.search-select {
+  background: var(--surface2); border: 1px solid var(--border2);
+  color: var(--mid); border-radius: 8px; padding: 8px 10px;
+  font-size: 12px; outline: none; cursor: pointer;
+}
+
+/* ── STATES ── */
+.loading { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 60px 20px; color: var(--dim); }
+.spinner {
+  width: 20px; height: 20px; border: 2px solid var(--border2);
+  border-top-color: var(--blue); border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.empty-state { text-align: center; padding: 60px 20px; }
+.empty-icon  { font-size: 36px; margin-bottom: 12px; }
+.empty-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+.empty-desc  { font-size: 12px; color: var(--dim); }
+.export-btn {
+  font-size: 11px; padding: 4px 10px; background: var(--surface2);
+  border: 1px solid var(--border2); color: var(--mid);
+  border-radius: 5px; cursor: pointer; transition: all .15s;
+}
+.export-btn:hover { border-color: var(--blue); color: var(--text); }
+
+/* ── ORDER SEARCH INPUTS ── */
+.orders-search { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 768px) {
+  .hdr          { padding: 0 12px; }
+  .hdr-title    { display: none; }
+  .hdr-sep      { display: none; }
+  .tab-panel    { padding: 12px; }
+  .filter-bar   { padding: 8px 12px; }
+  .charts-grid  { grid-template-columns: 1fr; }
+  .kpi-strip    { grid-template-columns: repeat(2, 1fr); }
+  .sku-drawer   { width: 100%; }
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════
+     LOGIN SCREEN
+     ══════════════════════════════════════ -->
+<div id="loginScreen">
+  <div class="login-wrap">
+    <div>
+      <div class="login-logo-mark">ASUNG</div>
+      <div class="login-logo-sub">Customer Portal</div>
+    </div>
+    <div class="login-card">
+      <div class="login-title">Sign in to your account</div>
+      <div class="login-sub">Access your purchase history, trends, and insights from Asung Trading.</div>
+      <div class="field-group">
+        <div class="field-label">Customer ID</div>
+        <input class="field-input" id="loginId" type="text" placeholder="e.g. C001" autocomplete="username" />
+      </div>
+      <div class="field-group">
+        <div class="field-label">Password</div>
+        <input class="field-input" id="loginPw" type="password" placeholder="Your portal password" autocomplete="current-password"
+          onkeydown="if(event.key==='Enter')doLogin()" />
+      </div>
+      <button class="login-btn" id="loginBtn" onclick="doLogin()">Sign In</button>
+      <div class="login-err" id="loginErr"></div>
+    </div>
+    <div class="login-note">Need access? Contact your Asung representative.</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     MAIN APP
+     ══════════════════════════════════════ -->
+<div id="mainApp">
+
+  <!-- Header -->
+  <div class="hdr">
+    <div class="hdr-brand">
+      <span class="hdr-logo">ASUNG</span>
+      <span class="hdr-sep">|</span>
+      <span class="hdr-title">My Account</span>
+    </div>
+    <div class="hdr-right">
+      <span class="hdr-cust">Signed in as <strong id="custName">—</strong></span>
+      <button class="hdr-signout" onclick="doLogout()">Sign out</button>
+    </div>
+  </div>
+
+  <!-- Tab nav -->
+  <div class="tab-nav">
+    <button class="tab-btn active" onclick="switchTab('overview')">📊 Overview</button>
+    <button class="tab-btn" onclick="switchTab('brands')">🏷 By Brand</button>
+    <button class="tab-btn" onclick="switchTab('skus')">📦 SKU Analysis</button>
+    <button class="tab-btn" onclick="switchTab('orders')">🧾 Order History</button>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="filter-bar">
+    <span class="filter-label">Period</span>
+    <input class="filter-input" id="dateFrom" type="date" />
+    <span class="filter-sep">—</span>
+    <input class="filter-input" id="dateTo"   type="date" />
+    <div class="quick-btns">
+      <button class="q-btn" onclick="setQuick(3)">3M</button>
+      <button class="q-btn" onclick="setQuick(6)">6M</button>
+      <button class="q-btn" onclick="setQuick(12)">1Y</button>
+      <button class="q-btn" onclick="setQuick(0)">All</button>
+    </div>
+    <button class="filter-btn" onclick="applyFilters()">Apply</button>
+  </div>
+
+  <!-- Tab: Overview -->
+  <div class="tab-panel active" id="tab-overview">
+    <div id="overviewContent"><div class="loading"><div class="spinner"></div> Loading your data…</div></div>
+  </div>
+
+  <!-- Tab: Brands -->
+  <div class="tab-panel" id="tab-brands">
+    <div id="brandsContent"><div class="loading"><div class="spinner"></div> Loading…</div></div>
+  </div>
+
+  <!-- Tab: SKUs -->
+  <div class="tab-panel" id="tab-skus">
+    <div class="search-row">
+      <input class="search-input" id="skuSearch" placeholder="Search SKU or product name…" oninput="filterSkuTable()" />
+      <select class="search-select" id="brandFilter" onchange="filterSkuTable()">
+        <option value="">All Brands</option>
+      </select>
+      <span id="skuCountLabel" style="font-size:11px;color:var(--dim);white-space:nowrap"></span>
+    </div>
+    <div id="skusContent"><div class="loading"><div class="spinner"></div> Loading…</div></div>
+  </div>
+
+  <!-- Tab: Orders -->
+  <div class="tab-panel" id="tab-orders">
+    <div class="orders-search">
+      <input class="search-input" id="orderSkuSearch" placeholder="Filter by SKU or product…" oninput="filterOrderTable()" style="max-width:240px" />
+      <input class="search-input" id="orderBrandSearch" placeholder="Filter by brand…" oninput="filterOrderTable()" style="max-width:180px" />
+      <span id="orderCountLabel" style="font-size:11px;color:var(--dim);align-self:center"></span>
+      <button class="export-btn" onclick="exportOrders()" style="margin-left:auto">⬇ CSV</button>
+    </div>
+    <div id="ordersContent"><div class="loading"><div class="spinner"></div> Loading…</div></div>
+  </div>
+
+</div><!-- /mainApp -->
+
+<!-- SKU Detail Drawer -->
+<div class="sku-drawer" id="skuDrawer">
+  <button class="drawer-close" onclick="closeDrawer()">✕</button>
+  <div id="drawerContent"></div>
+</div>
+<div id="drawerOverlay" onclick="closeDrawer()"
+  style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:499"></div>
+
+<script>
+// ══════════════════════════════════════
+// CONFIG — replace with your deployed Apps Script Web App URL
+// ══════════════════════════════════════
+const API_URL = 'https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID_HERE/exec';
+
+// ══════════════════════════════════════
+// STATE
+// ══════════════════════════════════════
+let authToken    = null;
+let displayName  = '';
+let allSkuRows   = [];    // full SKU data for client-side filtering
+let allOrderRows = [];    // full order data for client-side filtering
+const charts = {};
+const TOOLTIP = { backgroundColor:'#0f1218', titleColor:'#f1f5f9', bodyColor:'#94a3b8', borderColor:'#222a38', borderWidth:1 };
+
+// ── Formatters ──────────────────────────────────────────
+const fmt  = n => '$'+(parseFloat(n)||0).toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtK = n => { n=parseFloat(n)||0; return n>=1e6?'$'+(n/1e6).toFixed(2)+'M':n>=1e3?'$'+(n/1e3).toFixed(1)+'K':fmt(n); };
+const fmtN = n => (parseInt(n)||0).toLocaleString();
+const pct  = (a,b) => b>0?((parseFloat(a)||0)/(parseFloat(b)||1)*100).toFixed(1)+'%':'—';
+const d    = s => s ? new Date(s).toLocaleDateString('en-CA',{year:'numeric',month:'short',day:'numeric'}) : '—';
+
+function mkChart(id,cfg){ if(charts[id]) charts[id].destroy(); const c=document.getElementById(id); if(c) charts[id]=new Chart(c,cfg); }
+function baseOpts(rot){ return { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:'#94a3b8', font:{size:10} } }, tooltip:TOOLTIP }, scales:{ x:{ grid:{color:'#1a2233'}, ticks:{color:'#475569',font:{size:10},maxRotation:rot||0} }, y:{ grid:{color:'#1a2233'}, ticks:{color:'#475569',font:{size:10}} } } }; }
+
+// ══════════════════════════════════════
+// AUTH
+// ══════════════════════════════════════
+async function doLogin() {
+  const id = document.getElementById('loginId').value.trim();
+  const pw = document.getElementById('loginPw').value.trim();
+  if (!id || !pw) { showLoginErr('Please enter your Customer ID and password.'); return; }
+
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  document.getElementById('loginErr').textContent = '';
+
+  try {
+    const res = await apiCall({ action:'login', customer_id:id, password:pw });
+    if (!res.ok) throw new Error(res.error || 'Login failed');
+
+    authToken   = res.token;
+    displayName = res.display_name;
+    sessionStorage.setItem('cp_token', authToken);
+    sessionStorage.setItem('cp_name',  displayName);
+
+    document.getElementById('custName').textContent = displayName;
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('mainApp').style.display     = 'block';
+
+    initDates();
+    loadAll();
+  } catch(e) {
+    showLoginErr(e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Sign In';
+  }
+}
+
+function doLogout() {
+  if (authToken) apiCall({ action:'logout', token: authToken }).catch(()=>{});
+  authToken = null; displayName = '';
+  sessionStorage.removeItem('cp_token');
+  sessionStorage.removeItem('cp_name');
+  document.getElementById('mainApp').style.display     = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('loginId').value = '';
+  document.getElementById('loginPw').value = '';
+  document.getElementById('loginErr').textContent = '';
+}
+
+function showLoginErr(msg) { document.getElementById('loginErr').textContent = msg; }
+
+// ── Resume session from sessionStorage ───────────────────
+function tryResumeSession() {
+  const token = sessionStorage.getItem('cp_token');
+  const name  = sessionStorage.getItem('cp_name');
+  if (token && name) {
+    authToken   = token;
+    displayName = name;
+    document.getElementById('custName').textContent = displayName;
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('mainApp').style.display     = 'block';
+    initDates();
+    loadAll();
+  }
+}
+
+// ══════════════════════════════════════
+// DATES
+// ══════════════════════════════════════
+function initDates() {
+  const today = new Date();
+  const from  = new Date(today.getFullYear(), today.getMonth() - 11, 1);
+  document.getElementById('dateFrom').value = from.toISOString().slice(0,10);
+  document.getElementById('dateTo').value   = today.toISOString().slice(0,10);
+}
+
+function setQuick(months) {
+  document.querySelectorAll('.q-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  const today = new Date();
+  if (months === 0) {
+    document.getElementById('dateFrom').value = '2022-01-01';
+  } else {
+    const from = new Date(today.getFullYear(), today.getMonth() - months + 1, 1);
+    document.getElementById('dateFrom').value = from.toISOString().slice(0,10);
+  }
+  document.getElementById('dateTo').value = today.toISOString().slice(0,10);
+  applyFilters();
+}
+
+function applyFilters() { loadAll(); }
+
+function getDateParams() {
+  return {
+    date_from: document.getElementById('dateFrom').value,
+    date_to:   document.getElementById('dateTo').value,
+  };
+}
+
+// ══════════════════════════════════════
+// TABS
+// ══════════════════════════════════════
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelector(`.tab-btn[onclick="switchTab('${tab}')"]`).classList.add('active');
+  document.getElementById('tab-' + tab).classList.add('active');
+}
+
+// ══════════════════════════════════════
+// LOAD ALL
+// ══════════════════════════════════════
+function loadAll() {
+  loadOverview();
+  loadBrands();
+  loadSkus();
+  loadOrders();
+}
+
+// ══════════════════════════════════════
+// OVERVIEW TAB
+// ══════════════════════════════════════
+async function loadOverview() {
+  const el = document.getElementById('overviewContent');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div> Fetching your purchase summary…</div>';
+  try {
+    const [kpi, trend] = await Promise.all([
+      apiQuery('overview', getDateParams()),
+      apiQuery('trend',    getDateParams()),
+    ]);
+    renderOverview(kpi, trend);
+  } catch(e) { el.innerHTML = errState(e.message); }
+}
+
+function renderOverview(kpi, trend) {
+  const el = document.getElementById('overviewContent');
+  const k  = Array.isArray(kpi) ? (kpi[0]||{}) : kpi;
+
+  const torRev = parseFloat(k.toronto_rev)||0;
+  const edmRev = parseFloat(k.edmonton_rev)||0;
+  const totRev = parseFloat(k.total_revenue)||0;
+
+  el.innerHTML = `
+    <div class="kpi-strip">
+      <div class="kpi blue">
+        <div class="kpi-lbl">Total Purchases</div>
+        <div class="kpi-val">${fmtK(k.total_revenue)}</div>
+        <div class="kpi-sub">${fmtN(k.total_orders)} orders</div>
+      </div>
+      <div class="kpi yellow">
+        <div class="kpi-lbl">Units Ordered</div>
+        <div class="kpi-val">${fmtN(k.total_qty)}</div>
+        <div class="kpi-sub">total units</div>
+      </div>
+      <div class="kpi purple">
+        <div class="kpi-lbl">Unique SKUs</div>
+        <div class="kpi-val">${fmtN(k.unique_skus)}</div>
+        <div class="kpi-sub">${fmtN(k.unique_brands)} brands</div>
+      </div>
+      <div class="kpi blue">
+        <div class="kpi-lbl">Toronto</div>
+        <div class="kpi-val">${fmtK(torRev)}</div>
+        <div class="kpi-sub">${totRev>0?(torRev/totRev*100).toFixed(1):0}% of spend</div>
+      </div>
+      <div class="kpi orange">
+        <div class="kpi-lbl">Edmonton</div>
+        <div class="kpi-val">${fmtK(edmRev)}</div>
+        <div class="kpi-sub">${totRev>0?(edmRev/totRev*100).toFixed(1):0}% of spend</div>
+      </div>
+      <div class="kpi teal">
+        <div class="kpi-lbl">Active Since</div>
+        <div class="kpi-val" style="font-size:15px">${k.first_order ? new Date(k.first_order).toLocaleDateString('en-CA',{year:'numeric',month:'short'}) : '—'}</div>
+        <div class="kpi-sub">Last order: ${k.last_order ? new Date(k.last_order).toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'}) : '—'}</div>
+      </div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="card">
+        <div class="card-hdr">
+          <span class="card-title">Monthly Spend</span>
+          <span class="card-badge">${trend.length} months</span>
+        </div>
+        <div class="chart-box tall"><canvas id="cTrend"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">Units Ordered per Month</span></div>
+        <div class="chart-box tall"><canvas id="cQty"></canvas></div>
+      </div>
+    </div>
+
+    <div class="charts-row">
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">Orders per Month</span></div>
+        <div class="chart-box"><canvas id="cOrders"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">Branch Split</span></div>
+        <div class="chart-box"><canvas id="cBranch"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">Avg Order Value</span></div>
+        <div class="chart-box"><canvas id="cAOV"></canvas></div>
+      </div>
+    </div>
+  `;
+
+  const labels = trend.map(r=>r.month);
+  const revData = trend.map(r=>parseFloat(r.revenue)||0);
+  const qtyData = trend.map(r=>parseInt(r.qty)||0);
+  const ordData = trend.map(r=>parseInt(r.orders)||0);
+  const aovData = trend.map((r,i) => ordData[i]>0 ? revData[i]/ordData[i] : 0);
+
+  mkChart('cTrend',{type:'bar',data:{labels,datasets:[
+    {label:'Spend',data:revData,backgroundColor:'rgba(59,130,246,.7)',borderRadius:4}
+  ]},options:{...baseOpts(),plugins:{...baseOpts().plugins,tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}}}});
+
+  mkChart('cQty',{type:'bar',data:{labels,datasets:[
+    {label:'Units',data:qtyData,backgroundColor:'rgba(168,85,247,.7)',borderRadius:4}
+  ]},options:{...baseOpts(),plugins:{...baseOpts().plugins,tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+ctx.raw.toLocaleString()}}}}});
+
+  mkChart('cOrders',{type:'line',data:{labels,datasets:[
+    {label:'Orders',data:ordData,borderColor:'var(--teal)',backgroundColor:'rgba(20,184,166,.1)',tension:.3,fill:true,pointRadius:3}
+  ]},options:{...baseOpts(),plugins:{...baseOpts().plugins,tooltip:{...TOOLTIP}}}});
+
+  mkChart('cBranch',{type:'doughnut',data:{
+    labels:['Toronto','Edmonton'],
+    datasets:[{data:[torRev,edmRev],backgroundColor:['rgba(59,130,246,.8)','rgba(249,115,22,.8)'],borderWidth:1,borderColor:'#080a0f'}]
+  },options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:10},boxWidth:10}},tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}}}});
+
+  mkChart('cAOV',{type:'line',data:{labels,datasets:[
+    {label:'Avg Order Value',data:aovData,borderColor:'var(--gold)',backgroundColor:'rgba(245,158,11,.1)',tension:.3,fill:true,pointRadius:3}
+  ]},options:{...baseOpts(),plugins:{...baseOpts().plugins,tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}}}});
+}
+
+// ══════════════════════════════════════
+// BRANDS TAB
+// ══════════════════════════════════════
+async function loadBrands() {
+  const el = document.getElementById('brandsContent');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading brand breakdown…</div>';
+  try {
+    const rows = await apiQuery('brands', getDateParams());
+    renderBrands(rows);
+  } catch(e) { el.innerHTML = errState(e.message); }
+}
+
+function renderBrands(rows) {
+  const el = document.getElementById('brandsContent');
+  if (!rows.length) { el.innerHTML = emptyState('No data found for this period.'); return; }
+
+  const totalRev = rows.reduce((a,r)=>a+(parseFloat(r.revenue)||0),0);
+  const top10    = rows.slice(0,10);
+
+  el.innerHTML = `
+    <div class="charts-row" style="margin-bottom:16px">
+      <div class="card" style="grid-column:span 2">
+        <div class="card-hdr">
+          <span class="card-title">Spend by Brand</span>
+          <span class="card-badge">Top ${top10.length}</span>
+        </div>
+        <div class="chart-box tall"><canvas id="cBrandBar"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">Brand Share</span></div>
+        <div class="chart-box tall"><canvas id="cBrandPie"></canvas></div>
+      </div>
+    </div>
+    <div class="tbl-card">
+      <div class="tbl-hdr">
+        <span class="tbl-title">All Brands</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="tbl-count">${rows.length} brands</span>
+          <button class="export-btn" onclick="exportCSV(window._brandRows,'brands.csv')">⬇ CSV</button>
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>Brand</th>
+            <th class="num">Total Spend</th>
+            <th class="num">Units</th>
+            <th class="num">Orders</th>
+            <th class="num">SKUs</th>
+            <th class="num">Share</th>
+            <th>First Order</th>
+            <th>Last Order</th>
+          </tr></thead>
+          <tbody>
+            ${rows.map(r=>`
+              <tr>
+                <td><strong>${r.brand||'—'}</strong></td>
+                <td class="num">${fmt(r.revenue)}</td>
+                <td class="num">${fmtN(r.qty)}</td>
+                <td class="num">${fmtN(r.orders)}</td>
+                <td class="num">${fmtN(r.skus)}</td>
+                <td class="num">${pct(r.revenue,totalRev)}</td>
+                <td>${r.first_date?new Date(r.first_date).toLocaleDateString('en-CA',{month:'short',year:'numeric'}):'—'}</td>
+                <td>${r.last_date?new Date(r.last_date).toLocaleDateString('en-CA',{month:'short',year:'numeric'}):'—'}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  window._brandRows = rows;
+
+  const COLORS = ['rgba(59,130,246,.8)','rgba(20,184,166,.8)','rgba(168,85,247,.8)','rgba(249,115,22,.8)','rgba(34,197,94,.8)','rgba(234,179,8,.8)','rgba(239,68,68,.8)','rgba(96,165,250,.8)','rgba(245,158,11,.8)','rgba(14,165,233,.8)'];
+  mkChart('cBrandBar',{type:'bar',indexAxis:'y',data:{
+    labels:top10.map(r=>r.brand),
+    datasets:[{label:'Spend',data:top10.map(r=>parseFloat(r.revenue)||0),backgroundColor:'rgba(59,130,246,.7)',borderRadius:3}]
+  },options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}},scales:{x:{grid:{color:'#1a2233'},ticks:{color:'#475569',font:{size:9}}},y:{grid:{color:'#1a2233'},ticks:{color:'#94a3b8',font:{size:9}}}}}});
+
+  mkChart('cBrandPie',{type:'doughnut',data:{
+    labels:top10.map(r=>r.brand),
+    datasets:[{data:top10.map(r=>parseFloat(r.revenue)||0),backgroundColor:COLORS,borderWidth:1,borderColor:'#080a0f'}]
+  },options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:9},boxWidth:8}},tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}}}});
+}
+
+// ══════════════════════════════════════
+// SKUs TAB
+// ══════════════════════════════════════
+async function loadSkus() {
+  const el = document.getElementById('skusContent');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading SKU analysis with benchmarks…</div>';
+  try {
+    const rows = await apiQuery('skus', getDateParams());
+    allSkuRows = rows;
+    populateBrandFilter(rows);
+    renderSkuTable(rows);
+  } catch(e) { el.innerHTML = errState(e.message); }
+}
+
+function populateBrandFilter(rows) {
+  const brands = [...new Set(rows.map(r=>r.brand).filter(Boolean))].sort();
+  const sel = document.getElementById('brandFilter');
+  sel.innerHTML = '<option value="">All Brands</option>' + brands.map(b=>`<option value="${b}">${b}</option>`).join('');
+}
+
+function filterSkuTable() {
+  const q   = (document.getElementById('skuSearch').value||'').toLowerCase();
+  const brd = document.getElementById('brandFilter').value;
+  const filtered = allSkuRows.filter(r => {
+    const matchQ = !q || (r.SKU||'').toLowerCase().includes(q) || (r.product||'').toLowerCase().includes(q);
+    const matchB = !brd || r.brand === brd;
+    return matchQ && matchB;
+  });
+  document.getElementById('skuCountLabel').textContent = `${filtered.length} SKUs`;
+  renderSkuTable(filtered);
+}
+
+function renderSkuTable(rows) {
+  const el = document.getElementById('skusContent');
+  document.getElementById('skuCountLabel').textContent = `${rows.length} SKUs`;
+
+  if (!rows.length) { el.innerHTML = emptyState('No SKUs found.'); return; }
+
+  el.innerHTML = `
+    <div class="tbl-card">
+      <div class="tbl-hdr">
+        <span class="tbl-title">SKU Performance & Volume Benchmark</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span style="font-size:10px;color:var(--dim)">
+            <span style="color:var(--green)">▲</span> = buying more than avg &nbsp;
+            <span style="color:var(--blue2)">▼</span> = buying less than avg
+          </span>
+          <button class="export-btn" onclick="exportCSV(window._skuRows,'sku_analysis.csv')">⬇ CSV</button>
+        </div>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>SKU</th>
+            <th>Product</th>
+            <th>Brand</th>
+            <th class="num">Total Spend</th>
+            <th class="num">My Units</th>
+            <th class="num">Orders</th>
+            <th class="num">Avg Units/Buyer</th>
+            <th class="num">vs. Market</th>
+            <th>Last Order</th>
+            <th></th>
+          </tr></thead>
+          <tbody>
+            ${rows.map(r => {
+              const myQty  = parseInt(r.my_qty)||0;
+              const avgQty = parseFloat(r.avg_qty_per_buyer)||0;
+              const diff   = parseFloat(r.qty_vs_avg_pct)||0;
+              const diffEl = avgQty > 0
+                ? `<span style="font-size:10px;font-weight:600;color:${diff > 5 ? 'var(--green)' : diff < -5 ? 'var(--blue2)' : 'var(--dim)'}">
+                    ${diff > 5 ? '▲' : diff < -5 ? '▼' : '≈'} ${Math.abs(diff).toFixed(0)}%
+                   </span>`
+                : '<span style="color:var(--dim);font-size:10px">—</span>';
+              return `
+                <tr>
+                  <td class="sku-tag">${r.SKU||'—'}</td>
+                  <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${r.product||'—'}</td>
+                  <td class="brand-tag">${r.brand||'—'}</td>
+                  <td class="num">${fmt(r.my_revenue)}</td>
+                  <td class="num">${fmtN(r.my_qty)}</td>
+                  <td class="num">${fmtN(r.my_orders)}</td>
+                  <td class="num">${avgQty > 0 ? Math.round(avgQty).toLocaleString() : '—'}</td>
+                  <td class="num">${diffEl}</td>
+                  <td>${r.last_date ? new Date(r.last_date).toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
+                  <td><button class="q-btn" onclick="openSkuDrawer('${(r.SKU||'').replace(/'/g,"\\'")}','${(r.product||'').replace(/'/g,"\\'")}')">Detail ›</button></td>
+                </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  window._skuRows = rows;
+}
+
+// ══════════════════════════════════════
+// SKU DETAIL DRAWER
+// ══════════════════════════════════════
+async function openSkuDrawer(sku, product) {
+  document.getElementById('skuDrawer').classList.add('open');
+  document.getElementById('drawerOverlay').style.display = 'block';
+  document.getElementById('drawerContent').innerHTML = `
+    <div class="drawer-title">${product}</div>
+    <div class="drawer-sku">${sku}</div>
+    <div class="loading"><div class="spinner"></div> Loading SKU detail…</div>
+  `;
+  try {
+    const data = await apiQuery('sku_detail', { ...getDateParams(), sku });
+    renderDrawer(sku, product, data);
+  } catch(e) {
+    document.getElementById('drawerContent').innerHTML = errState(e.message);
+  }
+}
+
+function closeDrawer() {
+  document.getElementById('skuDrawer').classList.remove('open');
+  document.getElementById('drawerOverlay').style.display = 'none';
+  if (charts['cDrawerTrend']) { charts['cDrawerTrend'].destroy(); delete charts['cDrawerTrend']; }
+}
+
+function renderDrawer(sku, product, data) {
+  const { my_history, benchmark } = data;
+  const b = benchmark || {};
+
+  const myTotalQty    = my_history.reduce((s,r)=>(parseInt(r.qty)||0)+s, 0);
+  const avgQtyBuyer   = parseFloat(b.avg_qty_per_buyer)||0;
+  const avgQtyOrder   = parseFloat(b.avg_qty_per_order)||0;
+  const totalBuyers   = parseInt(b.total_buyers)||0;
+  const totalQtyAll   = parseInt(b.total_qty_all)||0;
+  const diff          = avgQtyBuyer > 0 ? ((myTotalQty - avgQtyBuyer) / avgQtyBuyer * 100) : 0;
+  const isMore  = diff > 5;
+  const isLess  = diff < -5;
+
+  document.getElementById('drawerContent').innerHTML = `
+    <div class="drawer-title">${product}</div>
+    <div class="drawer-sku">${sku}</div>
+
+    <div class="bench-grid">
+      <div class="bench-card">
+        <div class="bench-lbl">My Total Units</div>
+        <div class="bench-val">${fmtN(myTotalQty)}</div>
+        <div class="bench-sub">in selected period</div>
+      </div>
+      <div class="bench-card">
+        <div class="bench-lbl">Avg Units / Buyer</div>
+        <div class="bench-val">${avgQtyBuyer > 0 ? Math.round(avgQtyBuyer).toLocaleString() : '—'}</div>
+        <div class="bench-sub">${totalBuyers > 0 ? totalBuyers.toLocaleString() + ' buyers market-wide' : '—'}</div>
+      </div>
+      <div class="bench-card">
+        <div class="bench-lbl">vs. Market</div>
+        <div class="bench-val ${isMore?'down':isLess?'':''}" style="color:${isMore?'var(--green)':isLess?'var(--blue2)':'var(--mid)'}">
+          ${avgQtyBuyer > 0 ? (isMore ? '▲ ' : isLess ? '▼ ' : '≈ ') + Math.abs(diff).toFixed(0) + '%' : '—'}
+        </div>
+        <div class="bench-sub">${isMore ? 'Buying more than average' : isLess ? 'Buying less than average' : 'Near market average'}</div>
+      </div>
+      <div class="bench-card">
+        <div class="bench-lbl">Avg Units / Order</div>
+        <div class="bench-val">${avgQtyOrder > 0 ? avgQtyOrder.toLocaleString('en-CA',{maximumFractionDigits:1}) : '—'}</div>
+        <div class="bench-sub">typical order size market-wide</div>
+      </div>
+    </div>
+
+    <div class="card-hdr" style="margin-bottom:10px">
+      <span class="card-title">Your Purchase History (${sku})</span>
+      <span class="card-badge">${my_history.length} months</span>
+    </div>
+    <div class="drawer-chart-box"><canvas id="cDrawerTrend"></canvas></div>
+
+    ${my_history.length ? `
+    <div class="tbl-card" style="margin-top:14px">
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>Month</th><th class="num">Units</th><th class="num">Orders</th>
+          </tr></thead>
+          <tbody>
+            ${my_history.map(r=>`<tr>
+              <td>${r.month}</td>
+              <td class="num">${fmtN(r.qty)}</td>
+              <td class="num">${fmtN(r.orders)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>` : ''}
+  `;
+
+  if (my_history.length) {
+    const labels = my_history.map(r=>r.month);
+    mkChart('cDrawerTrend',{type:'bar',data:{labels,datasets:[
+      {label:'Units',data:my_history.map(r=>parseInt(r.qty)||0),backgroundColor:'rgba(59,130,246,.7)',borderRadius:3},
+    ]},options:{...baseOpts(),plugins:{...baseOpts().plugins,tooltip:{...TOOLTIP,callbacks:{label:ctx=>` Units: ${ctx.raw.toLocaleString()}`}}}}});
+  }
+}
+
+// ══════════════════════════════════════
+// ORDERS TAB
+// ══════════════════════════════════════
+async function loadOrders() {
+  const el = document.getElementById('ordersContent');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading order history…</div>';
+  try {
+    const rows = await apiQuery('orders', getDateParams());
+    allOrderRows = rows;
+    renderOrderTable(rows);
+  } catch(e) { el.innerHTML = errState(e.message); }
+}
+
+function filterOrderTable() {
+  const sku   = (document.getElementById('orderSkuSearch').value||'').toLowerCase();
+  const brand = (document.getElementById('orderBrandSearch').value||'').toLowerCase();
+  const filtered = allOrderRows.filter(r => {
+    const matchS = !sku   || (r.SKU||'').toLowerCase().includes(sku) || (r.product||'').toLowerCase().includes(sku);
+    const matchB = !brand || (r.brand||'').toLowerCase().includes(brand);
+    return matchS && matchB;
+  });
+  document.getElementById('orderCountLabel').textContent = `${filtered.length.toLocaleString()} lines`;
+  renderOrderTable(filtered);
+}
+
+function renderOrderTable(rows) {
+  const el = document.getElementById('ordersContent');
+  document.getElementById('orderCountLabel').textContent = `${rows.length.toLocaleString()} lines`;
+  if (!rows.length) { el.innerHTML = emptyState('No orders found for this period.'); return; }
+
+  el.innerHTML = `
+    <div class="tbl-card">
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>Date</th>
+            <th>Order #</th>
+            <th>SKU</th>
+            <th>Product</th>
+            <th>Brand</th>
+            <th class="num">Qty</th>
+            <th class="num">Unit Price</th>
+            <th class="num">Line Total</th>
+            <th>Branch</th>
+          </tr></thead>
+          <tbody>
+            ${rows.map(r=>`<tr>
+              <td>${r.date ? new Date(r.date).toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
+              <td style="font-family:monospace;font-size:11px;color:var(--mid)">${r.order_number||'—'}</td>
+              <td class="sku-tag">${r.SKU||'—'}</td>
+              <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis">${r.product||'—'}</td>
+              <td class="brand-tag">${r.brand||'—'}</td>
+              <td class="num">${fmtN(r.qty)}</td>
+              <td class="num">${fmt(r.unit_price)}</td>
+              <td class="num">${fmt(r.line_total)}</td>
+              <td class="${r.location==='Asung Trading Inc.'?'loc-tor':'loc-edm'}">${r.location==='Asung Trading Inc.'?'Toronto':'Edmonton'}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+  window._orderRows = rows;
+}
+
+function exportOrders() {
+  const rows = window._orderRows || allOrderRows;
+  if (rows) exportCSV(rows, 'order_history.csv');
+}
+
+// ══════════════════════════════════════
+// API HELPERS
+// ══════════════════════════════════════
+async function apiCall(body) {
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function apiQuery(type, params) {
+  const res = await apiCall({ action:'query', token: authToken, type, params });
+  if (!res.ok) {
+    if (res.error && res.error.includes('Session expired')) {
+      doLogout(); throw new Error('Session expired. Please sign in again.');
+    }
+    throw new Error(res.error || 'Query failed');
+  }
+  return res.data;
+}
+
+// ══════════════════════════════════════
+// UTILITIES
+// ══════════════════════════════════════
+function exportCSV(rows, filename) {
+  if (!rows || !rows.length) return;
+  const keys = Object.keys(rows[0]);
+  const csv  = [keys.join(','), ...rows.map(r => keys.map(k => {
+    const v = r[k] == null ? '' : String(r[k]);
+    return v.includes(',') || v.includes('"') || v.includes('\n') ? `"${v.replace(/"/g,'""')}"` : v;
+  }).join(','))].join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = filename;
+  a.click();
+}
+
+function errState(msg) {
+  return `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Error</div><div class="empty-desc">${msg}</div></div>`;
+}
+function emptyState(msg) {
+  return `<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-title">No Data</div><div class="empty-desc">${msg}</div></div>`;
+}
+
+// ══════════════════════════════════════
+// INIT
+// ══════════════════════════════════════
+window.addEventListener('DOMContentLoaded', tryResumeSession);
+</script>
+</body>
+</html>
