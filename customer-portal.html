@@ -288,6 +288,15 @@ tr:hover td { background: var(--surface2); }
 }
 .export-btn:hover { border-color: var(--blue); color: var(--text); }
 
+/* ── STORE SELECTOR ── */
+.store-select {
+  background: var(--surface2); border: 1px solid var(--border2);
+  color: var(--text); border-radius: 8px; padding: 5px 10px;
+  font-size: 12px; font-weight: 500; outline: none; cursor: pointer;
+  max-width: 220px; transition: border-color .2s;
+}
+.store-select:focus { border-color: var(--blue); }
+
 /* ── ORDER SEARCH INPUTS ── */
 .orders-search { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
 
@@ -318,9 +327,9 @@ tr:hover td { background: var(--surface2); }
     <div class="login-card">
       <div class="login-title">Sign in to your account</div>
       <div class="login-sub">Access your purchase history, trends, and insights from Asung Trading.</div>
-      <div class="field-group">
+      <div class="field-group" id="idFieldGroup">
         <div class="field-label">Customer ID</div>
-        <input class="field-input" id="loginId" type="text" placeholder="e.g. C001" autocomplete="username" />
+        <input class="field-input" id="loginId" type="text" placeholder="e.g. G001" autocomplete="username" />
       </div>
       <div class="field-group">
         <div class="field-label">Password</div>
@@ -347,6 +356,11 @@ tr:hover td { background: var(--surface2); }
       <span class="hdr-title">My Account</span>
     </div>
     <div class="hdr-right">
+      <div id="storeSelectorWrap" style="display:none;align-items:center;gap:8px">
+        <span style="font-size:11px;color:var(--dim)">Viewing:</span>
+        <select id="storeSelector" class="store-select" onchange="onStoreChange()"></select>
+      </div>
+      <span class="hdr-sep" style="color:var(--border2)">|</span>
       <span class="hdr-cust">Signed in as <strong id="custName">—</strong></span>
       <button class="hdr-signout" onclick="doLogout()">Sign out</button>
     </div>
@@ -429,8 +443,10 @@ const API_URL = 'https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID_HERE/exec
 // ══════════════════════════════════════
 let authToken    = null;
 let displayName  = '';
-let allSkuRows   = [];    // full SKU data for client-side filtering
-let allOrderRows = [];    // full order data for client-side filtering
+let groupStores  = [];   // [{store_id, store_name}, ...]
+let activeStoreId = 'all';
+let allSkuRows   = [];
+let allOrderRows = [];
 const charts = {};
 const TOOLTIP = { backgroundColor:'#0f1218', titleColor:'#f1f5f9', bodyColor:'#94a3b8', borderColor:'#222a38', borderWidth:1 };
 
@@ -457,19 +473,19 @@ async function doLogin() {
   document.getElementById('loginErr').textContent = '';
 
   try {
-    const res = await apiCall({ action:'login', customer_id:id, password:pw });
+    const res = await apiCall({ action:'login', group_id: id, password: pw });
     if (!res.ok) throw new Error(res.error || 'Login failed');
 
-    authToken   = res.token;
-    displayName = res.display_name;
-    sessionStorage.setItem('cp_token', authToken);
-    sessionStorage.setItem('cp_name',  displayName);
+    authToken    = res.token;
+    displayName  = res.display_name;
+    groupStores  = res.stores || [];
+    activeStoreId = 'all';
 
-    document.getElementById('custName').textContent = displayName;
-    document.getElementById('loginScreen').style.display = 'none';
-    document.getElementById('mainApp').style.display     = 'block';
+    sessionStorage.setItem('cp_token',  authToken);
+    sessionStorage.setItem('cp_name',   displayName);
+    sessionStorage.setItem('cp_stores', JSON.stringify(groupStores));
 
-    initDates();
+    _applySession();
     loadAll();
   } catch(e) {
     showLoginErr(e.message);
@@ -478,11 +494,20 @@ async function doLogin() {
   }
 }
 
+function _applySession() {
+  document.getElementById('custName').textContent = displayName;
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('mainApp').style.display     = 'block';
+  initDates();
+  _buildStoreSelector();
+}
+
 function doLogout() {
   if (authToken) apiCall({ action:'logout', token: authToken }).catch(()=>{});
-  authToken = null; displayName = '';
+  authToken = null; displayName = ''; groupStores = []; activeStoreId = 'all';
   sessionStorage.removeItem('cp_token');
   sessionStorage.removeItem('cp_name');
+  sessionStorage.removeItem('cp_stores');
   document.getElementById('mainApp').style.display     = 'none';
   document.getElementById('loginScreen').style.display = 'flex';
   document.getElementById('loginId').value = '';
@@ -492,19 +517,57 @@ function doLogout() {
 
 function showLoginErr(msg) { document.getElementById('loginErr').textContent = msg; }
 
+// ── URL ?id= → auto-fill Customer ID ─────────────────────
+function prefillIdFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const id     = params.get('id');
+  if (id) {
+    const field = document.getElementById('loginId');
+    field.value = id.toUpperCase();
+    // Hide the ID field row — customer only needs to enter password
+    document.getElementById('idFieldGroup').style.display = 'none';
+    document.getElementById('loginPw').focus();
+  }
+}
+
 // ── Resume session from sessionStorage ───────────────────
 function tryResumeSession() {
-  const token = sessionStorage.getItem('cp_token');
-  const name  = sessionStorage.getItem('cp_name');
+  prefillIdFromUrl();
+  const token  = sessionStorage.getItem('cp_token');
+  const name   = sessionStorage.getItem('cp_name');
+  const stores = sessionStorage.getItem('cp_stores');
   if (token && name) {
-    authToken   = token;
-    displayName = name;
-    document.getElementById('custName').textContent = displayName;
-    document.getElementById('loginScreen').style.display = 'none';
-    document.getElementById('mainApp').style.display     = 'block';
+    authToken    = token;
+    displayName  = name;
+    groupStores  = stores ? JSON.parse(stores) : [];
+    activeStoreId = 'all';
+    _applySession();
     initDates();
     loadAll();
   }
+}
+
+// ── Store selector ────────────────────────────────────────
+function _buildStoreSelector() {
+  const wrap = document.getElementById('storeSelectorWrap');
+  const sel  = document.getElementById('storeSelector');
+
+  if (groupStores.length <= 1) {
+    // Single store — no dropdown needed
+    wrap.style.display = 'none';
+    return;
+  }
+
+  wrap.style.display = 'flex';
+  sel.innerHTML =
+    `<option value="all">All Stores (${groupStores.length})</option>` +
+    groupStores.map(s => `<option value="${s.store_id}">${s.store_name}</option>`).join('');
+  sel.value = activeStoreId;
+}
+
+function onStoreChange() {
+  activeStoreId = document.getElementById('storeSelector').value;
+  loadAll();
 }
 
 // ══════════════════════════════════════
@@ -999,6 +1062,7 @@ function renderOrderTable(rows) {
             <th class="num">Unit Price</th>
             <th class="num">Line Total</th>
             <th>Branch</th>
+            ${groupStores.length > 1 && activeStoreId === 'all' ? '<th>Store</th>' : ''}
           </tr></thead>
           <tbody>
             ${rows.map(r=>`<tr>
@@ -1011,6 +1075,7 @@ function renderOrderTable(rows) {
               <td class="num">${fmt(r.unit_price)}</td>
               <td class="num">${fmt(r.line_total)}</td>
               <td class="${r.location==='Asung Trading Inc.'?'loc-tor':'loc-edm'}">${r.location==='Asung Trading Inc.'?'Toronto':'Edmonton'}</td>
+              ${groupStores.length > 1 && activeStoreId === 'all' ? `<td style="font-size:11px;color:var(--mid)">${r.customer||'—'}</td>` : ''}
             </tr>`).join('')}
           </tbody>
         </table>
@@ -1039,7 +1104,8 @@ async function apiCall(body) {
 }
 
 async function apiQuery(type, params) {
-  const res = await apiCall({ action:'query', token: authToken, type, params });
+  const fullParams = { ...params, store_id: activeStoreId };
+  const res = await apiCall({ action:'query', token: authToken, type, params: fullParams });
   if (!res.ok) {
     if (res.error && res.error.includes('Session expired')) {
       doLogout(); throw new Error('Session expired. Please sign in again.');
