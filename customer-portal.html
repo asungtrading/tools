@@ -638,11 +638,16 @@ async function loadOverview() {
   try {
     const kpi   = await apiQuery('overview', getDateParams());
     const trend = await apiQuery('trend',    getDateParams());
-    renderOverview(kpi, trend);
+    // Store comparison only when viewing all stores and multiple stores exist
+    let storeCompare = null;
+    if (activeStoreId === 'all' && groupStores.length > 1) {
+      storeCompare = await apiQuery('store_compare', getDateParams());
+    }
+    renderOverview(kpi, trend, storeCompare);
   } catch(e) { el.innerHTML = errState(e.message); }
 }
 
-function renderOverview(kpi, trend) {
+function renderOverview(kpi, trend, storeCompare) {
   const el = document.getElementById('overviewContent');
   const k  = Array.isArray(kpi) ? (kpi[0]||{}) : kpi;
 
@@ -712,6 +717,26 @@ function renderOverview(kpi, trend) {
         <div class="chart-box"><canvas id="cAOV"></canvas></div>
       </div>
     </div>
+
+    <div id="storeCompareSection" style="display:none">
+      <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:12px;padding-top:8px;border-top:1px solid var(--border)">
+        📍 Store Comparison
+      </div>
+      <div class="charts-row">
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">Revenue by Store</span></div>
+          <div class="chart-box tall"><canvas id="cStoreRev"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">Units by Store</span></div>
+          <div class="chart-box tall"><canvas id="cStoreQty"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">Orders by Store</span></div>
+          <div class="chart-box tall"><canvas id="cStoreOrd"></canvas></div>
+        </div>
+      </div>
+    </div>
   `;
 
   const labels = trend.map(r=>r.month);
@@ -740,6 +765,34 @@ function renderOverview(kpi, trend) {
   mkChart('cAOV',{type:'line',data:{labels,datasets:[
     {label:'Avg Order Value',data:aovData,borderColor:'var(--gold)',backgroundColor:'rgba(245,158,11,.1)',tension:.3,fill:true,pointRadius:3}
   ]},options:{...baseOpts(),plugins:{...baseOpts().plugins,tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}}}});
+
+  // Store comparison charts (only when viewing All Stores)
+  if (storeCompare && storeCompare.length > 1) {
+    const scEl = document.getElementById('storeCompareSection');
+    if (scEl) {
+      scEl.style.display = 'block';
+      const scLabels = storeCompare.map(s => s.store_name.replace(/Beauty Collection /gi,'').trim());
+      const scRev    = storeCompare.map(s => parseFloat(s.revenue)||0);
+      const scQty    = storeCompare.map(s => parseInt(s.qty)||0);
+      const scOrd    = storeCompare.map(s => parseInt(s.orders)||0);
+      const COLORS   = ['rgba(59,130,246,.8)','rgba(20,184,166,.8)','rgba(168,85,247,.8)','rgba(249,115,22,.8)','rgba(34,197,94,.8)','rgba(234,179,8,.8)'];
+
+      mkChart('cStoreRev',{type:'bar',indexAxis:'y',data:{
+        labels:scLabels,
+        datasets:[{label:'Revenue',data:scRev,backgroundColor:COLORS.slice(0,scRev.length),borderRadius:3}]
+      },options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}},scales:{x:{grid:{color:'#1a2233'},ticks:{color:'#475569',font:{size:9}}},y:{grid:{color:'#1a2233'},ticks:{color:'#94a3b8',font:{size:9}}}}}});
+
+      mkChart('cStoreQty',{type:'bar',indexAxis:'y',data:{
+        labels:scLabels,
+        datasets:[{label:'Units',data:scQty,backgroundColor:COLORS.slice(0,scQty.length),borderRadius:3}]
+      },options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+ctx.raw.toLocaleString()+' units'}}},scales:{x:{grid:{color:'#1a2233'},ticks:{color:'#475569',font:{size:9}}},y:{grid:{color:'#1a2233'},ticks:{color:'#94a3b8',font:{size:9}}}}}});
+
+      mkChart('cStoreOrd',{type:'bar',indexAxis:'y',data:{
+        labels:scLabels,
+        datasets:[{label:'Orders',data:scOrd,backgroundColor:COLORS.slice(0,scOrd.length),borderRadius:3}]
+      },options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...TOOLTIP}},scales:{x:{grid:{color:'#1a2233'},ticks:{color:'#475569',font:{size:9}}},y:{grid:{color:'#1a2233'},ticks:{color:'#94a3b8',font:{size:9}}}}}});
+    }
+  }
 }
 
 // ══════════════════════════════════════
@@ -1099,7 +1152,8 @@ function exportOrders() {
 // ══════════════════════════════════════
 async function apiCall(body) {
   const payload  = encodeURIComponent(JSON.stringify(body));
-  const cbName   = '_asung_cb_' + Date.now();
+  const cbName   = '_asung_cb_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+  const tagId    = '_jsonp_' + cbName;
   const url      = `${API_URL}?payload=${payload}&callback=${cbName}`;
 
   return new Promise((resolve, reject) => {
@@ -1111,7 +1165,7 @@ async function apiCall(body) {
     function cleanup() {
       clearTimeout(timer);
       delete window[cbName];
-      const el = document.getElementById('_jsonp_tag_');
+      const el = document.getElementById(tagId);
       if (el) el.remove();
     }
 
@@ -1120,9 +1174,9 @@ async function apiCall(body) {
       resolve(data);
     };
 
-    const script  = document.createElement('script');
-    script.id     = '_jsonp_tag_';
-    script.src    = url;
+    const script   = document.createElement('script');
+    script.id      = tagId;
+    script.src     = url;
     script.onerror = () => {
       cleanup();
       reject(new Error('Failed to fetch'));
