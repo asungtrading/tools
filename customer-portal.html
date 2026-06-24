@@ -464,7 +464,7 @@ function baseOpts(rot){ return { responsive:true, maintainAspectRatio:false, plu
 // AUTH
 // ══════════════════════════════════════
 async function doLogin() {
-  const id = document.getElementById('loginId').value.trim();
+  const id = document.getElementById('loginId').value.trim() || _urlGroupId;
   const pw = document.getElementById('loginPw').value.trim();
   if (!id || !pw) { showLoginErr('Please enter your Customer ID and password.'); return; }
 
@@ -518,15 +518,19 @@ function doLogout() {
 function showLoginErr(msg) { document.getElementById('loginErr').textContent = msg; }
 
 // ── URL ?id= → auto-fill Customer ID ─────────────────────
+let _urlGroupId = '';  // fallback storage
+
 function prefillIdFromUrl() {
   const params = new URLSearchParams(window.location.search);
   const id     = params.get('id');
   if (id) {
+    _urlGroupId = id.toUpperCase();
     const field = document.getElementById('loginId');
-    field.value = id.toUpperCase();
-    // Hide the ID field row — customer only needs to enter password
-    document.getElementById('idFieldGroup').style.display = 'none';
-    document.getElementById('loginPw').focus();
+    if (field) {
+      field.value = _urlGroupId;
+      document.getElementById('idFieldGroup').style.display = 'none';
+      document.getElementById('loginPw').focus();
+    }
   }
 }
 
