@@ -1094,10 +1094,10 @@ function exportOrders() {
 // API HELPERS
 // ══════════════════════════════════════
 async function apiCall(body) {
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+  const payload = encodeURIComponent(JSON.stringify(body));
+  const res = await fetch(`${API_URL}?payload=${payload}`, {
+    method: 'GET',
+    redirect: 'follow',
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
