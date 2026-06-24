@@ -369,8 +369,8 @@ tr:hover td { background: var(--surface2); }
   <!-- Tab nav -->
   <div class="tab-nav">
     <button class="tab-btn active" onclick="switchTab('overview')">📊 Overview</button>
-    <button class="tab-btn" onclick="switchTab('brands')">🏷 By Brand</button>
-    <button class="tab-btn" onclick="switchTab('skus')">📦 SKU Analysis</button>
+    <button class="tab-btn" onclick="switchTab('reco')">🌟 Buy More / Reorder</button>
+    <button class="tab-btn" onclick="switchTab('skus')">📦 My Products</button>
     <button class="tab-btn" onclick="switchTab('orders')">🧾 Order History</button>
   </div>
 
@@ -394,9 +394,9 @@ tr:hover td { background: var(--surface2); }
     <div id="overviewContent"><div class="loading"><div class="spinner"></div> Loading your data…</div></div>
   </div>
 
-  <!-- Tab: Brands -->
-  <div class="tab-panel" id="tab-brands">
-    <div id="brandsContent"><div class="loading"><div class="spinner"></div> Loading…</div></div>
+  <!-- Tab: Recommendations -->
+  <div class="tab-panel" id="tab-reco">
+    <div id="recoContent"><div class="loading"><div class="spinner"></div> Loading…</div></div>
   </div>
 
   <!-- Tab: SKUs -->
@@ -414,6 +414,7 @@ tr:hover td { background: var(--surface2); }
   <!-- Tab: Orders -->
   <div class="tab-panel" id="tab-orders">
     <div class="orders-search">
+      <input class="search-input" id="orderNumSearch" placeholder="Filter by order #…" oninput="filterOrderTable()" style="max-width:160px" />
       <input class="search-input" id="orderSkuSearch" placeholder="Filter by SKU or product…" oninput="filterOrderTable()" style="max-width:240px" />
       <input class="search-input" id="orderBrandSearch" placeholder="Filter by brand…" oninput="filterOrderTable()" style="max-width:180px" />
       <span id="orderCountLabel" style="font-size:11px;color:var(--dim);align-self:center"></span>
@@ -613,7 +614,7 @@ function getDateParams() {
 // LOAD ALL
 // ══════════════════════════════════════
 // Track what state each tab was last loaded with (store + dates)
-const _tabLoadKey = { overview:null, brands:null, skus:null, orders:null };
+const _tabLoadKey = { overview:null, reco:null, skus:null, orders:null };
 let _currentTab = 'overview';
 
 function _stateKey() {
@@ -623,7 +624,7 @@ function _stateKey() {
 function loadAll() {
   // Invalidate all tab caches (store or date changed)
   _tabLoadKey.overview = null;
-  _tabLoadKey.brands   = null;
+  _tabLoadKey.reco     = null;
   _tabLoadKey.skus     = null;
   _tabLoadKey.orders   = null;
   // Load only the currently visible tab
@@ -635,7 +636,7 @@ function loadTab(tab) {
   if (_tabLoadKey[tab] === key) return; // already loaded with this state
   _tabLoadKey[tab] = key;
   if      (tab === 'overview') loadOverview();
-  else if (tab === 'brands')   loadBrands();
+  else if (tab === 'reco')     loadReco();
   else if (tab === 'skus')     loadSkus();
   else if (tab === 'orders')   loadOrders();
 }
@@ -821,87 +822,102 @@ function renderOverview(kpi, trend, storeCompare) {
 }
 
 // ══════════════════════════════════════
-// BRANDS TAB
+// RECOMMENDATIONS TAB
 // ══════════════════════════════════════
-async function loadBrands() {
-  const el = document.getElementById('brandsContent');
-  el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading brand breakdown…</div>';
+let _recoGapDays = 90;
+
+async function loadReco() {
+  const el = document.getElementById('recoContent');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div> Finding opportunities…</div>';
   try {
-    const rows = await apiQuery('brands', getDateParams());
-    renderBrands(rows);
+    const [popular, gaps] = await Promise.all([
+      apiQuery('recommendations', getDateParams()),
+      apiQuery('reorder_gaps', { ...getDateParams(), gap_days: _recoGapDays, analysis_days: 365, min_count: 3 }),
+    ]);
+    renderReco(popular, gaps);
   } catch(e) { el.innerHTML = errState(e.message); }
 }
 
-function renderBrands(rows) {
-  const el = document.getElementById('brandsContent');
-  if (!rows.length) { el.innerHTML = emptyState('No data found for this period.'); return; }
+async function reloadReorderGaps() {
+  _recoGapDays = parseInt(document.getElementById('recoGapSel').value) || 90;
+  const col = document.getElementById('reorderCol');
+  if (col) col.innerHTML = '<div class="loading" style="padding:30px"><div class="spinner"></div></div>';
+  try {
+    const gaps = await apiQuery('reorder_gaps', { ...getDateParams(), gap_days: _recoGapDays, analysis_days: 365, min_count: 3 });
+    if (col) col.innerHTML = _reorderColInner(gaps);
+  } catch(e) { if (col) col.innerHTML = errState(e.message); }
+}
 
-  const totalRev = rows.reduce((a,r)=>a+(parseFloat(r.revenue)||0),0);
-  const top10    = rows.slice(0,10);
+function _recoCard(r, accent, metricLabel, metricVal) {
+  const skuEsc  = (r.SKU||'').replace(/'/g,"\\'");
+  const prodEsc = (r.product||'').replace(/'/g,"\\'");
+  return `
+    <div onmouseenter="showSkuPreview(event,'${skuEsc}','${prodEsc}')" onmouseleave="hideSkuPreview()" onclick="openSkuDrawer('${skuEsc}','${prodEsc}')"
+      style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid ${accent};border-radius:8px;padding:10px 12px;margin-bottom:8px;cursor:pointer;transition:border-color .15s"
+      onmouseover="this.style.borderColor='${accent}'" onmouseout="this.style.borderColor='var(--border)';this.style.borderLeftColor='${accent}'">
+      <div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
+        <div style="min-width:0;flex:1">
+          <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.product||'—'}</div>
+          <div style="font-family:monospace;font-size:10px;color:var(--blue2);margin-top:2px">${r.SKU||'—'} · <span style="color:var(--dim)">${r.brand||''}</span></div>
+        </div>
+        <div style="text-align:right;white-space:nowrap">
+          <div style="font-size:9px;color:var(--dim);text-transform:uppercase">${metricLabel}</div>
+          <div style="font-size:13px;font-weight:700;color:${accent}">${metricVal}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function _reorderColInner(gaps) {
+  if (!gaps.length) {
+    return `<div style="text-align:center;padding:30px 10px;color:var(--dim)"><div style="font-size:28px;margin-bottom:8px">✅</div><div style="font-size:12px">No lapsed items at this threshold.</div></div>`;
+  }
+  return gaps.map(r => _recoCard(r, 'var(--orange)', 'Days ago', (parseInt(r.days_since_last)||0)+'d')).join('');
+}
+
+function renderReco(popular, gaps) {
+  const el = document.getElementById('recoContent');
 
   el.innerHTML = `
-    <div class="charts-row" style="margin-bottom:16px">
-      <div class="card" style="grid-column:span 2">
-        <div class="card-hdr">
-          <span class="card-title">Spend by Brand</span>
-          <span class="card-badge">Top ${top10.length}</span>
-        </div>
-        <div class="chart-box tall"><canvas id="cBrandBar"></canvas></div>
-      </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px">
+
+      <!-- Popular at Asung (not bought) -->
       <div class="card">
-        <div class="card-hdr"><span class="card-title">Brand Share</span></div>
-        <div class="chart-box tall"><canvas id="cBrandPie"></canvas></div>
-      </div>
-    </div>
-    <div class="tbl-card">
-      <div class="tbl-hdr">
-        <span class="tbl-title">All Brands</span>
-        <div style="display:flex;gap:8px;align-items:center">
-          <span class="tbl-count">${rows.length} brands</span>
-          <button class="export-btn" onclick="exportCSV(window._brandRows,'brands.csv')">⬇ CSV</button>
+        <div class="card-hdr" style="margin-bottom:6px">
+          <span class="card-title">🌟 Popular at Asung</span>
+          <span class="card-badge">${popular.length}</span>
+        </div>
+        <div style="font-size:11px;color:var(--dim);margin-bottom:12px;line-height:1.5">
+          Top-selling items across Asung that you haven't ordered yet.
+        </div>
+        <div style="max-height:600px;overflow-y:auto">
+          ${popular.length
+            ? popular.map(r => _recoCard(r, 'var(--green)', 'Sold', fmtN(r.market_qty))).join('')
+            : '<div style="text-align:center;padding:30px 10px;color:var(--dim);font-size:12px">No new suggestions right now.</div>'}
         </div>
       </div>
-      <div class="tbl-wrap">
-        <table>
-          <thead><tr>
-            <th>Brand</th>
-            <th class="num">Total Spend</th>
-            <th class="num">Units</th>
-            <th class="num">Orders</th>
-            <th class="num">SKUs</th>
-            <th class="num">Share</th>
-            <th>First Order</th>
-            <th>Last Order</th>
-          </tr></thead>
-          <tbody>
-            ${rows.map(r=>`
-              <tr>
-                <td><strong>${r.brand||'—'}</strong></td>
-                <td class="num">${fmt(r.revenue)}</td>
-                <td class="num">${fmtN(r.qty)}</td>
-                <td class="num">${fmtN(r.orders)}</td>
-                <td class="num">${fmtN(r.skus)}</td>
-                <td class="num">${pct(r.revenue,totalRev)}</td>
-                <td>${r.first_date?new Date(r.first_date).toLocaleDateString('en-CA',{month:'short',year:'numeric'}):'—'}</td>
-                <td>${r.last_date?new Date(r.last_date).toLocaleDateString('en-CA',{month:'short',year:'numeric'}):'—'}</td>
-              </tr>`).join('')}
-          </tbody>
-        </table>
+
+      <!-- Haven't Reordered (lapsed) -->
+      <div class="card">
+        <div class="card-hdr" style="margin-bottom:6px">
+          <span class="card-title">🔔 Haven't Reordered</span>
+          <select id="recoGapSel" class="search-select" onchange="reloadReorderGaps()" style="padding:3px 6px;font-size:11px">
+            <option value="90"${_recoGapDays===90?' selected':''}>90+ days</option>
+            <option value="120"${_recoGapDays===120?' selected':''}>120+ days</option>
+            <option value="150"${_recoGapDays===150?' selected':''}>150+ days</option>
+            <option value="365"${_recoGapDays===365?' selected':''}>365+ days</option>
+          </select>
+        </div>
+        <div style="font-size:11px;color:var(--dim);margin-bottom:12px;line-height:1.5">
+          Items you ordered 3+ times in the past year but haven't reordered recently.
+        </div>
+        <div id="reorderCol" style="max-height:600px;overflow-y:auto">
+          ${_reorderColInner(gaps)}
+        </div>
       </div>
+
     </div>
   `;
-  window._brandRows = rows;
-
-  const COLORS = ['rgba(59,130,246,.8)','rgba(20,184,166,.8)','rgba(168,85,247,.8)','rgba(249,115,22,.8)','rgba(34,197,94,.8)','rgba(234,179,8,.8)','rgba(239,68,68,.8)','rgba(96,165,250,.8)','rgba(245,158,11,.8)','rgba(14,165,233,.8)'];
-  mkChart('cBrandBar',{type:'bar',indexAxis:'y',data:{
-    labels:top10.map(r=>r.brand),
-    datasets:[{label:'Spend',data:top10.map(r=>parseFloat(r.revenue)||0),backgroundColor:'rgba(59,130,246,.7)',borderRadius:3}]
-  },options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}},scales:{x:{grid:{color:'#1a2233'},ticks:{color:'#475569',font:{size:9}}},y:{grid:{color:'#1a2233'},ticks:{color:'#94a3b8',font:{size:9}}}}}});
-
-  mkChart('cBrandPie',{type:'doughnut',data:{
-    labels:top10.map(r=>r.brand),
-    datasets:[{data:top10.map(r=>parseFloat(r.revenue)||0),backgroundColor:COLORS,borderWidth:1,borderColor:'#080a0f'}]
-  },options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:9},boxWidth:8}},tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}}}});
 }
 
 // ══════════════════════════════════════
@@ -974,15 +990,10 @@ function renderSkuView() {
   document.getElementById('skuCountLabel').textContent = `${rows.length} SKUs`;
   if (!rows.length) { el.innerHTML = emptyState('No SKUs found.'); return; }
 
-  // Reorder reminders: not purchased in 90+ days, OR buying notably less than market
-  const stale       = rows.filter(r => (parseInt(r.days_since_last)||0) >= 90);
-  const belowMarket = rows.filter(r => r.below_market === true || r.below_market === 'true');
-
   const sorted = _applySkuSort(rows);
   window._skuRows = sorted;
 
   el.innerHTML = `
-    ${_reorderBanner(stale, belowMarket)}
     <div class="tbl-card">
       <div class="tbl-hdr">
         <span class="tbl-title">My SKU Purchase History</span>
@@ -1023,35 +1034,6 @@ function renderSkuView() {
       </div>
     </div>
   `;
-}
-
-function _reorderBanner(stale, belowMarket) {
-  if (!stale.length && !belowMarket.length) return '';
-  const items = [];
-  if (stale.length) {
-    items.push(`
-      <div style="flex:1;min-width:240px">
-        <div style="font-size:11px;font-weight:600;color:var(--orange);margin-bottom:6px">⏰ Not ordered recently (90+ days)</div>
-        <div style="font-size:11px;color:var(--mid);line-height:1.6">
-          ${stale.slice(0,6).map(r=>`<span style="display:inline-block;background:var(--surface3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;margin:2px;cursor:pointer" onclick="openSkuDrawer('${(r.SKU||'').replace(/'/g,"\\'")}','${(r.product||'').replace(/'/g,"\\'")}')">${r.SKU} · ${(r.product||'').slice(0,28)}</span>`).join('')}
-          ${stale.length>6?`<span style="color:var(--dim)"> +${stale.length-6} more</span>`:''}
-        </div>
-      </div>`);
-  }
-  if (belowMarket.length) {
-    items.push(`
-      <div style="flex:1;min-width:240px">
-        <div style="font-size:11px;font-weight:600;color:var(--blue2);margin-bottom:6px">📉 You may be under-stocking these</div>
-        <div style="font-size:11px;color:var(--mid);line-height:1.6">
-          ${belowMarket.slice(0,6).map(r=>`<span style="display:inline-block;background:var(--surface3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;margin:2px;cursor:pointer" onclick="openSkuDrawer('${(r.SKU||'').replace(/'/g,"\\'")}','${(r.product||'').replace(/'/g,"\\'")}')">${r.SKU} · ${(r.product||'').slice(0,28)}</span>`).join('')}
-          ${belowMarket.length>6?`<span style="color:var(--dim)"> +${belowMarket.length-6} more</span>`:''}
-        </div>
-      </div>`);
-  }
-  return `
-    <div class="card" style="margin-bottom:16px;display:flex;gap:24px;flex-wrap:wrap">
-      ${items.join('')}
-    </div>`;
 }
 
 function renderSkuTable(rows) { renderSkuView(); } // legacy alias
@@ -1239,12 +1221,14 @@ async function loadOrders() {
 }
 
 function filterOrderTable() {
+  const onum  = (document.getElementById('orderNumSearch').value||'').toLowerCase();
   const sku   = (document.getElementById('orderSkuSearch').value||'').toLowerCase();
   const brand = (document.getElementById('orderBrandSearch').value||'').toLowerCase();
   const filtered = allOrderRows.filter(r => {
+    const matchO = !onum  || (r.order_number||'').toLowerCase().includes(onum);
     const matchS = !sku   || (r.SKU||'').toLowerCase().includes(sku) || (r.product||'').toLowerCase().includes(sku);
     const matchB = !brand || (r.brand||'').toLowerCase().includes(brand);
-    return matchS && matchB;
+    return matchO && matchS && matchB;
   });
   document.getElementById('orderCountLabel').textContent = `${filtered.length.toLocaleString()} lines`;
   renderOrderTable(filtered);
