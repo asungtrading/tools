@@ -779,7 +779,7 @@ function renderOverview(kpi, trend, storeCompare) {
   ]},options:{...baseOpts(),plugins:{...baseOpts().plugins,tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+ctx.raw.toLocaleString()}}}}});
 
   mkChart('cOrders',{type:'line',data:{labels,datasets:[
-    {label:'Orders',data:ordData,borderColor:'var(--teal)',backgroundColor:'rgba(20,184,166,.1)',tension:.3,fill:true,pointRadius:3}
+    {label:'Orders',data:ordData,borderColor:'#2dd4bf',backgroundColor:'rgba(45,212,191,.25)',tension:.3,fill:true,pointRadius:3,pointBackgroundColor:'#2dd4bf',borderWidth:2.5}
   ]},options:{...baseOpts(),plugins:{...baseOpts().plugins,tooltip:{...TOOLTIP}}}});
 
   mkChart('cBranch',{type:'doughnut',data:{
@@ -788,7 +788,7 @@ function renderOverview(kpi, trend, storeCompare) {
   },options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:10},boxWidth:10}},tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}}}});
 
   mkChart('cAOV',{type:'line',data:{labels,datasets:[
-    {label:'Avg Order Value',data:aovData,borderColor:'var(--gold)',backgroundColor:'rgba(245,158,11,.1)',tension:.3,fill:true,pointRadius:3}
+    {label:'Avg Order Value',data:aovData,borderColor:'#fbbf24',backgroundColor:'rgba(251,191,36,.25)',tension:.3,fill:true,pointRadius:3,pointBackgroundColor:'#fbbf24',borderWidth:2.5}
   ]},options:{...baseOpts(),plugins:{...baseOpts().plugins,tooltip:{...TOOLTIP,callbacks:{label:ctx=>' '+fmt(ctx.raw)}}}}});
 
   // Store comparison charts (only when viewing All Stores)
@@ -907,14 +907,16 @@ function renderBrands(rows) {
 // ══════════════════════════════════════
 // SKUs TAB
 // ══════════════════════════════════════
+let _skuSort = { col: 'last_date', dir: 'desc' };
+
 async function loadSkus() {
   const el = document.getElementById('skusContent');
-  el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading SKU analysis with benchmarks…</div>';
+  el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading SKU analysis…</div>';
   try {
     const rows = await apiQuery('skus', getDateParams());
     allSkuRows = rows;
     populateBrandFilter(rows);
-    renderSkuTable(rows);
+    renderSkuView();
   } catch(e) { el.innerHTML = errState(e.message); }
 }
 
@@ -924,72 +926,96 @@ function populateBrandFilter(rows) {
   sel.innerHTML = '<option value="">All Brands</option>' + brands.map(b=>`<option value="${b}">${b}</option>`).join('');
 }
 
-function filterSkuTable() {
+function filterSkuTable() { renderSkuView(); }
+
+function _getFilteredSkus() {
   const q   = (document.getElementById('skuSearch').value||'').toLowerCase();
   const brd = document.getElementById('brandFilter').value;
-  const filtered = allSkuRows.filter(r => {
+  return allSkuRows.filter(r => {
     const matchQ = !q || (r.SKU||'').toLowerCase().includes(q) || (r.product||'').toLowerCase().includes(q);
     const matchB = !brd || r.brand === brd;
     return matchQ && matchB;
   });
-  document.getElementById('skuCountLabel').textContent = `${filtered.length} SKUs`;
-  renderSkuTable(filtered);
 }
 
-function renderSkuTable(rows) {
-  const el = document.getElementById('skusContent');
-  document.getElementById('skuCountLabel').textContent = `${rows.length} SKUs`;
+function sortSkus(col) {
+  if (_skuSort.col === col) {
+    _skuSort.dir = _skuSort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    _skuSort.col = col;
+    _skuSort.dir = (col === 'product' || col === 'brand' || col === 'SKU') ? 'asc' : 'desc';
+  }
+  renderSkuView();
+}
 
+function _applySkuSort(rows) {
+  const { col, dir } = _skuSort;
+  const mult = dir === 'asc' ? 1 : -1;
+  const numeric = ['my_revenue','my_qty','my_orders','days_since_last'];
+  return [...rows].sort((a,b) => {
+    let av, bv;
+    if (col === 'last_date') { av = a.last_date?new Date(a.last_date).getTime():0; bv = b.last_date?new Date(b.last_date).getTime():0; }
+    else if (numeric.includes(col)) { av = parseFloat(a[col])||0; bv = parseFloat(b[col])||0; }
+    else { av = (a[col]||'').toString().toLowerCase(); bv = (b[col]||'').toString().toLowerCase(); }
+    if (av < bv) return -1*mult;
+    if (av > bv) return  1*mult;
+    return 0;
+  });
+}
+
+function _sortArrow(col) {
+  if (_skuSort.col !== col) return '<span style="color:var(--dim);opacity:.4">↕</span>';
+  return _skuSort.dir === 'asc' ? '<span style="color:var(--blue2)">↑</span>' : '<span style="color:var(--blue2)">↓</span>';
+}
+
+function renderSkuView() {
+  const el = document.getElementById('skusContent');
+  let rows = _getFilteredSkus();
+  document.getElementById('skuCountLabel').textContent = `${rows.length} SKUs`;
   if (!rows.length) { el.innerHTML = emptyState('No SKUs found.'); return; }
 
+  // Reorder reminders: not purchased in 90+ days, OR buying notably less than market
+  const stale       = rows.filter(r => (parseInt(r.days_since_last)||0) >= 90);
+  const belowMarket = rows.filter(r => r.below_market === true || r.below_market === 'true');
+
+  const sorted = _applySkuSort(rows);
+  window._skuRows = sorted;
+
   el.innerHTML = `
+    ${_reorderBanner(stale, belowMarket)}
     <div class="tbl-card">
       <div class="tbl-hdr">
-        <span class="tbl-title">SKU Performance & Volume Benchmark</span>
-        <div style="display:flex;gap:8px;align-items:center">
-          <span style="font-size:10px;color:var(--dim)">
-            <span style="color:var(--green)">▲</span> = buying more than avg &nbsp;
-            <span style="color:var(--blue2)">▼</span> = buying less than avg
-          </span>
-          <button class="export-btn" onclick="exportCSV(window._skuRows,'sku_analysis.csv')">⬇ CSV</button>
-        </div>
+        <span class="tbl-title">My SKU Purchase History</span>
+        <button class="export-btn" onclick="exportCSV(window._skuRows,'sku_analysis.csv')">⬇ CSV</button>
       </div>
       <div class="tbl-wrap">
         <table>
           <thead><tr>
-            <th>SKU</th>
-            <th>Product</th>
-            <th>Brand</th>
-            <th class="num">Total Spend</th>
-            <th class="num">My Units</th>
-            <th class="num">Orders</th>
-            <th class="num">Avg Units/Buyer</th>
-            <th class="num">vs. Market</th>
-            <th>Last Order</th>
-            <th></th>
+            <th style="cursor:pointer" onclick="sortSkus('SKU')">SKU ${_sortArrow('SKU')}</th>
+            <th style="cursor:pointer" onclick="sortSkus('product')">Product ${_sortArrow('product')}</th>
+            <th style="cursor:pointer" onclick="sortSkus('brand')">Brand ${_sortArrow('brand')}</th>
+            <th class="num" style="cursor:pointer" onclick="sortSkus('my_revenue')">Total Spend ${_sortArrow('my_revenue')}</th>
+            <th class="num" style="cursor:pointer" onclick="sortSkus('my_qty')">Units ${_sortArrow('my_qty')}</th>
+            <th class="num" style="cursor:pointer" onclick="sortSkus('my_orders')">Orders ${_sortArrow('my_orders')}</th>
+            <th style="cursor:pointer" onclick="sortSkus('last_date')">Last Order ${_sortArrow('last_date')}</th>
+            <th class="num" style="cursor:pointer" onclick="sortSkus('days_since_last')">Days Ago ${_sortArrow('days_since_last')}</th>
           </tr></thead>
           <tbody>
-            ${rows.map(r => {
-              const myQty  = parseInt(r.my_qty)||0;
-              const avgQty = parseFloat(r.avg_qty_per_buyer)||0;
-              const diff   = parseFloat(r.qty_vs_avg_pct)||0;
-              const diffEl = avgQty > 0
-                ? `<span style="font-size:10px;font-weight:600;color:${diff > 5 ? 'var(--green)' : diff < -5 ? 'var(--blue2)' : 'var(--dim)'}">
-                    ${diff > 5 ? '▲' : diff < -5 ? '▼' : '≈'} ${Math.abs(diff).toFixed(0)}%
-                   </span>`
-                : '<span style="color:var(--dim);font-size:10px">—</span>';
+            ${sorted.map(r => {
+              const days = parseInt(r.days_since_last)||0;
+              const daysColor = days >= 180 ? 'var(--red)' : days >= 90 ? 'var(--orange)' : 'var(--dim)';
+              const skuEsc  = (r.SKU||'').replace(/'/g,"\\'");
+              const prodEsc = (r.product||'').replace(/'/g,"\\'");
               return `
-                <tr>
+                <tr onmouseenter="showSkuPreview(event,'${skuEsc}','${prodEsc}')" onmouseleave="hideSkuPreview()" style="cursor:pointer" onclick="openSkuDrawer('${skuEsc}','${prodEsc}')">
                   <td class="sku-tag">${r.SKU||'—'}</td>
-                  <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">${r.product||'—'}</td>
+                  <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.product||'—'}</td>
                   <td class="brand-tag">${r.brand||'—'}</td>
                   <td class="num">${fmt(r.my_revenue)}</td>
                   <td class="num">${fmtN(r.my_qty)}</td>
                   <td class="num">${fmtN(r.my_orders)}</td>
-                  <td class="num">${avgQty > 0 ? Math.round(avgQty).toLocaleString() : '—'}</td>
-                  <td class="num">${diffEl}</td>
                   <td>${r.last_date ? new Date(r.last_date).toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
-                  <td><button class="q-btn" onclick="openSkuDrawer('${(r.SKU||'').replace(/'/g,"\\'")}','${(r.product||'').replace(/'/g,"\\'")}')">Detail ›</button></td>
+                  <td class="num" style="color:${daysColor};font-weight:${days>=90?'600':'400'}">${days}d</td>
                 </tr>`;
             }).join('')}
           </tbody>
@@ -997,12 +1023,104 @@ function renderSkuTable(rows) {
       </div>
     </div>
   `;
-  window._skuRows = rows;
 }
+
+function _reorderBanner(stale, belowMarket) {
+  if (!stale.length && !belowMarket.length) return '';
+  const items = [];
+  if (stale.length) {
+    items.push(`
+      <div style="flex:1;min-width:240px">
+        <div style="font-size:11px;font-weight:600;color:var(--orange);margin-bottom:6px">⏰ Not ordered recently (90+ days)</div>
+        <div style="font-size:11px;color:var(--mid);line-height:1.6">
+          ${stale.slice(0,6).map(r=>`<span style="display:inline-block;background:var(--surface3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;margin:2px;cursor:pointer" onclick="openSkuDrawer('${(r.SKU||'').replace(/'/g,"\\'")}','${(r.product||'').replace(/'/g,"\\'")}')">${r.SKU} · ${(r.product||'').slice(0,28)}</span>`).join('')}
+          ${stale.length>6?`<span style="color:var(--dim)"> +${stale.length-6} more</span>`:''}
+        </div>
+      </div>`);
+  }
+  if (belowMarket.length) {
+    items.push(`
+      <div style="flex:1;min-width:240px">
+        <div style="font-size:11px;font-weight:600;color:var(--blue2);margin-bottom:6px">📉 You may be under-stocking these</div>
+        <div style="font-size:11px;color:var(--mid);line-height:1.6">
+          ${belowMarket.slice(0,6).map(r=>`<span style="display:inline-block;background:var(--surface3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px;margin:2px;cursor:pointer" onclick="openSkuDrawer('${(r.SKU||'').replace(/'/g,"\\'")}','${(r.product||'').replace(/'/g,"\\'")}')">${r.SKU} · ${(r.product||'').slice(0,28)}</span>`).join('')}
+          ${belowMarket.length>6?`<span style="color:var(--dim)"> +${belowMarket.length-6} more</span>`:''}
+        </div>
+      </div>`);
+  }
+  return `
+    <div class="card" style="margin-bottom:16px;display:flex;gap:24px;flex-wrap:wrap">
+      ${items.join('')}
+    </div>`;
+}
+
+function renderSkuTable(rows) { renderSkuView(); } // legacy alias
 
 // ══════════════════════════════════════
 // SKU DETAIL DRAWER
 // ══════════════════════════════════════
+// ── SKU hover preview (lightweight floating card with mini chart) ──
+let _previewTimer = null;
+let _previewCache = {};
+
+function showSkuPreview(evt, sku, product) {
+  clearTimeout(_previewTimer);
+  const x = evt.clientX, y = evt.clientY;
+  _previewTimer = setTimeout(async () => {
+    let box = document.getElementById('skuPreviewBox');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'skuPreviewBox';
+      box.style.cssText = 'position:fixed;z-index:600;width:320px;background:var(--surface);border:1px solid var(--border2);border-radius:10px;padding:14px;box-shadow:0 12px 40px rgba(0,0,0,.5);pointer-events:none';
+      document.body.appendChild(box);
+    }
+    // Position near cursor, keep on screen
+    const px = Math.min(x + 16, window.innerWidth - 340);
+    const py = Math.min(y + 16, window.innerHeight - 240);
+    box.style.left = px + 'px';
+    box.style.top  = py + 'px';
+    box.style.display = 'block';
+    box.innerHTML = `<div style="font-size:12px;font-weight:600;margin-bottom:2px">${product}</div>
+      <div style="font-family:monospace;font-size:11px;color:var(--blue2);margin-bottom:8px">${sku}</div>
+      <div style="font-size:11px;color:var(--dim)">Loading…</div>`;
+
+    try {
+      let data = _previewCache[sku];
+      if (!data) {
+        data = await apiQuery('sku_detail', { ...getDateParams(), sku });
+        _previewCache[sku] = data;
+      }
+      // box may have been hidden while loading
+      if (box.style.display === 'none') return;
+      const hist = data.my_history || [];
+      const bench = data.benchmark || {};
+      const totalQty = hist.reduce((s,r)=>(parseInt(r.qty)||0)+s,0);
+      box.innerHTML = `
+        <div style="font-size:12px;font-weight:600;margin-bottom:2px">${product}</div>
+        <div style="font-family:monospace;font-size:11px;color:var(--blue2);margin-bottom:10px">${sku}</div>
+        <div style="display:flex;gap:12px;margin-bottom:10px">
+          <div><div style="font-size:9px;color:var(--dim);text-transform:uppercase">My Units</div><div style="font-size:15px;font-weight:700">${fmtN(totalQty)}</div></div>
+          <div><div style="font-size:9px;color:var(--dim);text-transform:uppercase">Orders</div><div style="font-size:15px;font-weight:700">${fmtN(hist.reduce((s,r)=>(parseInt(r.orders)||0)+s,0))}</div></div>
+          <div><div style="font-size:9px;color:var(--dim);text-transform:uppercase">Months</div><div style="font-size:15px;font-weight:700">${hist.length}</div></div>
+        </div>
+        <div style="height:90px"><canvas id="cPreviewChart"></canvas></div>
+        <div style="font-size:10px;color:var(--dim);margin-top:6px;text-align:center">Click row for full detail</div>`;
+      if (hist.length) {
+        const ctx = document.getElementById('cPreviewChart');
+        new Chart(ctx, {type:'bar',data:{labels:hist.map(r=>r.month),datasets:[
+          {label:'Units',data:hist.map(r=>parseInt(r.qty)||0),backgroundColor:'rgba(59,130,246,.7)',borderRadius:2}
+        ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},scales:{x:{grid:{display:false},ticks:{color:'#475569',font:{size:8}}},y:{grid:{color:'#1a2233'},ticks:{color:'#475569',font:{size:8}}}}}});
+      }
+    } catch(e) { /* ignore preview errors */ }
+  }, 350); // delay so quick mouse passes don't fire
+}
+
+function hideSkuPreview() {
+  clearTimeout(_previewTimer);
+  const box = document.getElementById('skuPreviewBox');
+  if (box) box.style.display = 'none';
+}
+
 async function openSkuDrawer(sku, product) {
   document.getElementById('skuDrawer').classList.add('open');
   document.getElementById('drawerOverlay').style.display = 'block';
@@ -1029,14 +1147,16 @@ function renderDrawer(sku, product, data) {
   const { my_history, benchmark } = data;
   const b = benchmark || {};
 
-  const myTotalQty    = my_history.reduce((s,r)=>(parseInt(r.qty)||0)+s, 0);
-  const avgQtyBuyer   = parseFloat(b.avg_qty_per_buyer)||0;
-  const avgQtyOrder   = parseFloat(b.avg_qty_per_order)||0;
-  const totalBuyers   = parseInt(b.total_buyers)||0;
-  const totalQtyAll   = parseInt(b.total_qty_all)||0;
-  const diff          = avgQtyBuyer > 0 ? ((myTotalQty - avgQtyBuyer) / avgQtyBuyer * 100) : 0;
-  const isMore  = diff > 5;
-  const isLess  = diff < -5;
+  const myTotalQty  = my_history.reduce((s,r)=>(parseInt(r.qty)||0)+s, 0);
+  const myTotalOrd  = my_history.reduce((s,r)=>(parseInt(r.orders)||0)+s, 0);
+  const avgQtyBuyer = parseFloat(b.avg_qty_per_buyer)||0;
+  const avgQtyOrder = parseFloat(b.avg_qty_per_order)||0;
+
+  // Only surface "buying less than market" as a gentle suggestion (never "more")
+  const buyingLess = avgQtyBuyer > 0 && myTotalQty < avgQtyBuyer * 0.7;
+
+  // Last purchase recency
+  let lastMonth = my_history.length ? my_history[my_history.length-1].month : null;
 
   document.getElementById('drawerContent').innerHTML = `
     <div class="drawer-title">${product}</div>
@@ -1049,26 +1169,30 @@ function renderDrawer(sku, product, data) {
         <div class="bench-sub">in selected period</div>
       </div>
       <div class="bench-card">
-        <div class="bench-lbl">Avg Units / Buyer</div>
-        <div class="bench-val">${avgQtyBuyer > 0 ? Math.round(avgQtyBuyer).toLocaleString() : '—'}</div>
-        <div class="bench-sub">${totalBuyers > 0 ? totalBuyers.toLocaleString() + ' buyers market-wide' : '—'}</div>
+        <div class="bench-lbl">My Orders</div>
+        <div class="bench-val">${fmtN(myTotalOrd)}</div>
+        <div class="bench-sub">times ordered</div>
       </div>
       <div class="bench-card">
-        <div class="bench-lbl">vs. Market</div>
-        <div class="bench-val ${isMore?'down':isLess?'':''}" style="color:${isMore?'var(--green)':isLess?'var(--blue2)':'var(--mid)'}">
-          ${avgQtyBuyer > 0 ? (isMore ? '▲ ' : isLess ? '▼ ' : '≈ ') + Math.abs(diff).toFixed(0) + '%' : '—'}
-        </div>
-        <div class="bench-sub">${isMore ? 'Buying more than average' : isLess ? 'Buying less than average' : 'Near market average'}</div>
+        <div class="bench-lbl">Avg / Order</div>
+        <div class="bench-val">${myTotalOrd>0 ? Math.round(myTotalQty/myTotalOrd).toLocaleString() : '—'}</div>
+        <div class="bench-sub">units per order</div>
       </div>
       <div class="bench-card">
-        <div class="bench-lbl">Avg Units / Order</div>
-        <div class="bench-val">${avgQtyOrder > 0 ? avgQtyOrder.toLocaleString('en-CA',{maximumFractionDigits:1}) : '—'}</div>
-        <div class="bench-sub">typical order size market-wide</div>
+        <div class="bench-lbl">Last Purchase</div>
+        <div class="bench-val" style="font-size:14px">${lastMonth || '—'}</div>
+        <div class="bench-sub">most recent month</div>
       </div>
     </div>
 
+    ${buyingLess ? `
+    <div style="background:rgba(59,130,246,.08);border:1px solid var(--blue);border-radius:8px;padding:12px 14px;margin-bottom:18px">
+      <div style="font-size:12px;font-weight:600;color:var(--blue2);margin-bottom:4px">💡 Stocking opportunity</div>
+      <div style="font-size:11px;color:var(--mid);line-height:1.5">Similar stores typically carry more of this item. You may want to consider increasing your order quantity.</div>
+    </div>` : ''}
+
     <div class="card-hdr" style="margin-bottom:10px">
-      <span class="card-title">Your Purchase History (${sku})</span>
+      <span class="card-title">Your Purchase History</span>
       <span class="card-badge">${my_history.length} months</span>
     </div>
     <div class="drawer-chart-box"><canvas id="cDrawerTrend"></canvas></div>
@@ -1095,8 +1219,9 @@ function renderDrawer(sku, product, data) {
   if (my_history.length) {
     const labels = my_history.map(r=>r.month);
     mkChart('cDrawerTrend',{type:'bar',data:{labels,datasets:[
-      {label:'Units',data:my_history.map(r=>parseInt(r.qty)||0),backgroundColor:'rgba(59,130,246,.7)',borderRadius:3},
-    ]},options:{...baseOpts(),plugins:{...baseOpts().plugins,tooltip:{...TOOLTIP,callbacks:{label:ctx=>` Units: ${ctx.raw.toLocaleString()}`}}}}});
+      {label:'Units',type:'bar',data:my_history.map(r=>parseInt(r.qty)||0),backgroundColor:'rgba(59,130,246,.7)',borderRadius:3,yAxisID:'yQ',order:2},
+      {label:'Orders',type:'line',data:my_history.map(r=>parseInt(r.orders)||0),borderColor:'#2dd4bf',backgroundColor:'rgba(45,212,191,.2)',tension:.3,fill:false,pointRadius:3,pointBackgroundColor:'#2dd4bf',borderWidth:2.5,yAxisID:'yO',order:1},
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#94a3b8',font:{size:10}}},tooltip:{...TOOLTIP,mode:'index'}},scales:{x:{grid:{color:'#1a2233'},ticks:{color:'#475569',font:{size:9}}},yQ:{position:'left',grid:{color:'#1a2233'},ticks:{color:'#475569',font:{size:9}}},yO:{position:'right',grid:{display:false},ticks:{color:'#475569',font:{size:9}}}}}});
   }
 }
 
@@ -1147,10 +1272,13 @@ function renderOrderTable(rows) {
             ${groupStores.length > 1 && activeStoreId === 'all' ? '<th>Store</th>' : ''}
           </tr></thead>
           <tbody>
-            ${rows.map(r=>`<tr>
+            ${rows.map(r=>{
+              const skuEsc  = (r.SKU||'').replace(/'/g,"\\'");
+              const prodEsc = (r.product||'').replace(/'/g,"\\'");
+              return `<tr>
               <td>${r.date ? new Date(r.date).toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
               <td style="font-family:monospace;font-size:11px;color:var(--mid)">${r.order_number||'—'}</td>
-              <td class="sku-tag">${r.SKU||'—'}</td>
+              <td class="sku-tag" style="cursor:pointer" onmouseenter="showSkuPreview(event,'${skuEsc}','${prodEsc}')" onmouseleave="hideSkuPreview()" onclick="openSkuDrawer('${skuEsc}','${prodEsc}')">${r.SKU||'—'}</td>
               <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis">${r.product||'—'}</td>
               <td class="brand-tag">${r.brand||'—'}</td>
               <td class="num">${fmtN(r.qty)}</td>
@@ -1158,7 +1286,7 @@ function renderOrderTable(rows) {
               <td class="num">${fmt(r.line_total)}</td>
               <td class="${r.location==='Asung Trading Inc.'?'loc-tor':'loc-edm'}">${r.location==='Asung Trading Inc.'?'Toronto':'Edmonton'}</td>
               ${groupStores.length > 1 && activeStoreId === 'all' ? `<td style="font-size:11px;color:var(--mid)">${r.customer||'—'}</td>` : ''}
-            </tr>`).join('')}
+            </tr>`;}).join('')}
           </tbody>
         </table>
       </div>
