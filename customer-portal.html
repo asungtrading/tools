@@ -612,21 +612,41 @@ function getDateParams() {
 // ══════════════════════════════════════
 // LOAD ALL
 // ══════════════════════════════════════
+// Track what state each tab was last loaded with (store + dates)
+const _tabLoadKey = { overview:null, brands:null, skus:null, orders:null };
+let _currentTab = 'overview';
+
+function _stateKey() {
+  return activeStoreId + '|' + document.getElementById('dateFrom').value + '|' + document.getElementById('dateTo').value;
+}
+
 function loadAll() {
-  // JSONP는 동시 요청 충돌 — 현재 탭만 먼저 로드
-  loadOverview();
-  // 나머지는 탭 클릭 시 로드 (lazy)
+  // Invalidate all tab caches (store or date changed)
+  _tabLoadKey.overview = null;
+  _tabLoadKey.brands   = null;
+  _tabLoadKey.skus     = null;
+  _tabLoadKey.orders   = null;
+  // Load only the currently visible tab
+  loadTab(_currentTab);
+}
+
+function loadTab(tab) {
+  const key = _stateKey();
+  if (_tabLoadKey[tab] === key) return; // already loaded with this state
+  _tabLoadKey[tab] = key;
+  if      (tab === 'overview') loadOverview();
+  else if (tab === 'brands')   loadBrands();
+  else if (tab === 'skus')     loadSkus();
+  else if (tab === 'orders')   loadOrders();
 }
 
 function switchTab(tab) {
+  _currentTab = tab;
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelector(`.tab-btn[onclick="switchTab('${tab}')"]`).classList.add('active');
   document.getElementById('tab-' + tab).classList.add('active');
-  // Lazy load on tab switch
-  if (tab === 'brands')  loadBrands();
-  if (tab === 'skus')    loadSkus();
-  if (tab === 'orders')  loadOrders();
+  loadTab(tab);
 }
 
 // ══════════════════════════════════════
@@ -636,13 +656,18 @@ async function loadOverview() {
   const el = document.getElementById('overviewContent');
   el.innerHTML = '<div class="loading"><div class="spinner"></div> Fetching your purchase summary…</div>';
   try {
-    const kpi   = await apiQuery('overview', getDateParams());
-    const trend = await apiQuery('trend',    getDateParams());
-    // Store comparison only when viewing all stores and multiple stores exist
-    let storeCompare = null;
-    if (activeStoreId === 'all' && groupStores.length > 1) {
-      storeCompare = await apiQuery('store_compare', getDateParams());
-    }
+    const showCompare = (activeStoreId === 'all' && groupStores.length > 1);
+    const promises = [
+      apiQuery('overview', getDateParams()),
+      apiQuery('trend',    getDateParams()),
+    ];
+    if (showCompare) promises.push(apiQuery('store_compare', getDateParams()));
+
+    const results = await Promise.all(promises);
+    const kpi          = results[0];
+    const trend        = results[1];
+    const storeCompare = showCompare ? results[2] : null;
+
     renderOverview(kpi, trend, storeCompare);
   } catch(e) { el.innerHTML = errState(e.message); }
 }
