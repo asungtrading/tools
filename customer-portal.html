@@ -370,12 +370,11 @@ tr:hover td { background: var(--surface2); }
   <div class="tab-nav">
     <button class="tab-btn active" onclick="switchTab('overview')">📊 Overview</button>
     <button class="tab-btn" onclick="switchTab('reco')">🌟 Buy More / Reorder</button>
-    <button class="tab-btn" onclick="switchTab('skus')">📦 My Products</button>
     <button class="tab-btn" onclick="switchTab('orders')">🧾 Order History</button>
   </div>
 
   <!-- Filter bar -->
-  <div class="filter-bar">
+  <div class="filter-bar" id="filterBar">
     <span class="filter-label">Period</span>
     <input class="filter-input" id="dateFrom" type="date" />
     <span class="filter-sep">—</span>
@@ -397,18 +396,6 @@ tr:hover td { background: var(--surface2); }
   <!-- Tab: Recommendations -->
   <div class="tab-panel" id="tab-reco">
     <div id="recoContent"><div class="loading"><div class="spinner"></div> Loading…</div></div>
-  </div>
-
-  <!-- Tab: SKUs -->
-  <div class="tab-panel" id="tab-skus">
-    <div class="search-row">
-      <input class="search-input" id="skuSearch" placeholder="Search SKU or product name…" oninput="filterSkuTable()" />
-      <select class="search-select" id="brandFilter" onchange="filterSkuTable()">
-        <option value="">All Brands</option>
-      </select>
-      <span id="skuCountLabel" style="font-size:11px;color:var(--dim);white-space:nowrap"></span>
-    </div>
-    <div id="skusContent"><div class="loading"><div class="spinner"></div> Loading…</div></div>
   </div>
 
   <!-- Tab: Orders -->
@@ -446,7 +433,7 @@ let authToken    = null;
 let displayName  = '';
 let groupStores  = [];   // [{store_id, store_name}, ...]
 let activeStoreId = 'all';
-let allSkuRows   = [];
+let allSkuRows   = []; // (legacy, unused)
 let allOrderRows = [];
 const charts = {};
 const TOOLTIP = { backgroundColor:'#0f1218', titleColor:'#f1f5f9', bodyColor:'#94a3b8', borderColor:'#222a38', borderWidth:1 };
@@ -614,7 +601,7 @@ function getDateParams() {
 // LOAD ALL
 // ══════════════════════════════════════
 // Track what state each tab was last loaded with (store + dates)
-const _tabLoadKey = { overview:null, reco:null, skus:null, orders:null };
+const _tabLoadKey = { overview:null, reco:null, orders:null };
 let _currentTab = 'overview';
 
 function _stateKey() {
@@ -625,7 +612,6 @@ function loadAll() {
   // Invalidate all tab caches (store or date changed)
   _tabLoadKey.overview = null;
   _tabLoadKey.reco     = null;
-  _tabLoadKey.skus     = null;
   _tabLoadKey.orders   = null;
   // Load only the currently visible tab
   loadTab(_currentTab);
@@ -637,7 +623,6 @@ function loadTab(tab) {
   _tabLoadKey[tab] = key;
   if      (tab === 'overview') loadOverview();
   else if (tab === 'reco')     loadReco();
-  else if (tab === 'skus')     loadSkus();
   else if (tab === 'orders')   loadOrders();
 }
 
@@ -647,6 +632,9 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelector(`.tab-btn[onclick="switchTab('${tab}')"]`).classList.add('active');
   document.getElementById('tab-' + tab).classList.add('active');
+  // Period filter is irrelevant on the recommendations tab (always recent-window based)
+  const fb = document.getElementById('filterBar');
+  if (fb) fb.style.display = (tab === 'reco') ? 'none' : '';
   loadTab(tab);
 }
 
@@ -834,6 +822,8 @@ async function loadReco() {
       apiQuery('recommendations', getDateParams()),
       apiQuery('reorder_gaps', { ...getDateParams(), gap_days: _recoGapDays, analysis_days: 365, min_count: 3 }),
     ]);
+    window._recoPopular = popular;
+    window._recoGaps    = gaps;
     renderReco(popular, gaps);
   } catch(e) { el.innerHTML = errState(e.message); }
 }
@@ -844,8 +834,30 @@ async function reloadReorderGaps() {
   if (col) col.innerHTML = '<div class="loading" style="padding:30px"><div class="spinner"></div></div>';
   try {
     const gaps = await apiQuery('reorder_gaps', { ...getDateParams(), gap_days: _recoGapDays, analysis_days: 365, min_count: 3 });
+    window._recoGaps = gaps;
     if (col) col.innerHTML = _reorderColInner(gaps);
   } catch(e) { if (col) col.innerHTML = errState(e.message); }
+}
+
+async function exportReco(which) {
+  try {
+    if (which === 'popular') {
+      const full = await apiQuery('recommendations', { ...getDateParams(), limit: 1000 });
+      const rows = (full||[]).map(r=>({
+        SKU:r.SKU, Product:r.product, Brand:r.brand,
+        Units_Sold_Asung:r.market_qty, Stores_Buying:r.buyer_count, Orders:r.market_orders
+      }));
+      exportCSV(rows, 'popular_at_asung.csv');
+    } else {
+      const full = await apiQuery('reorder_gaps', { ...getDateParams(), gap_days: _recoGapDays, analysis_days: 365, min_count: 3, limit: 2000 });
+      const rows = (full||[]).map(r=>({
+        SKU:r.SKU, Product:r.product, Brand:r.brand,
+        Times_Ordered:r.purchase_count, Total_Units:r.total_qty,
+        Last_Purchase:r.last_purchase, Days_Since_Last:r.days_since_last
+      }));
+      exportCSV(rows, 'havent_reordered.csv');
+    }
+  } catch(e) { alert('Export failed: ' + e.message); }
 }
 
 function _recoCard(r, accent, metricLabel, metricVal) {
@@ -882,34 +894,42 @@ function renderReco(popular, gaps) {
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px">
 
       <!-- Popular at Asung (not bought) -->
-      <div class="card">
-        <div class="card-hdr" style="margin-bottom:6px">
-          <span class="card-title">🌟 Popular at Asung</span>
-          <span class="card-badge">${popular.length}</span>
+      <div class="card" style="border-top:3px solid var(--green)">
+        <div class="card-hdr" style="margin-bottom:10px">
+          <span class="card-title" style="font-size:15px">🌟 Popular at Asung</span>
+          <div style="display:flex;gap:6px;align-items:center">
+            <span class="card-badge">${popular.length}</span>
+            <button class="export-btn" onclick="exportReco('popular')">⬇ CSV</button>
+          </div>
         </div>
-        <div style="font-size:11px;color:var(--dim);margin-bottom:12px;line-height:1.5">
-          Top-selling items across Asung that you haven't ordered yet.
+        <div style="background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:8px;padding:10px 12px;margin-bottom:14px">
+          <div style="font-size:12px;font-weight:600;color:#4ade80;margin-bottom:3px">Best-sellers you're missing</div>
+          <div style="font-size:11px;color:var(--mid);line-height:1.5">These fly off the shelves at other stores — but you haven't ordered them yet. <span style="color:var(--dim)">(Units sold across Asung in the last 6 months)</span></div>
         </div>
         <div style="max-height:600px;overflow-y:auto">
           ${popular.length
-            ? popular.map(r => _recoCard(r, 'var(--green)', 'Sold', fmtN(r.market_qty))).join('')
+            ? popular.map(r => _recoCard(r, 'var(--green)', '6mo sold', fmtN(r.market_qty))).join('')
             : '<div style="text-align:center;padding:30px 10px;color:var(--dim);font-size:12px">No new suggestions right now.</div>'}
         </div>
       </div>
 
       <!-- Haven't Reordered (lapsed) -->
-      <div class="card">
-        <div class="card-hdr" style="margin-bottom:6px">
-          <span class="card-title">🔔 Haven't Reordered</span>
-          <select id="recoGapSel" class="search-select" onchange="reloadReorderGaps()" style="padding:3px 6px;font-size:11px">
-            <option value="90"${_recoGapDays===90?' selected':''}>90+ days</option>
-            <option value="120"${_recoGapDays===120?' selected':''}>120+ days</option>
-            <option value="150"${_recoGapDays===150?' selected':''}>150+ days</option>
-            <option value="365"${_recoGapDays===365?' selected':''}>365+ days</option>
-          </select>
+      <div class="card" style="border-top:3px solid var(--orange)">
+        <div class="card-hdr" style="margin-bottom:10px">
+          <span class="card-title" style="font-size:15px">🔔 Time to Restock</span>
+          <div style="display:flex;gap:6px;align-items:center">
+            <select id="recoGapSel" class="search-select" onchange="reloadReorderGaps()" style="padding:3px 6px;font-size:11px">
+              <option value="90"${_recoGapDays===90?' selected':''}>90+ days</option>
+              <option value="120"${_recoGapDays===120?' selected':''}>120+ days</option>
+              <option value="150"${_recoGapDays===150?' selected':''}>150+ days</option>
+              <option value="365"${_recoGapDays===365?' selected':''}>365+ days</option>
+            </select>
+            <button class="export-btn" onclick="exportReco('gaps')">⬇ CSV</button>
+          </div>
         </div>
-        <div style="font-size:11px;color:var(--dim);margin-bottom:12px;line-height:1.5">
-          Items you ordered 3+ times in the past year but haven't reordered recently.
+        <div style="background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.3);border-radius:8px;padding:10px 12px;margin-bottom:14px">
+          <div style="font-size:12px;font-weight:600;color:#fb923c;margin-bottom:3px">Your regulars, gone quiet</div>
+          <div style="font-size:11px;color:var(--mid);line-height:1.5">You used to order these often, but it's been a while. Running low?</div>
         </div>
         <div id="reorderCol" style="max-height:600px;overflow-y:auto">
           ${_reorderColInner(gaps)}
@@ -919,124 +939,6 @@ function renderReco(popular, gaps) {
     </div>
   `;
 }
-
-// ══════════════════════════════════════
-// SKUs TAB
-// ══════════════════════════════════════
-let _skuSort = { col: 'last_date', dir: 'desc' };
-
-async function loadSkus() {
-  const el = document.getElementById('skusContent');
-  el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading SKU analysis…</div>';
-  try {
-    const rows = await apiQuery('skus', getDateParams());
-    allSkuRows = rows;
-    populateBrandFilter(rows);
-    renderSkuView();
-  } catch(e) { el.innerHTML = errState(e.message); }
-}
-
-function populateBrandFilter(rows) {
-  const brands = [...new Set(rows.map(r=>r.brand).filter(Boolean))].sort();
-  const sel = document.getElementById('brandFilter');
-  sel.innerHTML = '<option value="">All Brands</option>' + brands.map(b=>`<option value="${b}">${b}</option>`).join('');
-}
-
-function filterSkuTable() { renderSkuView(); }
-
-function _getFilteredSkus() {
-  const q   = (document.getElementById('skuSearch').value||'').toLowerCase();
-  const brd = document.getElementById('brandFilter').value;
-  return allSkuRows.filter(r => {
-    const matchQ = !q || (r.SKU||'').toLowerCase().includes(q) || (r.product||'').toLowerCase().includes(q);
-    const matchB = !brd || r.brand === brd;
-    return matchQ && matchB;
-  });
-}
-
-function sortSkus(col) {
-  if (_skuSort.col === col) {
-    _skuSort.dir = _skuSort.dir === 'asc' ? 'desc' : 'asc';
-  } else {
-    _skuSort.col = col;
-    _skuSort.dir = (col === 'product' || col === 'brand' || col === 'SKU') ? 'asc' : 'desc';
-  }
-  renderSkuView();
-}
-
-function _applySkuSort(rows) {
-  const { col, dir } = _skuSort;
-  const mult = dir === 'asc' ? 1 : -1;
-  const numeric = ['my_revenue','my_qty','my_orders','days_since_last'];
-  return [...rows].sort((a,b) => {
-    let av, bv;
-    if (col === 'last_date') { av = a.last_date?new Date(a.last_date).getTime():0; bv = b.last_date?new Date(b.last_date).getTime():0; }
-    else if (numeric.includes(col)) { av = parseFloat(a[col])||0; bv = parseFloat(b[col])||0; }
-    else { av = (a[col]||'').toString().toLowerCase(); bv = (b[col]||'').toString().toLowerCase(); }
-    if (av < bv) return -1*mult;
-    if (av > bv) return  1*mult;
-    return 0;
-  });
-}
-
-function _sortArrow(col) {
-  if (_skuSort.col !== col) return '<span style="color:var(--dim);opacity:.4">↕</span>';
-  return _skuSort.dir === 'asc' ? '<span style="color:var(--blue2)">↑</span>' : '<span style="color:var(--blue2)">↓</span>';
-}
-
-function renderSkuView() {
-  const el = document.getElementById('skusContent');
-  let rows = _getFilteredSkus();
-  document.getElementById('skuCountLabel').textContent = `${rows.length} SKUs`;
-  if (!rows.length) { el.innerHTML = emptyState('No SKUs found.'); return; }
-
-  const sorted = _applySkuSort(rows);
-  window._skuRows = sorted;
-
-  el.innerHTML = `
-    <div class="tbl-card">
-      <div class="tbl-hdr">
-        <span class="tbl-title">My SKU Purchase History</span>
-        <button class="export-btn" onclick="exportCSV(window._skuRows,'sku_analysis.csv')">⬇ CSV</button>
-      </div>
-      <div class="tbl-wrap">
-        <table>
-          <thead><tr>
-            <th style="cursor:pointer" onclick="sortSkus('SKU')">SKU ${_sortArrow('SKU')}</th>
-            <th style="cursor:pointer" onclick="sortSkus('product')">Product ${_sortArrow('product')}</th>
-            <th style="cursor:pointer" onclick="sortSkus('brand')">Brand ${_sortArrow('brand')}</th>
-            <th class="num" style="cursor:pointer" onclick="sortSkus('my_revenue')">Total Spend ${_sortArrow('my_revenue')}</th>
-            <th class="num" style="cursor:pointer" onclick="sortSkus('my_qty')">Units ${_sortArrow('my_qty')}</th>
-            <th class="num" style="cursor:pointer" onclick="sortSkus('my_orders')">Orders ${_sortArrow('my_orders')}</th>
-            <th style="cursor:pointer" onclick="sortSkus('last_date')">Last Order ${_sortArrow('last_date')}</th>
-            <th class="num" style="cursor:pointer" onclick="sortSkus('days_since_last')">Days Ago ${_sortArrow('days_since_last')}</th>
-          </tr></thead>
-          <tbody>
-            ${sorted.map(r => {
-              const days = parseInt(r.days_since_last)||0;
-              const daysColor = days >= 180 ? 'var(--red)' : days >= 90 ? 'var(--orange)' : 'var(--dim)';
-              const skuEsc  = (r.SKU||'').replace(/'/g,"\\'");
-              const prodEsc = (r.product||'').replace(/'/g,"\\'");
-              return `
-                <tr onmouseenter="showSkuPreview(event,'${skuEsc}','${prodEsc}')" onmouseleave="hideSkuPreview()" style="cursor:pointer" onclick="openSkuDrawer('${skuEsc}','${prodEsc}')">
-                  <td class="sku-tag">${r.SKU||'—'}</td>
-                  <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.product||'—'}</td>
-                  <td class="brand-tag">${r.brand||'—'}</td>
-                  <td class="num">${fmt(r.my_revenue)}</td>
-                  <td class="num">${fmtN(r.my_qty)}</td>
-                  <td class="num">${fmtN(r.my_orders)}</td>
-                  <td>${r.last_date ? new Date(r.last_date).toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
-                  <td class="num" style="color:${daysColor};font-weight:${days>=90?'600':'400'}">${days}d</td>
-                </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
-}
-
-function renderSkuTable(rows) { renderSkuView(); } // legacy alias
 
 // ══════════════════════════════════════
 // SKU DETAIL DRAWER
@@ -1126,19 +1028,22 @@ function closeDrawer() {
 }
 
 function renderDrawer(sku, product, data) {
-  const { my_history, benchmark } = data;
+  const { my_history, benchmark, summary } = data;
   const b = benchmark || {};
+  const s = summary || {};
 
-  const myTotalQty  = my_history.reduce((s,r)=>(parseInt(r.qty)||0)+s, 0);
-  const myTotalOrd  = my_history.reduce((s,r)=>(parseInt(r.orders)||0)+s, 0);
+  const myTotalQty  = parseInt(s.total_qty)    || my_history.reduce((acc,r)=>(parseInt(r.qty)||0)+acc, 0);
+  const myTotalOrd  = parseInt(s.total_orders) || my_history.reduce((acc,r)=>(parseInt(r.orders)||0)+acc, 0);
+  const myRevenue   = parseFloat(s.total_revenue) || 0;
+  const avgUnitPx   = parseFloat(s.avg_unit_price) || 0;
   const avgQtyBuyer = parseFloat(b.avg_qty_per_buyer)||0;
-  const avgQtyOrder = parseFloat(b.avg_qty_per_order)||0;
 
   // Only surface "buying less than market" as a gentle suggestion (never "more")
   const buyingLess = avgQtyBuyer > 0 && myTotalQty < avgQtyBuyer * 0.7;
 
-  // Last purchase recency
-  let lastMonth = my_history.length ? my_history[my_history.length-1].month : null;
+  // Last / first purchase dates
+  const fmtDate = d => d ? new Date(d).toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'}) : '—';
+  const lastDate  = s.last_date ? fmtDate(s.last_date) : (my_history.length ? my_history[my_history.length-1].month : '—');
 
   document.getElementById('drawerContent').innerHTML = `
     <div class="drawer-title">${product}</div>
@@ -1146,24 +1051,24 @@ function renderDrawer(sku, product, data) {
 
     <div class="bench-grid">
       <div class="bench-card">
-        <div class="bench-lbl">My Total Units</div>
+        <div class="bench-lbl">Total Spend</div>
+        <div class="bench-val">${fmt(myRevenue)}</div>
+        <div class="bench-sub">all-time (this period)</div>
+      </div>
+      <div class="bench-card">
+        <div class="bench-lbl">Total Units</div>
         <div class="bench-val">${fmtN(myTotalQty)}</div>
-        <div class="bench-sub">in selected period</div>
+        <div class="bench-sub">${myTotalOrd} orders</div>
       </div>
       <div class="bench-card">
-        <div class="bench-lbl">My Orders</div>
-        <div class="bench-val">${fmtN(myTotalOrd)}</div>
-        <div class="bench-sub">times ordered</div>
-      </div>
-      <div class="bench-card">
-        <div class="bench-lbl">Avg / Order</div>
-        <div class="bench-val">${myTotalOrd>0 ? Math.round(myTotalQty/myTotalOrd).toLocaleString() : '—'}</div>
-        <div class="bench-sub">units per order</div>
+        <div class="bench-lbl">Avg Unit Price</div>
+        <div class="bench-val">${avgUnitPx>0?fmt(avgUnitPx):'—'}</div>
+        <div class="bench-sub">your price paid</div>
       </div>
       <div class="bench-card">
         <div class="bench-lbl">Last Purchase</div>
-        <div class="bench-val" style="font-size:14px">${lastMonth || '—'}</div>
-        <div class="bench-sub">most recent month</div>
+        <div class="bench-val" style="font-size:14px">${lastDate}</div>
+        <div class="bench-sub">most recent order</div>
       </div>
     </div>
 
