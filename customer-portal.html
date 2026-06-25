@@ -58,6 +58,8 @@ body::before {
   background: linear-gradient(135deg, var(--blue), var(--teal));
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
 }
+.login-logo-img { display:block; height: 52px; width:auto; margin: 0 auto 4px; }
+.hdr-logo-img   { display:block; height: 26px; width:auto; }
 .login-logo-sub { font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: var(--dim); margin-top: 2px; text-align: center; }
 .login-card {
   background: var(--surface); border: 1px solid var(--border);
@@ -321,7 +323,7 @@ tr:hover td { background: var(--surface2); }
 <div id="loginScreen">
   <div class="login-wrap">
     <div>
-      <div class="login-logo-mark">ASUNG</div>
+      <img class="login-logo-img" src="asung-logo-white.png" alt="Asung Trading Inc." />
       <div class="login-logo-sub">Customer Portal</div>
     </div>
     <div class="login-card">
@@ -351,7 +353,7 @@ tr:hover td { background: var(--surface2); }
   <!-- Header -->
   <div class="hdr">
     <div class="hdr-brand">
-      <span class="hdr-logo">ASUNG</span>
+      <img class="hdr-logo-img" src="asung-logo-white.png" alt="Asung Trading Inc." />
       <span class="hdr-sep">|</span>
       <span class="hdr-title">My Account</span>
     </div>
@@ -814,17 +816,27 @@ function renderOverview(kpi, trend, storeCompare) {
 // ══════════════════════════════════════
 let _recoGapDays = 90;
 
+// State for recommendations tab
+let _recoState = {
+  popularAll: [], gapsAll: [],
+  popularShown: 30, gapsShown: 30,
+  popularBrand: '', gapsBrand: '',
+  PAGE: 30,
+};
+
 async function loadReco() {
   const el = document.getElementById('recoContent');
   el.innerHTML = '<div class="loading"><div class="spinner"></div> Finding opportunities…</div>';
   try {
     const [popular, gaps] = await Promise.all([
-      apiQuery('recommendations', getDateParams()),
-      apiQuery('reorder_gaps', { ...getDateParams(), gap_days: _recoGapDays, analysis_days: 365, min_count: 3 }),
+      apiQuery('recommendations', { ...getDateParams(), limit: 300 }),
+      apiQuery('reorder_gaps', { ...getDateParams(), gap_days: _recoGapDays, analysis_days: 365, min_count: 3, limit: 300 }),
     ]);
-    window._recoPopular = popular;
-    window._recoGaps    = gaps;
-    renderReco(popular, gaps);
+    _recoState.popularAll   = popular || [];
+    _recoState.gapsAll      = gaps || [];
+    _recoState.popularShown = _recoState.PAGE;
+    _recoState.gapsShown    = _recoState.PAGE;
+    renderReco();
   } catch(e) { el.innerHTML = errState(e.message); }
 }
 
@@ -833,24 +845,44 @@ async function reloadReorderGaps() {
   const col = document.getElementById('reorderCol');
   if (col) col.innerHTML = '<div class="loading" style="padding:30px"><div class="spinner"></div></div>';
   try {
-    const gaps = await apiQuery('reorder_gaps', { ...getDateParams(), gap_days: _recoGapDays, analysis_days: 365, min_count: 3 });
-    window._recoGaps = gaps;
-    if (col) col.innerHTML = _reorderColInner(gaps);
+    const gaps = await apiQuery('reorder_gaps', { ...getDateParams(), gap_days: _recoGapDays, analysis_days: 365, min_count: 3, limit: 300 });
+    _recoState.gapsAll   = gaps || [];
+    _recoState.gapsShown = _recoState.PAGE;
+    renderReco();
   } catch(e) { if (col) col.innerHTML = errState(e.message); }
 }
+
+// brand-filtered views
+function _recoPopularFiltered() {
+  const b = _recoState.popularBrand;
+  return b ? _recoState.popularAll.filter(r => r.brand === b) : _recoState.popularAll;
+}
+function _recoGapsFiltered() {
+  const b = _recoState.gapsBrand;
+  return b ? _recoState.gapsAll.filter(r => r.brand === b) : _recoState.gapsAll;
+}
+
+function _recoBrandOptions(rows, selected) {
+  const brands = [...new Set(rows.map(r=>r.brand).filter(Boolean))].sort();
+  return '<option value="">All Brands</option>' +
+    brands.map(b=>`<option value="${b}"${b===selected?' selected':''}>${b}</option>`).join('');
+}
+
+function onPopularBrand() { _recoState.popularBrand = document.getElementById('popBrandSel').value; _recoState.popularShown = _recoState.PAGE; renderReco(); }
+function onGapsBrand()    { _recoState.gapsBrand    = document.getElementById('gapBrandSel').value; _recoState.gapsShown    = _recoState.PAGE; renderReco(); }
+function showMorePopular(){ _recoState.popularShown += _recoState.PAGE; renderReco(); }
+function showMoreGaps()   { _recoState.gapsShown    += _recoState.PAGE; renderReco(); }
 
 async function exportReco(which) {
   try {
     if (which === 'popular') {
-      const full = await apiQuery('recommendations', { ...getDateParams(), limit: 1000 });
-      const rows = (full||[]).map(r=>({
+      const rows = _recoPopularFiltered().map(r=>({
         SKU:r.SKU, Product:r.product, Brand:r.brand,
-        Units_Sold_Asung:r.market_qty, Stores_Buying:r.buyer_count, Orders:r.market_orders
+        Units_Sold_6mo:r.market_qty, Stores_Buying:r.buyer_count, Orders:r.market_orders
       }));
       exportCSV(rows, 'popular_at_asung.csv');
     } else {
-      const full = await apiQuery('reorder_gaps', { ...getDateParams(), gap_days: _recoGapDays, analysis_days: 365, min_count: 3, limit: 2000 });
-      const rows = (full||[]).map(r=>({
+      const rows = _recoGapsFiltered().map(r=>({
         SKU:r.SKU, Product:r.product, Brand:r.brand,
         Times_Ordered:r.purchase_count, Total_Units:r.total_qty,
         Last_Purchase:r.last_purchase, Days_Since_Last:r.days_since_last
@@ -880,44 +912,52 @@ function _recoCard(r, accent, metricLabel, metricVal) {
     </div>`;
 }
 
-function _reorderColInner(gaps) {
-  if (!gaps.length) {
-    return `<div style="text-align:center;padding:30px 10px;color:var(--dim)"><div style="font-size:28px;margin-bottom:8px">✅</div><div style="font-size:12px">No lapsed items at this threshold.</div></div>`;
-  }
-  return gaps.map(r => _recoCard(r, 'var(--orange)', 'Days ago', (parseInt(r.days_since_last)||0)+'d')).join('');
+function _moreBtn(shown, total, fn, accent) {
+  if (shown >= total) return '';
+  const remaining = total - shown;
+  return `<button onclick="${fn}()" style="width:100%;margin-top:8px;padding:8px;background:var(--surface3);border:1px solid var(--border2);border-radius:6px;color:${accent};font-size:11px;font-weight:600;cursor:pointer">▼ Show ${Math.min(_recoState.PAGE,remaining)} more (${remaining} remaining)</button>`;
 }
 
-function renderReco(popular, gaps) {
+function renderReco() {
   const el = document.getElementById('recoContent');
+
+  const popF = _recoPopularFiltered();
+  const gapF = _recoGapsFiltered();
+  const popShow = popF.slice(0, _recoState.popularShown);
+  const gapShow = gapF.slice(0, _recoState.gapsShown);
 
   el.innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px">
 
-      <!-- Popular at Asung (not bought) -->
+      <!-- Popular at Asung -->
       <div class="card" style="border-top:3px solid var(--green)">
         <div class="card-hdr" style="margin-bottom:10px">
           <span class="card-title" style="font-size:15px">🌟 Popular at Asung</span>
           <div style="display:flex;gap:6px;align-items:center">
-            <span class="card-badge">${popular.length}</span>
+            <span class="card-badge">${popF.length}</span>
             <button class="export-btn" onclick="exportReco('popular')">⬇ CSV</button>
           </div>
         </div>
-        <div style="background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:8px;padding:10px 12px;margin-bottom:14px">
+        <div style="background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:8px;padding:10px 12px;margin-bottom:12px">
           <div style="font-size:12px;font-weight:600;color:#4ade80;margin-bottom:3px">Best-sellers you're missing</div>
           <div style="font-size:11px;color:var(--mid);line-height:1.5">These fly off the shelves at other stores — but you haven't ordered them yet. <span style="color:var(--dim)">(Units sold across Asung in the last 6 months)</span></div>
         </div>
+        <select id="popBrandSel" class="search-select" onchange="onPopularBrand()" style="width:100%;margin-bottom:12px;padding:5px 8px;font-size:11px">
+          ${_recoBrandOptions(_recoState.popularAll, _recoState.popularBrand)}
+        </select>
         <div style="max-height:600px;overflow-y:auto">
-          ${popular.length
-            ? popular.map(r => _recoCard(r, 'var(--green)', '6mo sold', fmtN(r.market_qty))).join('')
+          ${popShow.length
+            ? popShow.map(r => _recoCard(r, 'var(--green)', '6mo sold', fmtN(r.market_qty))).join('') + _moreBtn(_recoState.popularShown, popF.length, 'showMorePopular', '#4ade80')
             : '<div style="text-align:center;padding:30px 10px;color:var(--dim);font-size:12px">No new suggestions right now.</div>'}
         </div>
       </div>
 
-      <!-- Haven't Reordered (lapsed) -->
+      <!-- Time to Restock -->
       <div class="card" style="border-top:3px solid var(--orange)">
         <div class="card-hdr" style="margin-bottom:10px">
           <span class="card-title" style="font-size:15px">🔔 Time to Restock</span>
           <div style="display:flex;gap:6px;align-items:center">
+            <span class="card-badge">${gapF.length}</span>
             <select id="recoGapSel" class="search-select" onchange="reloadReorderGaps()" style="padding:3px 6px;font-size:11px">
               <option value="90"${_recoGapDays===90?' selected':''}>90+ days</option>
               <option value="120"${_recoGapDays===120?' selected':''}>120+ days</option>
@@ -927,12 +967,17 @@ function renderReco(popular, gaps) {
             <button class="export-btn" onclick="exportReco('gaps')">⬇ CSV</button>
           </div>
         </div>
-        <div style="background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.3);border-radius:8px;padding:10px 12px;margin-bottom:14px">
+        <div style="background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.3);border-radius:8px;padding:10px 12px;margin-bottom:12px">
           <div style="font-size:12px;font-weight:600;color:#fb923c;margin-bottom:3px">Your regulars, gone quiet</div>
           <div style="font-size:11px;color:var(--mid);line-height:1.5">You used to order these often, but it's been a while. Running low?</div>
         </div>
-        <div id="reorderCol" style="max-height:600px;overflow-y:auto">
-          ${_reorderColInner(gaps)}
+        <select id="gapBrandSel" class="search-select" onchange="onGapsBrand()" style="width:100%;margin-bottom:12px;padding:5px 8px;font-size:11px">
+          ${_recoBrandOptions(_recoState.gapsAll, _recoState.gapsBrand)}
+        </select>
+        <div style="max-height:600px;overflow-y:auto">
+          ${gapShow.length
+            ? gapShow.map(r => _recoCard(r, 'var(--orange)', 'Days ago', (parseInt(r.days_since_last)||0)+'d')).join('') + _moreBtn(_recoState.gapsShown, gapF.length, 'showMoreGaps', '#fb923c')
+            : '<div style="text-align:center;padding:30px 10px;color:var(--dim)"><div style="font-size:28px;margin-bottom:8px">✅</div><div style="font-size:12px">No lapsed items at this threshold.</div></div>'}
         </div>
       </div>
 
@@ -1173,7 +1218,7 @@ function renderOrderTable(rows) {
               <td class="num">${fmtN(r.qty)}</td>
               <td class="num">${fmt(r.unit_price)}</td>
               <td class="num">${fmt(r.line_total)}</td>
-              <td class="${r.location==='Asung Trading Inc.'?'loc-tor':'loc-edm'}">${r.location==='Asung Trading Inc.'?'Toronto':'Edmonton'}</td>
+              <td class="${r.location==='Asung - Edmonton'?'loc-edm':'loc-tor'}">${r.location==='Asung - Edmonton'?'Edmonton':'Toronto'}</td>
               ${groupStores.length > 1 && activeStoreId === 'all' ? `<td style="font-size:11px;color:var(--mid)">${r.customer||'—'}</td>` : ''}
             </tr>`;}).join('')}
           </tbody>
