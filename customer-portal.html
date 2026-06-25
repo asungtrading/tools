@@ -301,6 +301,9 @@ tr:hover td { background: var(--surface2); }
 
 /* ── ORDER SEARCH INPUTS ── */
 .orders-search { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.ord-toggle { background: var(--surface2); border: 1px solid var(--border); color: var(--mid); font-size: 12px; font-weight: 600; padding: 7px 14px; border-radius: 7px; cursor: pointer; transition: all .15s; }
+.ord-toggle:hover { border-color: var(--border2); color: var(--text); }
+.ord-toggle.active { background: var(--blue); border-color: var(--blue); color: #fff; }
 
 /* ── RESPONSIVE ── */
 @media (max-width: 768px) {
@@ -372,6 +375,7 @@ tr:hover td { background: var(--surface2); }
   <div class="tab-nav">
     <button class="tab-btn active" onclick="switchTab('overview')">📊 Overview</button>
     <button class="tab-btn" onclick="switchTab('reco')">🌟 Buy More / Reorder</button>
+    <button class="tab-btn" onclick="switchTab('pricelist')">🏷️ Price List</button>
     <button class="tab-btn" onclick="switchTab('orders')">🧾 Order History</button>
   </div>
 
@@ -400,8 +404,24 @@ tr:hover td { background: var(--surface2); }
     <div id="recoContent"><div class="loading"><div class="spinner"></div> Loading…</div></div>
   </div>
 
+  <!-- Tab: Price List -->
+  <div class="tab-panel" id="tab-pricelist">
+    <div class="orders-search">
+      <input class="search-input" id="plSearch" placeholder="Search SKU or product…" oninput="filterPriceList()" style="max-width:240px" />
+      <select class="search-select" id="plBrand" onchange="filterPriceList()" style="max-width:180px"><option value="">All Brands</option></select>
+      <select class="search-select" id="plCategory" onchange="filterPriceList()" style="max-width:200px"><option value="">All Categories</option></select>
+      <span id="plCountLabel" style="font-size:11px;color:var(--dim);align-self:center"></span>
+      <button class="export-btn" onclick="exportPriceList()" style="margin-left:auto">⬇ CSV</button>
+    </div>
+    <div id="pricelistContent"><div class="loading"><div class="spinner"></div> Loading…</div></div>
+  </div>
+
   <!-- Tab: Orders -->
   <div class="tab-panel" id="tab-orders">
+    <div style="display:flex;gap:6px;margin-bottom:12px">
+      <button id="ordViewByOrder" class="ord-toggle active" onclick="setOrderView('byorder')">📋 By Order</button>
+      <button id="ordViewAll" class="ord-toggle" onclick="setOrderView('all')">📃 All Line Items</button>
+    </div>
     <div class="orders-search">
       <input class="search-input" id="orderNumSearch" placeholder="Filter by order #…" oninput="filterOrderTable()" style="max-width:160px" />
       <input class="search-input" id="orderSkuSearch" placeholder="Filter by SKU or product…" oninput="filterOrderTable()" style="max-width:240px" />
@@ -603,7 +623,7 @@ function getDateParams() {
 // LOAD ALL
 // ══════════════════════════════════════
 // Track what state each tab was last loaded with (store + dates)
-const _tabLoadKey = { overview:null, reco:null, orders:null };
+const _tabLoadKey = { overview:null, reco:null, pricelist:null, orders:null };
 let _currentTab = 'overview';
 
 function _stateKey() {
@@ -612,9 +632,10 @@ function _stateKey() {
 
 function loadAll() {
   // Invalidate all tab caches (store or date changed)
-  _tabLoadKey.overview = null;
-  _tabLoadKey.reco     = null;
-  _tabLoadKey.orders   = null;
+  _tabLoadKey.overview  = null;
+  _tabLoadKey.reco      = null;
+  _tabLoadKey.pricelist = null;
+  _tabLoadKey.orders    = null;
   // Load only the currently visible tab
   loadTab(_currentTab);
 }
@@ -623,9 +644,10 @@ function loadTab(tab) {
   const key = _stateKey();
   if (_tabLoadKey[tab] === key) return; // already loaded with this state
   _tabLoadKey[tab] = key;
-  if      (tab === 'overview') loadOverview();
-  else if (tab === 'reco')     loadReco();
-  else if (tab === 'orders')   loadOrders();
+  if      (tab === 'overview')  loadOverview();
+  else if (tab === 'reco')      loadReco();
+  else if (tab === 'pricelist') loadPriceList();
+  else if (tab === 'orders')    loadOrders();
 }
 
 function switchTab(tab) {
@@ -634,9 +656,9 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelector(`.tab-btn[onclick="switchTab('${tab}')"]`).classList.add('active');
   document.getElementById('tab-' + tab).classList.add('active');
-  // Period filter is irrelevant on the recommendations tab (always recent-window based)
+  // Period filter is irrelevant on recommendations and price list tabs
   const fb = document.getElementById('filterBar');
-  if (fb) fb.style.display = (tab === 'reco') ? 'none' : '';
+  if (fb) fb.style.display = (tab === 'reco' || tab === 'pricelist') ? 'none' : '';
   loadTab(tab);
 }
 
@@ -1158,30 +1180,261 @@ function renderDrawer(sku, product, data) {
 }
 
 // ══════════════════════════════════════
+// PRICE LIST TAB
+// ══════════════════════════════════════
+let _plAll = [];
+let _plTier = '';
+let _plShown = 100;
+const _PL_PAGE = 100;
+
+async function loadPriceList() {
+  const el = document.getElementById('pricelistContent');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading price list…</div>';
+  try {
+    const res = await apiQuery('price_list', getDateParams());
+    // res = { tier, rows } or { error, rows }
+    if (res.error === 'no_price_list') {
+      el.innerHTML = emptyState('No price list is assigned to this store. Please contact Asung.');
+      return;
+    }
+    _plAll  = res.rows || [];
+    _plTier = res.tier || '';
+    _plShown = _PL_PAGE;
+    _populatePlFilters(_plAll);
+    renderPriceList();
+  } catch(e) { el.innerHTML = errState(e.message); }
+}
+
+function _populatePlFilters(rows) {
+  const brands = [...new Set(rows.map(r=>r.brand).filter(Boolean))].sort();
+  const cats   = [...new Set(rows.map(r=>r.category).filter(Boolean))].sort();
+  document.getElementById('plBrand').innerHTML = '<option value="">All Brands</option>' + brands.map(b=>`<option value="${b}">${b}</option>`).join('');
+  document.getElementById('plCategory').innerHTML = '<option value="">All Categories</option>' + cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+}
+
+function _plFiltered() {
+  const q   = (document.getElementById('plSearch').value||'').toLowerCase();
+  const brd = document.getElementById('plBrand').value;
+  const cat = document.getElementById('plCategory').value;
+  return _plAll.filter(r => {
+    const matchQ = !q || (r.sku||'').toLowerCase().includes(q) || (r.product||'').toLowerCase().includes(q) || (r.barcode||'').toLowerCase().includes(q);
+    const matchB = !brd || r.brand === brd;
+    const matchC = !cat || r.category === cat;
+    return matchQ && matchB && matchC;
+  });
+}
+
+function filterPriceList() { _plShown = _PL_PAGE; renderPriceList(); }
+function showMorePl() { _plShown += _PL_PAGE; renderPriceList(); }
+
+function _plNum(v) {
+  const n = parseFloat(v);
+  return isNaN(n) ? null : n;
+}
+
+function _volBadge(disc, price) {
+  const p = _plNum(price);
+  const d = (disc===undefined||disc===null) ? '' : String(disc).trim();
+  if (!d || d === '-' || p === null) return '';
+  // disc may be a qty threshold like "6" or "12"
+  return `<span style="display:inline-block;background:var(--surface3);border:1px solid var(--border2);border-radius:4px;padding:1px 6px;font-size:10px;color:var(--mid);margin-right:4px">${d}+ : ${fmt(p)}</span>`;
+}
+
+function renderPriceList() {
+  const el = document.getElementById('pricelistContent');
+  const rows = _plFiltered();
+  document.getElementById('plCountLabel').textContent =
+    `${rows.length.toLocaleString()} items` + (_plTier ? ` · ${_plTier}` : '');
+
+  if (!rows.length) { el.innerHTML = emptyState('No products found.'); return; }
+
+  const show = rows.slice(0, _plShown);
+
+  el.innerHTML = `
+    <div class="tbl-card">
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th style="width:44px"></th>
+            <th>SKU</th>
+            <th>Product</th>
+            <th>Brand</th>
+            <th>Category</th>
+            <th class="num">List Price</th>
+            <th class="num">Your Price</th>
+            <th class="num">Stock</th>
+            <th>Volume Pricing</th>
+          </tr></thead>
+          <tbody>
+            ${show.map(r=>{
+              const list = _plNum(r.list_price);
+              const your = _plNum(r.your_price);
+              const stock = _plNum(r.stock);
+              const img = r.image
+                ? `<img src="${r.image}" loading="lazy" style="width:36px;height:36px;object-fit:cover;border-radius:5px;background:var(--surface3)" onerror="this.style.display='none'">`
+                : `<div style="width:36px;height:36px;border-radius:5px;background:var(--surface3)"></div>`;
+              const vol = _volBadge(r.vol_disc1, r.vol_price1) + _volBadge(r.vol_disc2, r.vol_price2);
+              return `<tr>
+                <td>${img}</td>
+                <td class="sku-tag">${r.sku||'—'}</td>
+                <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.product||'—'}</td>
+                <td class="brand-tag">${r.brand||'—'}</td>
+                <td style="font-size:11px;color:var(--mid)">${r.category||'—'}</td>
+                <td class="num" style="color:var(--dim);text-decoration:line-through">${list!==null?fmt(list):'—'}</td>
+                <td class="num" style="font-weight:700;color:var(--green)">${your!==null?fmt(your):'—'}</td>
+                <td class="num" style="color:${stock>0?'var(--text)':'var(--red)'}">${stock!==null?fmtN(stock):'—'}</td>
+                <td>${vol||'<span style="color:var(--dim);font-size:11px">—</span>'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+      ${_plShown < rows.length ? `<div style="padding:12px;text-align:center"><button onclick="showMorePl()" style="padding:8px 20px;background:var(--surface3);border:1px solid var(--border2);border-radius:6px;color:var(--blue2);font-size:12px;font-weight:600;cursor:pointer">▼ Show ${Math.min(_PL_PAGE, rows.length-_plShown)} more (${rows.length-_plShown} remaining)</button></div>` : ''}
+    </div>
+  `;
+}
+
+function exportPriceList() {
+  const rows = _plFiltered().map(r=>({
+    SKU:r.sku, Product:r.product, Brand:r.brand, Category:r.category, Unit:r.unit,
+    List_Price:r.list_price, Your_Price:r.your_price, Stock:r.stock,
+    Barcode:r.barcode
+  }));
+  exportCSV(rows, `price_list_${_plTier||'asung'}.csv`);
+}
+
+// ══════════════════════════════════════
 // ORDERS TAB
 // ══════════════════════════════════════
+let _orderView = 'byorder';            // 'byorder' | 'all'
+let _expandedOrders = {};              // track which orders are expanded
+
 async function loadOrders() {
   const el = document.getElementById('ordersContent');
   el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading order history…</div>';
   try {
     const rows = await apiQuery('orders', getDateParams());
     allOrderRows = rows;
-    renderOrderTable(rows);
+    _expandedOrders = {};
+    filterOrderTable();
   } catch(e) { el.innerHTML = errState(e.message); }
 }
 
-function filterOrderTable() {
+function setOrderView(view) {
+  _orderView = view;
+  document.getElementById('ordViewByOrder').classList.toggle('active', view==='byorder');
+  document.getElementById('ordViewAll').classList.toggle('active', view==='all');
+  filterOrderTable();
+}
+
+function _getFilteredOrders() {
   const onum  = (document.getElementById('orderNumSearch').value||'').toLowerCase();
   const sku   = (document.getElementById('orderSkuSearch').value||'').toLowerCase();
   const brand = (document.getElementById('orderBrandSearch').value||'').toLowerCase();
-  const filtered = allOrderRows.filter(r => {
+  return allOrderRows.filter(r => {
     const matchO = !onum  || (r.order_number||'').toLowerCase().includes(onum);
     const matchS = !sku   || (r.SKU||'').toLowerCase().includes(sku) || (r.product||'').toLowerCase().includes(sku);
     const matchB = !brand || (r.brand||'').toLowerCase().includes(brand);
     return matchO && matchS && matchB;
   });
-  document.getElementById('orderCountLabel').textContent = `${filtered.length.toLocaleString()} lines`;
-  renderOrderTable(filtered);
+}
+
+function filterOrderTable() {
+  const filtered = _getFilteredOrders();
+  window._orderRows = filtered;
+  if (_orderView === 'byorder') renderOrdersByOrder(filtered);
+  else                          renderOrderTable(filtered);
+}
+
+function toggleOrder(onum) {
+  _expandedOrders[onum] = !_expandedOrders[onum];
+  renderOrdersByOrder(_getFilteredOrders());
+}
+
+function renderOrdersByOrder(rows) {
+  const el = document.getElementById('ordersContent');
+  if (!rows.length) { el.innerHTML = emptyState('No orders found for this period.'); return; }
+
+  // Group rows by order_number
+  const groups = {};
+  rows.forEach(r => {
+    const k = r.order_number || '—';
+    if (!groups[k]) groups[k] = { order_number:k, date:r.date, location:r.location, customer:r.customer, lines:[], total:0, qty:0 };
+    groups[k].lines.push(r);
+    groups[k].total += parseFloat(r.line_total)||0;
+    groups[k].qty   += parseInt(r.qty)||0;
+  });
+  // Sort orders by date desc
+  const orderList = Object.values(groups).sort((a,b)=> new Date(b.date) - new Date(a.date));
+
+  document.getElementById('orderCountLabel').textContent =
+    `${orderList.length.toLocaleString()} orders · ${rows.length.toLocaleString()} lines`;
+
+  const showStore = groupStores.length > 1 && activeStoreId === 'all';
+
+  el.innerHTML = `
+    <div class="tbl-card">
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th style="width:30px"></th>
+            <th>Order #</th>
+            <th>Date</th>
+            <th>Branch</th>
+            ${showStore ? '<th>Store</th>' : ''}
+            <th class="num">Items</th>
+            <th class="num">Total Qty</th>
+            <th class="num">Order Total</th>
+          </tr></thead>
+          <tbody>
+            ${orderList.map(o => {
+              const open = !!_expandedOrders[o.order_number];
+              const onumEsc = (o.order_number||'').replace(/'/g,"\\'");
+              const header = `
+                <tr style="cursor:pointer;background:${open?'var(--surface2)':'transparent'}" onclick="toggleOrder('${onumEsc}')">
+                  <td style="text-align:center;color:var(--blue2);font-weight:700">${open?'▾':'▸'}</td>
+                  <td style="font-family:monospace;font-size:12px;font-weight:600;color:var(--blue2)">${o.order_number}</td>
+                  <td>${o.date ? new Date(o.date).toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
+                  <td class="${o.location==='Asung - Edmonton'?'loc-edm':'loc-tor'}">${o.location==='Asung - Edmonton'?'Edmonton':'Toronto'}</td>
+                  ${showStore ? `<td style="font-size:11px;color:var(--mid)">${o.customer||'—'}</td>` : ''}
+                  <td class="num">${o.lines.length}</td>
+                  <td class="num">${fmtN(o.qty)}</td>
+                  <td class="num" style="font-weight:700;color:var(--green)">${fmt(o.total)}</td>
+                </tr>`;
+              if (!open) return header;
+              // Expanded detail rows
+              const detail = `
+                <tr><td colspan="${showStore?8:7}" style="padding:0;background:var(--surface)">
+                  <div style="padding:4px 12px 12px 40px">
+                    <table style="width:100%">
+                      <thead><tr>
+                        <th>SKU</th><th>Product</th><th>Brand</th>
+                        <th class="num">Qty</th><th class="num">Unit Price</th><th class="num">Line Total</th>
+                      </tr></thead>
+                      <tbody>
+                        ${o.lines.map(r=>{
+                          const skuEsc  = (r.SKU||'').replace(/'/g,"\\'");
+                          const prodEsc = (r.product||'').replace(/'/g,"\\'");
+                          return `<tr>
+                            <td class="sku-tag" style="cursor:pointer" onmouseenter="showSkuPreview(event,'${skuEsc}','${prodEsc}')" onmouseleave="hideSkuPreview()" onclick="event.stopPropagation();openSkuDrawer('${skuEsc}','${prodEsc}')">${r.SKU||'—'}</td>
+                            <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis">${r.product||'—'}</td>
+                            <td class="brand-tag">${r.brand||'—'}</td>
+                            <td class="num">${fmtN(r.qty)}</td>
+                            <td class="num">${fmt(r.unit_price)}</td>
+                            <td class="num">${fmt(r.line_total)}</td>
+                          </tr>`;
+                        }).join('')}
+                      </tbody>
+                    </table>
+                  </div>
+                </td></tr>`;
+              return header + detail;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
 }
 
 function renderOrderTable(rows) {
