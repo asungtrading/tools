@@ -34,6 +34,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
 /* ── HEADER ── */
 .header{background:var(--surface);border-bottom:1px solid var(--border);padding:16px 28px;display:flex;align-items:center;gap:12px;}
 .logo{width:32px;height:32px;background:var(--accent);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:16px;}
+.hdr-logo-img{height:24px;width:auto;display:block;}
+.gate-logo-img{height:40px;width:auto;display:block;margin:0 auto 16px;}
 .header h1{font-size:16px;font-weight:600;letter-spacing:-.3px;}
 .header span{color:var(--muted);font-size:12px;}
 
@@ -250,7 +252,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
 <div id="gate">
   <div class="gate-box">
     <div class="gate-logo">🏷️</div>
-    <h2>Asung Barcode Generator</h2>
+    <img class="gate-logo-img" src="asung-logo-white.png" alt="Asung Trading Inc.">
+    <h2>Barcode Generator</h2>
     <p>내부 전용 도구입니다. 비밀번호를 입력하세요.</p>
     <input class="gate-input" id="pwInput" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkPw()">
     <button class="gate-btn" onclick="checkPw()">입장</button>
@@ -262,7 +265,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
 <div id="app" style="display:none;">
 <div class="header">
   <div class="logo">🏷️</div>
-  <h1>Barcode Generator <span>— Asung Trading Inc.</span></h1>
+  <h1>Barcode Generator <span style="display:inline-flex;align-items:center;gap:6px">— <img class="hdr-logo-img" src="asung-logo-white.png" alt="Asung Trading Inc."></span></h1>
 </div>
 
 <div class="tab-nav">

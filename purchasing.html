@@ -18,7 +18,8 @@
 html,body{height:100%;overflow:hidden}
 body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;line-height:1.5}
 #header{height:52px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 18px;gap:14px;position:fixed;top:0;left:0;right:0;z-index:100}
-.logo{font-family:var(--mono);font-weight:600;font-size:14px;color:var(--accent);letter-spacing:.08em;white-space:nowrap}
+.logo{font-family:var(--mono);font-weight:600;font-size:14px;color:var(--accent);letter-spacing:.08em;white-space:nowrap;display:flex;align-items:center;gap:8px}
+.logo img{height:22px;width:auto;display:block}
 .logo span{color:var(--text3);font-weight:400}
 .hsep{width:1px;height:20px;background:var(--border);flex-shrink:0}
 .hright{margin-left:auto;display:flex;align-items:center;gap:8px;flex-shrink:0}
@@ -259,7 +260,7 @@ body.hide-bo6090 [data-col-id="bo6090"]{display:none!important}
 <body>
 
 <header id="header">
-  <div class="logo">ASUNG <span>/ 발주관리</span></div>
+  <div class="logo"><img src="asung-logo-white.png" alt="Asung"> <span>/ 발주관리</span></div>
   <div class="hsep"></div>
   <div class="hright">
     <div class="btog">
