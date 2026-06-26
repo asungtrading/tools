@@ -18,6 +18,7 @@
 .pw-logo{font-size:11px;font-weight:700;letter-spacing:2px;color:#6b738a;
   text-transform:uppercase;margin-bottom:24px;}
 .pw-logo span{color:#4f8ef7;}
+.pw-logo-img{height:34px;width:auto;display:block;margin:0 auto 24px;}
 .pw-title{font-size:18px;font-weight:700;color:#e8ecf5;margin-bottom:6px;}
 .pw-sub{font-size:12px;color:#6b738a;margin-bottom:24px;}
 .pw-input{
@@ -93,6 +94,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font-ui);min-heigh
 }
 .upload-logo{font-size:13px;font-weight:700;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-bottom:48px}
 .upload-logo span{color:var(--blue)}
+.upload-logo-img{height:40px;width:auto;display:block;margin-bottom:12px}
 .drop-zone{
   width:100%;max-width:520px;border:2px dashed var(--border);border-radius:16px;
   padding:60px 40px;text-align:center;cursor:pointer;transition:all .25s;
@@ -238,7 +240,7 @@ td.overdue-med{color:var(--yellow);font-weight:700}
 <!-- 비밀번호 화면 -->
 <div id="pwScreen" style="display:none">
   <div class="pw-card">
-    <div class="pw-logo">ASUNG TRADING <span>INC.</span></div>
+    <img class="pw-logo-img" src="asung-logo-white.png" alt="Asung Trading Inc.">
     <div class="pw-title">Open Orders Dashboard</div>
     <div class="pw-sub">내부 전용 · 비밀번호를 입력하세요</div>
     <input class="pw-input" type="password" id="pwInput" placeholder="비밀번호 입력" autofocus>
@@ -248,7 +250,8 @@ td.overdue-med{color:var(--yellow);font-weight:700}
 </div>
 
 <div id="uploadScreen">
-  <div class="upload-logo">Asung Trading <span>|</span> Open Orders Dashboard</div>
+  <img class="upload-logo-img" src="asung-logo-white.png" alt="Asung Trading Inc.">
+  <div class="upload-logo" style="margin-bottom:48px">Open Orders Dashboard</div>
 
   <div class="drop-zone" id="dropZone">
     <input type="file" id="fileInput" accept=".xlsx,.csv">
