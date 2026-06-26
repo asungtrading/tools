@@ -304,6 +304,11 @@ tr:hover td { background: var(--surface2); }
 .ord-toggle { background: var(--surface2); border: 1px solid var(--border); color: var(--mid); font-size: 12px; font-weight: 600; padding: 7px 14px; border-radius: 7px; cursor: pointer; transition: all .15s; }
 .ord-toggle:hover { border-color: var(--border2); color: var(--text); }
 .ord-toggle.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+/* Price list thumbnail hover-zoom */
+.pl-thumb { position: relative; display: inline-block; }
+.pl-thumb img.pl-thumb-img { width: 36px; height: 36px; object-fit: cover; border-radius: 5px; background: var(--surface3); cursor: zoom-in; display: block; }
+.pl-thumb .pl-zoom { display: none; position: absolute; top: 50%; left: 44px; transform: translateY(-50%); z-index: 50; width: 220px; height: 220px; object-fit: contain; background: #fff; border: 1px solid var(--border2); border-radius: 10px; box-shadow: 0 8px 28px rgba(0,0,0,.45); padding: 6px; pointer-events: none; }
+.pl-thumb:hover .pl-zoom { display: block; }
 
 /* ── RESPONSIVE ── */
 @media (max-width: 768px) {
@@ -375,8 +380,8 @@ tr:hover td { background: var(--surface2); }
   <div class="tab-nav">
     <button class="tab-btn active" onclick="switchTab('overview')">📊 Overview</button>
     <button class="tab-btn" onclick="switchTab('reco')">🌟 Buy More / Reorder</button>
-    <button class="tab-btn" onclick="switchTab('orders')">🧾 Order History</button>
     <button class="tab-btn" onclick="switchTab('pricelist')">🏷️ Price List</button>
+    <button class="tab-btn" onclick="switchTab('orders')">🧾 Order History</button>
   </div>
 
   <!-- Filter bar -->
@@ -625,6 +630,7 @@ function getDateParams() {
 // Track what state each tab was last loaded with (store + dates)
 const _tabLoadKey = { overview:null, reco:null, pricelist:null, orders:null };
 let _currentTab = 'overview';
+let _prefetchDone = {};
 
 function _stateKey() {
   return activeStoreId + '|' + document.getElementById('dateFrom').value + '|' + document.getElementById('dateTo').value;
@@ -636,6 +642,7 @@ function loadAll() {
   _tabLoadKey.reco      = null;
   _tabLoadKey.pricelist = null;
   _tabLoadKey.orders    = null;
+  _prefetchDone = {};        // allow re-prefetch for the new state
   // Load only the currently visible tab
   loadTab(_currentTab);
 }
@@ -648,6 +655,25 @@ function loadTab(tab) {
   else if (tab === 'reco')      loadReco();
   else if (tab === 'pricelist') loadPriceList();
   else if (tab === 'orders')    loadOrders();
+}
+
+// Quietly pre-load the other tabs in the background so they open instantly
+// when the user clicks them. Runs after the first (visible) tab finishes.
+function prefetchOtherTabs() {
+  const key = _stateKey();
+  if (_prefetchDone[key]) return;
+  _prefetchDone[key] = true;
+  const others = ['orders','pricelist','reco'].filter(t => t !== _currentTab);
+  // Stagger slightly so we don't fire everything at once (Apps Script is single-threaded)
+  others.forEach((tab, i) => {
+    setTimeout(() => {
+      if (_tabLoadKey[tab] === key) return; // already loaded by user
+      _tabLoadKey[tab] = key;
+      if      (tab === 'reco')      loadReco();
+      else if (tab === 'pricelist') loadPriceList();
+      else if (tab === 'orders')    loadOrders();
+    }, 600 * (i + 1));
+  });
 }
 
 function switchTab(tab) {
@@ -682,6 +708,7 @@ async function loadOverview() {
     const storeCompare = showCompare ? results[2] : null;
 
     renderOverview(kpi, trend, storeCompare);
+    prefetchOtherTabs();   // warm up other tabs in the background
   } catch(e) { el.innerHTML = errState(e.message); }
 }
 
@@ -1012,7 +1039,20 @@ function renderReco() {
 // ══════════════════════════════════════
 // ── SKU hover preview (lightweight floating card with mini chart) ──
 let _previewTimer = null;
-let _previewCache = {};
+let _skuDetailCache = {};   // shared by hover preview AND click drawer
+
+// Fetch SKU detail once and reuse (keyed by sku + current date range)
+function _skuCacheKey(sku) {
+  return sku + '|' + document.getElementById('dateFrom').value + '|' + document.getElementById('dateTo').value;
+}
+async function getSkuDetail(sku) {
+  const k = _skuCacheKey(sku);
+  if (_skuDetailCache[k]) return _skuDetailCache[k];
+  const p = apiQuery('sku_detail', { ...getDateParams(), sku });
+  _skuDetailCache[k] = p;          // cache the promise (dedupes concurrent calls)
+  try { return await p; }
+  catch(e) { delete _skuDetailCache[k]; throw e; }
+}
 
 function showSkuPreview(evt, sku, product) {
   clearTimeout(_previewTimer);
@@ -1036,11 +1076,7 @@ function showSkuPreview(evt, sku, product) {
       <div style="font-size:11px;color:var(--dim)">Loading…</div>`;
 
     try {
-      let data = _previewCache[sku];
-      if (!data) {
-        data = await apiQuery('sku_detail', { ...getDateParams(), sku });
-        _previewCache[sku] = data;
-      }
+      const data = await getSkuDetail(sku);
       // box may have been hidden while loading
       if (box.style.display === 'none') return;
       const hist = data.my_history || [];
@@ -1075,13 +1111,22 @@ function hideSkuPreview() {
 async function openSkuDrawer(sku, product) {
   document.getElementById('skuDrawer').classList.add('open');
   document.getElementById('drawerOverlay').style.display = 'block';
+  const k = _skuCacheKey(sku);
+  // If already cached (e.g. from hover preview), render instantly
+  if (_skuDetailCache[k]) {
+    try {
+      const data = await _skuDetailCache[k];
+      renderDrawer(sku, product, data);
+      return;
+    } catch(e) { /* fall through to reload */ }
+  }
   document.getElementById('drawerContent').innerHTML = `
     <div class="drawer-title">${product}</div>
     <div class="drawer-sku">${sku}</div>
     <div class="loading"><div class="spinner"></div> Loading SKU detail…</div>
   `;
   try {
-    const data = await apiQuery('sku_detail', { ...getDateParams(), sku });
+    const data = await getSkuDetail(sku);
     renderDrawer(sku, product, data);
   } catch(e) {
     document.getElementById('drawerContent').innerHTML = errState(e.message);
@@ -1184,7 +1229,6 @@ function renderDrawer(sku, product, data) {
 // ══════════════════════════════════════
 let _plAll = [];
 let _plTier = '';
-let _plStockLoc = 'both';   // 'toronto' | 'edmonton' | 'both'
 let _plShown = 100;
 const _PL_PAGE = 100;
 
@@ -1193,14 +1237,13 @@ async function loadPriceList() {
   el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading price list…</div>';
   try {
     const res = await apiQuery('price_list', getDateParams());
-    // res = { tier, stock_location, rows } or { error, rows }
+    // res = { tier, rows } or { error, rows }
     if (res.error === 'no_price_list') {
       el.innerHTML = emptyState('No price list is assigned to this store. Please contact Asung.');
       return;
     }
     _plAll  = res.rows || [];
     _plTier = res.tier || '';
-    _plStockLoc = res.stock_location || 'both';
     _plShown = _PL_PAGE;
     _populatePlFilters(_plAll);
     renderPriceList();
@@ -1252,26 +1295,6 @@ function renderPriceList() {
 
   const show = rows.slice(0, _plShown);
 
-  // 재고 컬럼 구성 — store의 stock_location 설정에 따라
-  const showTO = _plStockLoc === 'toronto'  || _plStockLoc === 'both';
-  const showED = _plStockLoc === 'edmonton' || _plStockLoc === 'both';
-
-  // 헤더 셀
-  let stockHead = '';
-  if (showTO && showED) {
-    stockHead = `<th class="num">Stock<br><span style="font-size:9px;color:var(--mid);font-weight:500">Toronto</span></th>`
-              + `<th class="num">Stock<br><span style="font-size:9px;color:var(--mid);font-weight:500">Edmonton</span></th>`;
-  } else if (showTO) {
-    stockHead = `<th class="num">Stock<br><span style="font-size:9px;color:var(--mid);font-weight:500">Toronto</span></th>`;
-  } else {
-    stockHead = `<th class="num">Stock<br><span style="font-size:9px;color:var(--mid);font-weight:500">Edmonton</span></th>`;
-  }
-
-  const stockCell = (v) => {
-    const n = _plNum(v);
-    return `<td class="num" style="color:${n>0?'var(--text)':'var(--red)'}">${n!==null?fmtN(n):'—'}</td>`;
-  };
-
   el.innerHTML = `
     <div class="tbl-card">
       <div class="tbl-wrap">
@@ -1284,20 +1307,18 @@ function renderPriceList() {
             <th>Category</th>
             <th class="num">List Price</th>
             <th class="num">Your Price</th>
-            ${stockHead}
+            <th class="num">Stock</th>
             <th>Volume Pricing</th>
           </tr></thead>
           <tbody>
             ${show.map(r=>{
               const list = _plNum(r.list_price);
               const your = _plNum(r.your_price);
+              const stock = _plNum(r.stock);
               const img = r.image
-                ? `<img src="${r.image}" loading="lazy" style="width:36px;height:36px;object-fit:cover;border-radius:5px;background:var(--surface3)" onerror="this.style.display='none'">`
+                ? `<span class="pl-thumb"><img src="${r.image}" loading="lazy" class="pl-thumb-img" onerror="this.parentNode.style.display='none'"><img src="${r.image}" loading="lazy" class="pl-zoom"></span>`
                 : `<div style="width:36px;height:36px;border-radius:5px;background:var(--surface3)"></div>`;
               const vol = _volBadge(r.vol_disc1, r.vol_price1) + _volBadge(r.vol_disc2, r.vol_price2);
-              let stockCells = '';
-              if (showTO) stockCells += stockCell(r.stock_toronto);
-              if (showED) stockCells += stockCell(r.stock_edmonton);
               return `<tr>
                 <td>${img}</td>
                 <td class="sku-tag">${r.sku||'—'}</td>
@@ -1306,7 +1327,7 @@ function renderPriceList() {
                 <td style="font-size:11px;color:var(--mid)">${r.category||'—'}</td>
                 <td class="num" style="color:var(--dim);text-decoration:line-through">${list!==null?fmt(list):'—'}</td>
                 <td class="num" style="font-weight:700;color:var(--green)">${your!==null?fmt(your):'—'}</td>
-                ${stockCells}
+                <td class="num" style="color:${stock>0?'var(--text)':'var(--red)'}">${stock!==null?fmtN(stock):'—'}</td>
                 <td>${vol||'<span style="color:var(--dim);font-size:11px">—</span>'}</td>
               </tr>`;
             }).join('')}
@@ -1319,18 +1340,11 @@ function renderPriceList() {
 }
 
 function exportPriceList() {
-  const showTO = _plStockLoc === 'toronto'  || _plStockLoc === 'both';
-  const showED = _plStockLoc === 'edmonton' || _plStockLoc === 'both';
-  const rows = _plFiltered().map(r=>{
-    const o = {
-      SKU:r.sku, Product:r.product, Brand:r.brand, Category:r.category, Unit:r.unit,
-      List_Price:r.list_price, Your_Price:r.your_price,
-    };
-    if (showTO) o.Stock_Toronto  = r.stock_toronto;
-    if (showED) o.Stock_Edmonton = r.stock_edmonton;
-    o.Barcode = r.barcode;
-    return o;
-  });
+  const rows = _plFiltered().map(r=>({
+    SKU:r.sku, Product:r.product, Brand:r.brand, Category:r.category, Unit:r.unit,
+    List_Price:r.list_price, Your_Price:r.your_price, Stock:r.stock,
+    Barcode:r.barcode
+  }));
   exportCSV(rows, `price_list_${_plTier||'asung'}.csv`);
 }
 
