@@ -111,6 +111,14 @@ body::before {
   border-radius: 6px; transition: all .2s; background: none;
 }
 .hdr-signout:hover { color: var(--text); border-color: var(--border2); }
+.hdr-shop {
+  font-size: 11px; color: var(--blue2); cursor: pointer; text-decoration: none;
+  padding: 4px 10px; border: 1px solid var(--border);
+  border-radius: 6px; transition: all .2s; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.hdr-shop:hover { color: #fff; border-color: var(--blue); background: var(--blue); }
+.hdr-logo-link { display: inline-flex; align-items: center; text-decoration: none; }
 
 /* ── TAB NAV ── */
 .tab-nav {
@@ -224,6 +232,14 @@ td {
 tr:last-child td { border-bottom: none; }
 tr:hover td { background: var(--surface2); }
 .sku-tag { font-family: monospace; font-size: 11px; color: var(--blue2); }
+.new-badge {
+  display: inline-block; font-size: 9px; font-weight: 800; letter-spacing: .5px;
+  color: #fff; background: linear-gradient(135deg, #f59e0b, #ef4444);
+  padding: 2px 6px; border-radius: 4px; margin-right: 6px; vertical-align: middle;
+  text-transform: uppercase;
+}
+tr.pl-new td { background: rgba(245, 158, 11, 0.04); }
+tr.pl-new td:first-child { box-shadow: inset 3px 0 0 #f59e0b; }
 .brand-tag { color: var(--mid); font-size: 11px; }
 .loc-tor { color: var(--blue2); }
 .loc-edm { color: var(--orange); }
@@ -361,7 +377,9 @@ tr:hover td { background: var(--surface2); }
   <!-- Header -->
   <div class="hdr">
     <div class="hdr-brand">
-      <img class="hdr-logo-img" src="asung-logo-white.png" alt="Asung Trading Inc." />
+      <a class="hdr-logo-link" href="https://www.asung.ca" target="_blank" rel="noopener" title="Go to asung.ca">
+        <img class="hdr-logo-img" src="asung-logo-white.png" alt="Asung Trading Inc." />
+      </a>
       <span class="hdr-sep">|</span>
       <span class="hdr-title">My Account</span>
     </div>
@@ -370,6 +388,7 @@ tr:hover td { background: var(--surface2); }
         <span style="font-size:11px;color:var(--dim)">Viewing:</span>
         <select id="storeSelector" class="store-select" onchange="onStoreChange()"></select>
       </div>
+      <a class="hdr-shop" href="https://www.asung.ca" target="_blank" rel="noopener">🛒 Shop at asung.ca</a>
       <span class="hdr-sep" style="color:var(--border2)">|</span>
       <span class="hdr-cust">Signed in as <strong id="custName">—</strong></span>
       <button class="hdr-signout" onclick="doLogout()">Sign out</button>
@@ -1339,10 +1358,11 @@ function renderPriceList() {
               let stockCells = '';
               if (showTO) stockCells += stockCell(r.stock_toronto);
               if (showED) stockCells += stockCell(r.stock_edmonton);
-              return `<tr>
+              const newBadge = r.is_new ? `<span class="new-badge" title="Registered ${r.registered_on||''}">NEW</span>` : '';
+              return `<tr class="${r.is_new?'pl-new':''}">
                 <td>${img}</td>
                 <td class="sku-tag">${r.sku||'—'}</td>
-                <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.product||'—'}</td>
+                <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${newBadge}${r.product||'—'}</td>
                 <td class="brand-tag">${r.brand||'—'}</td>
                 <td style="font-size:11px;color:var(--mid)">${r.category||'—'}</td>
                 <td class="num" style="color:var(--dim);text-decoration:line-through">${list!==null?fmt(list):'—'}</td>
