@@ -434,6 +434,10 @@ tr.pl-new td:first-child { box-shadow: inset 3px 0 0 #f59e0b; }
       <input class="search-input" id="plSearch" placeholder="Search SKU or product…" oninput="filterPriceList()" style="max-width:240px" />
       <select class="search-select" id="plBrand" onchange="filterPriceList()" style="max-width:180px"><option value="">All Brands</option></select>
       <select class="search-select" id="plCategory" onchange="filterPriceList()" style="max-width:200px"><option value="">All Categories</option></select>
+      <label id="plInStockWrap" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mid);cursor:pointer;user-select:none;white-space:nowrap">
+        <input type="checkbox" id="plInStock" onchange="filterPriceList()" style="cursor:pointer;accent-color:var(--blue)">
+        In-stock only
+      </label>
       <span id="plCountLabel" style="font-size:11px;color:var(--dim);align-self:center"></span>
       <button class="export-btn" onclick="exportPriceList()" style="margin-left:auto">⬇ CSV</button>
     </div>
@@ -1278,11 +1282,27 @@ function _plFiltered() {
   const q   = (document.getElementById('plSearch').value||'').toLowerCase();
   const brd = document.getElementById('plBrand').value;
   const cat = document.getElementById('plCategory').value;
+  const inStockEl = document.getElementById('plInStock');
+  const inStockOnly = inStockEl ? inStockEl.checked : false;
+
+  // 재고 판단 — 보고 있는 브랜치(stock_location) 기준
+  const showTO = _plStockLoc === 'toronto'  || _plStockLoc === 'both';
+  const showED = _plStockLoc === 'edmonton' || _plStockLoc === 'both';
+  const hasStock = (r) => {
+    const to = _plNum(r.stock_toronto)  || 0;
+    const ed = _plNum(r.stock_edmonton) || 0;
+    if (showTO && showED) return to > 0 || ed > 0;  // 둘 중 하나라도 있으면
+    if (showTO) return to > 0;
+    if (showED) return ed > 0;
+    return true;
+  };
+
   return _plAll.filter(r => {
     const matchQ = !q || (r.sku||'').toLowerCase().includes(q) || (r.product||'').toLowerCase().includes(q) || (r.barcode||'').toLowerCase().includes(q);
     const matchB = !brd || r.brand === brd;
     const matchC = !cat || r.category === cat;
-    return matchQ && matchB && matchC;
+    const matchS = !inStockOnly || hasStock(r);
+    return matchQ && matchB && matchC && matchS;
   });
 }
 
