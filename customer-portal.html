@@ -451,9 +451,9 @@ tr.pl-new td:first-child { box-shadow: inset 3px 0 0 #f59e0b; }
       <button id="ordViewAll" class="ord-toggle" onclick="setOrderView('all')">📃 All Line Items</button>
     </div>
     <div class="orders-search">
-      <input class="search-input" id="orderNumSearch" placeholder="Filter by order #…" oninput="filterOrderTable()" style="max-width:160px" />
-      <input class="search-input" id="orderSkuSearch" placeholder="Filter by SKU or product…" oninput="filterOrderTable()" style="max-width:240px" />
-      <input class="search-input" id="orderBrandSearch" placeholder="Filter by brand…" oninput="filterOrderTable()" style="max-width:180px" />
+      <input class="search-input" id="orderNumSearch" placeholder="Filter by order #…" oninput="filterOrderTableReset()" style="max-width:160px" />
+      <input class="search-input" id="orderSkuSearch" placeholder="Filter by SKU or product…" oninput="filterOrderTableReset()" style="max-width:240px" />
+      <input class="search-input" id="orderBrandSearch" placeholder="Filter by brand…" oninput="filterOrderTableReset()" style="max-width:180px" />
       <span id="orderCountLabel" style="font-size:11px;color:var(--dim);align-self:center"></span>
       <button class="export-btn" onclick="exportOrders()" style="margin-left:auto">⬇ CSV</button>
     </div>
@@ -1420,6 +1420,10 @@ function exportPriceList() {
 // ══════════════════════════════════════
 let _orderView = 'byorder';            // 'byorder' | 'all'
 let _expandedOrders = {};              // track which orders are expanded
+let _ordByShown = 50;                  // By Order: 표시할 주문 수
+let _ordLineShown = 200;               // All Line Items: 표시할 라인 수
+const _ORD_BY_PAGE = 50;
+const _ORD_LINE_PAGE = 200;
 
 async function loadOrders() {
   const el = document.getElementById('ordersContent');
@@ -1428,12 +1432,16 @@ async function loadOrders() {
     const rows = await apiQuery('orders', getDateParams());
     allOrderRows = rows;
     _expandedOrders = {};
+    _ordByShown   = _ORD_BY_PAGE;
+    _ordLineShown = _ORD_LINE_PAGE;
     filterOrderTable();
   } catch(e) { el.innerHTML = errState(e.message); }
 }
 
 function setOrderView(view) {
   _orderView = view;
+  _ordByShown   = _ORD_BY_PAGE;
+  _ordLineShown = _ORD_LINE_PAGE;
   document.getElementById('ordViewByOrder').classList.toggle('active', view==='byorder');
   document.getElementById('ordViewAll').classList.toggle('active', view==='all');
   filterOrderTable();
@@ -1456,6 +1464,19 @@ function filterOrderTable() {
   window._orderRows = filtered;
   if (_orderView === 'byorder') renderOrdersByOrder(filtered);
   else                          renderOrderTable(filtered);
+}
+
+// 검색 입력/기간 변경 시 호출 — 페이지 카운터 리셋
+function filterOrderTableReset() {
+  _ordByShown   = _ORD_BY_PAGE;
+  _ordLineShown = _ORD_LINE_PAGE;
+  filterOrderTable();
+}
+
+function showMoreOrders() {
+  if (_orderView === 'byorder') _ordByShown += _ORD_BY_PAGE;
+  else                          _ordLineShown += _ORD_LINE_PAGE;
+  filterOrderTable();
 }
 
 function toggleOrder(onum) {
@@ -1483,6 +1504,8 @@ function renderOrdersByOrder(rows) {
     `${orderList.length.toLocaleString()} orders · ${rows.length.toLocaleString()} lines`;
 
   const showStore = groupStores.length > 1 && activeStoreId === 'all';
+  const shownList = orderList.slice(0, _ordByShown);
+  const remaining = orderList.length - _ordByShown;
 
   el.innerHTML = `
     <div class="tbl-card">
@@ -1499,7 +1522,7 @@ function renderOrdersByOrder(rows) {
             <th class="num">Order Total</th>
           </tr></thead>
           <tbody>
-            ${orderList.map(o => {
+            ${shownList.map(o => {
               const open = !!_expandedOrders[o.order_number];
               const onumEsc = (o.order_number||'').replace(/'/g,"\\'");
               const header = `
@@ -1545,6 +1568,7 @@ function renderOrdersByOrder(rows) {
           </tbody>
         </table>
       </div>
+      ${remaining > 0 ? `<div style="padding:12px;text-align:center"><button onclick="showMoreOrders()" style="padding:8px 20px;background:var(--surface3);border:1px solid var(--border2);border-radius:6px;color:var(--blue2);font-size:12px;font-weight:600;cursor:pointer">▼ Show ${Math.min(_ORD_BY_PAGE, remaining)} more orders (${remaining.toLocaleString()} remaining)</button></div>` : ''}
     </div>
   `;
 }
@@ -1553,6 +1577,9 @@ function renderOrderTable(rows) {
   const el = document.getElementById('ordersContent');
   document.getElementById('orderCountLabel').textContent = `${rows.length.toLocaleString()} lines`;
   if (!rows.length) { el.innerHTML = emptyState('No orders found for this period.'); return; }
+
+  const shown = rows.slice(0, _ordLineShown);
+  const remaining = rows.length - _ordLineShown;
 
   el.innerHTML = `
     <div class="tbl-card">
@@ -1571,7 +1598,7 @@ function renderOrderTable(rows) {
             ${groupStores.length > 1 && activeStoreId === 'all' ? '<th>Store</th>' : ''}
           </tr></thead>
           <tbody>
-            ${rows.map(r=>{
+            ${shown.map(r=>{
               const skuEsc  = (r.SKU||'').replace(/'/g,"\\'");
               const prodEsc = (r.product||'').replace(/'/g,"\\'");
               return `<tr>
@@ -1589,6 +1616,7 @@ function renderOrderTable(rows) {
           </tbody>
         </table>
       </div>
+      ${remaining > 0 ? `<div style="padding:12px;text-align:center"><button onclick="showMoreOrders()" style="padding:8px 20px;background:var(--surface3);border:1px solid var(--border2);border-radius:6px;color:var(--blue2);font-size:12px;font-weight:600;cursor:pointer">▼ Show ${Math.min(_ORD_LINE_PAGE, remaining)} more lines (${remaining.toLocaleString()} remaining)</button></div>` : ''}
     </div>
   `;
   window._orderRows = rows;
