@@ -1521,7 +1521,7 @@ function renderOrdersByOrder(rows) {
                     <table style="width:100%">
                       <thead><tr>
                         <th>SKU</th><th>Product</th><th>Brand</th>
-                        <th class="num">Qty</th><th class="num">Unit Price</th><th class="num">Line Total</th>
+                        <th class="num">Qty</th><th class="num">Your Price</th><th class="num">Line Total</th>
                       </tr></thead>
                       <tbody>
                         ${o.lines.map(r=>{
@@ -1565,7 +1565,7 @@ function renderOrderTable(rows) {
             <th>Product</th>
             <th>Brand</th>
             <th class="num">Qty</th>
-            <th class="num">Unit Price</th>
+            <th class="num">Your Price</th>
             <th class="num">Line Total</th>
             <th>Branch</th>
             ${groupStores.length > 1 && activeStoreId === 'all' ? '<th>Store</th>' : ''}
@@ -1596,7 +1596,21 @@ function renderOrderTable(rows) {
 
 function exportOrders() {
   const rows = window._orderRows || allOrderRows;
-  if (rows) exportCSV(rows, 'order_history.csv');
+  if (!rows || !rows.length) return;
+  const mapped = rows.map(r => ({
+    Date:         r.date,
+    Order:        r.order_number,
+    Customer:     r.customer,
+    SKU:          r.SKU,
+    Product:      r.product,
+    Brand:        r.brand,
+    Qty:          r.qty,
+    List_Price:   r.regular_price,
+    Your_Price:   r.unit_price,
+    Line_Total:   r.line_total,
+    Location:     r.location,
+  }));
+  exportCSV(mapped, 'order_history.csv');
 }
 
 // ══════════════════════════════════════
