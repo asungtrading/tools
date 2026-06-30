@@ -1435,9 +1435,9 @@ function renderPriceList() {
               if (showTO) stockCells += stockCell(r.stock_toronto);
               if (showED) stockCells += stockCell(r.stock_edmonton);
               const newBadge = r.is_new ? `<span class="new-badge" title="Registered ${r.registered_on||''}">NEW</span>` : '';
-              // 실제 할인율이 티어 기본보다 높으면 특가 뱃지
+              // 실제 할인율이 티어 기본보다 1%p 초과로 높을 때만 특가 뱃지 (센트 반올림 노이즈 제외)
               const dr = _plDiscountRate(r);
-              const dealBadge = (dr > tierPct + 0.001 && list!==null)
+              const dealBadge = (dr > tierPct + 0.01 && list!==null)
                 ? `<div class="deal-badge">🔥 ${Math.round(dr*100)}% off</div>` : '';
               return `<tr class="${r.is_new?'pl-new':''}">
                 <td>${img}</td>
