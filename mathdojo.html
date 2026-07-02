@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Math Dojo — Number Belt</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#17181d; --ink-soft:#5b5d69; --ink-faint:#9a9ca8;
+    --paper:#eceef2; --card:#ffffff; --line:#e2e4ea; --line-soft:#eef0f4;
+    --brand:#4b45b2; --brand-soft:#ecebfa;
+    --ok:#2f9e5f; --ok-soft:#e6f5ec;
+    --grit:#e8873b; --grit-soft:#fbeee1;
+    --nope:#d6483b; --nope-soft:#fbe9e7;
+    --belt-white:#d9dbe1; --belt-yellow:#f4c531; --belt-orange:#e8873b;
+    --belt-green:#4fa361; --belt-blue:#3b7dd8; --belt-red:#d6483b; --belt-black:#23252b;
+    --shadow:0 1px 2px rgba(20,22,30,.05), 0 8px 24px rgba(20,22,30,.06);
+    --font: "Nunito", ui-rounded, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:var(--font); color:var(--ink); background:var(--paper);
+    -webkit-font-smoothing:antialiased; line-height:1.5; min-height:100vh;}
+  .wrap{max-width:640px; margin:0 auto; padding:20px 18px 64px;}
+  .topbar{display:flex; align-items:center; gap:12px; margin-bottom:20px;}
+  .logo{font-weight:900; font-size:19px; letter-spacing:-.02em; display:flex; align-items:center; gap:9px;}
+  .logo .mark{width:26px; height:26px; border-radius:8px; background:var(--brand); position:relative; flex:none;}
+  .logo .mark::after{content:""; position:absolute; left:5px; right:5px; top:10px; height:6px; border-radius:3px; background:#fff;}
+  .spacer{flex:1}
+  .ghostbtn{font-family:var(--font); font-weight:700; font-size:13px; color:var(--ink-soft);
+    background:transparent; border:1.5px solid var(--line); border-radius:999px; padding:7px 14px; cursor:pointer;}
+  .ghostbtn:hover{border-color:var(--ink-faint); color:var(--ink)}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:18px; box-shadow:var(--shadow); padding:22px;}
+  .card + .card{margin-top:16px;}
+  h1{font-size:23px; font-weight:900; letter-spacing:-.02em; margin:0 0 4px;}
+  h2{font-size:18px; font-weight:800; letter-spacing:-.01em; margin:0 0 10px;}
+  .sub{color:var(--ink-soft); font-weight:600; font-size:14px; margin:0;}
+  .eyebrow{font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--brand); margin:0 0 8px;}
+  .ladder{display:flex; gap:7px; margin:18px 0 4px;}
+  .rung{flex:1; height:10px; border-radius:6px; background:var(--line); position:relative;}
+  .rung.done{background:var(--rc, var(--brand));}
+  .rung.current{background:var(--rc, var(--brand)); box-shadow:0 0 0 3px rgba(75,69,178,.16);}
+  .ladder-labels{display:flex; gap:7px; margin-bottom:2px;}
+  .ladder-labels span{flex:1; text-align:center; font-size:10px; font-weight:800; color:var(--ink-faint); text-transform:capitalize;}
+  .ladder-labels span.current{color:var(--ink)}
+  .beltbadge{display:inline-flex; align-items:center; gap:8px; font-weight:800; font-size:13px;
+    padding:6px 13px; border-radius:999px; background:var(--paper); color:var(--ink);}
+  .beltbadge .dot{width:13px; height:13px; border-radius:4px; border:1px solid rgba(0,0,0,.15);}
+  .cta{display:block; width:100%; font-family:var(--font); font-weight:900; font-size:17px; color:#fff;
+    background:var(--brand); border:none; border-radius:14px; padding:16px; cursor:pointer; letter-spacing:-.01em;
+    transition:transform .06s ease, filter .15s ease;}
+  .cta:hover{filter:brightness(1.06)}
+  .cta:active{transform:scale(.985)}
+  .cta.secondary{background:var(--card); color:var(--brand); border:1.5px solid var(--brand);}
+  .cta.calm{background:var(--card); color:var(--ink-soft); border:1.5px solid var(--line); font-size:15px;}
+  .stats{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:14px;}
+  .stat{background:var(--paper); border-radius:12px; padding:12px; text-align:center;}
+  .stat .n{font-size:22px; font-weight:900; line-height:1;}
+  .stat .l{font-size:11px; font-weight:700; color:var(--ink-soft); margin-top:5px;}
+  .frame{display:flex; gap:6px; margin:2px 0 18px; flex-wrap:wrap;}
+  .fstep{flex:1; min-width:64px; text-align:center; font-size:11px; font-weight:800; padding:8px 4px; border-radius:10px;
+    background:var(--line-soft); color:var(--ink-faint); border:1.5px solid transparent;}
+  .fstep .fn{display:block; font-size:14px; font-weight:900;}
+  .fstep.active{background:var(--brand-soft); color:var(--brand); border-color:var(--brand);}
+  .fstep.done{background:var(--ok-soft); color:var(--ok);}
+  .qbox{background:var(--paper); border-radius:14px; padding:16px 18px; font-size:16px; font-weight:600; margin-bottom:16px; line-height:1.55;}
+  .qbox b{font-weight:900;}
+  .prompt{font-size:16px; font-weight:800; margin:0 0 12px;}
+  .opts{display:flex; flex-direction:column; gap:9px;}
+  .opt{display:flex; align-items:center; gap:11px; text-align:left; width:100%; font-family:var(--font);
+    font-size:15px; font-weight:700; color:var(--ink); background:var(--card); border:1.5px solid var(--line);
+    border-radius:12px; padding:13px 15px; cursor:pointer; transition:border-color .12s, background .12s;}
+  .opt:hover{border-color:var(--ink-faint);}
+  .opt .box{width:22px; height:22px; border-radius:7px; border:2px solid var(--line); flex:none; display:flex; align-items:center; justify-content:center; font-size:13px; color:#fff;}
+  .opt.sel{border-color:var(--brand); background:var(--brand-soft);}
+  .opt.sel .box{background:var(--brand); border-color:var(--brand);}
+  .opt.correct{border-color:var(--ok); background:var(--ok-soft);}
+  .opt.correct .box{background:var(--ok); border-color:var(--ok);}
+  .opt.wrong{border-color:var(--nope); background:var(--nope-soft);}
+  .opt.wrong .box{background:var(--nope); border-color:var(--nope);}
+  .opt.locked{pointer-events:none; opacity:.55;}
+  .numrow{display:flex; gap:10px; align-items:center; margin-bottom:14px;}
+  .numin{font-family:var(--font); font-weight:800; font-size:20px; text-align:center; width:120px; padding:12px;
+    border:2px solid var(--line); border-radius:12px; color:var(--ink); background:var(--card);}
+  .numin:focus{outline:none; border-color:var(--brand);}
+  .numunit{font-weight:700; color:var(--ink-soft); font-size:15px;}
+  .fb{border-radius:13px; padding:14px 16px; font-weight:700; font-size:14.5px; margin-top:14px; line-height:1.5; display:none;}
+  .fb.show{display:block; animation:pop .22s ease;}
+  .fb.ok{background:var(--ok-soft); color:#1e6b40;}
+  .fb.grit{background:var(--grit-soft); color:#9a5215;}
+  .fb.no{background:var(--nope-soft); color:#9a2c22;}
+  .fb .fbtitle{font-weight:900; display:block; margin-bottom:2px; font-size:15px;}
+  @keyframes pop{from{transform:translateY(6px); opacity:0} to{transform:none; opacity:1}}
+  .actionrow{display:flex; gap:10px; margin-top:16px;}
+  .actionrow .cta{flex:1;}
+  .we-step{border-left:3px solid var(--brand); padding:2px 0 2px 14px; margin:0 0 14px;}
+  .we-step .we-q{font-weight:800; font-size:14px; color:var(--brand); margin:0 0 3px;}
+  .we-step .we-a{font-weight:700; font-size:15px; margin:0;}
+  .levelup{text-align:center; padding:10px 4px;}
+  .beltbig{width:130px; height:26px; border-radius:8px; margin:6px auto 18px; border:2px solid rgba(0,0,0,.12); box-shadow:var(--shadow);}
+  .confetti{font-size:40px; margin-bottom:4px;}
+  .hint{background:var(--grit-soft); color:#8a4d16; border-radius:12px; padding:12px 15px; font-weight:700; font-size:14px; margin-bottom:14px; display:none;}
+  .hint.show{display:block;}
+  .hint b{font-weight:900;}
+  .coachbtn{background:none; border:none; color:var(--brand); font-family:var(--font); font-weight:800; font-size:13.5px;
+    cursor:pointer; padding:6px 0; display:inline-flex; align-items:center; gap:6px; margin-bottom:8px;}
+  .coachbtn:hover{text-decoration:underline;}
+  .coachbtn:disabled{color:var(--ink-faint); cursor:default; text-decoration:none;}
+  .backlink{background:none;border:none;color:var(--ink-soft);font-family:var(--font);font-weight:800;font-size:14px;cursor:pointer;padding:0;margin-bottom:14px;display:inline-flex;gap:6px;align-items:center;}
+  .backlink:hover{color:var(--ink)}
+  .prow{display:flex; justify-content:space-between; align-items:center; padding:13px 0; border-bottom:1px solid var(--line-soft); font-weight:700;}
+  .prow:last-child{border-bottom:none;}
+  .prow .pl{color:var(--ink-soft); font-size:14px;}
+  .prow .pv{font-weight:900; font-size:16px;}
+  .tag{display:inline-block; font-size:12px; font-weight:800; padding:4px 10px; border-radius:999px; margin:3px 4px 0 0;}
+  .tag.good{background:var(--ok-soft); color:#1e6b40;}
+  .tag.grow{background:var(--brand-soft); color:var(--brand);}
+  .note{font-size:13px; color:var(--ink-soft); font-weight:600; margin-top:10px; line-height:1.55;}
+  .micro{font-size:12.5px; color:var(--ink-faint); font-weight:700; margin-top:14px; text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+
+<script>
+/* ============================================================
+   CONFIG — 딱 여기 세 줄만 채우면 코치(Claude API)가 켜집니다.
+   비워두면 앱은 그대로 잘 돌아가고, 힌트는 미리 써둔 것으로 나옵니다.
+   ============================================================ */
+const CONFIG = {
+  PROXY_URL: '',   // Apps Script 웹앱 /exec URL (ClaudeProxy.gs 배포 후 붙여넣기)
+  APP_TOKEN: '',   // 프록시 Script Property의 APP_TOKEN 과 동일한 값
+  MODEL: 'claude-haiku-4-5-20251001'  // 더 똑똑한 힌트: 'claude-sonnet-5'
+};
+const COACH_ON = () => CONFIG.PROXY_URL && CONFIG.APP_TOKEN;
+
+/* ---------------- storage ---------------- */
+const _mem = {};
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v==null ? (_mem[k] ?? d) : JSON.parse(v);}catch(e){ return _mem[k] ?? d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){ _mem[k]=v; } }
+};
+const DEFAULT = { beltIndex:0, xp:0, gritBadges:0, attempts:0, correctFirstTry:0,
+  stepsCleared:0, reasoningRight:0, calcSlips:0, beltsEarned:0, coachUses:0 };
+let S = Object.assign({}, DEFAULT, store.get('mathdojo_number', {}));
+function save(){ store.set('mathdojo_number', S); }
+
+/* ---------------- helpers ---------------- */
+const pick = a => a[Math.floor(Math.random()*a.length)];
+const cap  = s => s.charAt(0).toUpperCase()+s.slice(1);
+
+/* ---------------- belts ---------------- */
+const BELTS = [
+  {key:'white',  name:'White belt',  color:'var(--belt-white)',  title:'Integer warm-up',            kind:'drill'},
+  {key:'yellow', name:'Yellow belt', color:'var(--belt-yellow)', title:'Fractions and decimals',     kind:'drill'},
+  {key:'orange', name:'Orange belt', color:'var(--belt-orange)', title:'Word problems, step by step', kind:'word'},
+  {key:'green',  name:'Green belt',  color:'var(--belt-green)',  title:'Ratios and rates',           kind:'locked'},
+  {key:'blue',   name:'Blue belt',   color:'var(--belt-blue)',   title:'Powers and roots',           kind:'locked'},
+  {key:'red',    name:'Red belt',    color:'var(--belt-red)',    title:'Mixed challenge',            kind:'locked'},
+  {key:'black',  name:'Black belt',  color:'var(--belt-black)',  title:'Number master',              kind:'locked'},
+];
+const DRILL_INTRO = {
+  white:"A quick warm-up. These are review from grade 7 and 8 — you've got this.",
+  yellow:"Fractions and decimals. Take your time — accuracy beats speed."
+};
+
+/* ---------------- drill generator (infinite) ---------------- */
+function genDrill(beltKey){
+  const items = [];
+  if(beltKey==='white'){
+    for(let i=0;i<4;i++){
+      const op = pick(['+','-','x']);
+      let a = pick([3,4,5,6,7,8,9,12,15]) * (Math.random()<.5?-1:1);
+      let b = pick([2,3,4,5,6,7,8,9]) * (Math.random()<.5?-1:1);
+      let q, ans;
+      if(op==='+'){ q=`${fmt(a)} + ${fmt(b)} =`; ans=a+b; }
+      else if(op==='-'){ q=`${fmt(a)} − ${fmt(b)} =`; ans=a-b; }
+      else { a = pick([2,3,4,5,6,7,8])*(Math.random()<.5?-1:1); b=pick([2,3,4,5,6,7,8])*(Math.random()<.5?-1:1); q=`${fmt(a)} × ${fmt(b)} =`; ans=a*b; }
+      items.push({q, a:ans});
+    }
+  } else if(beltKey==='yellow'){
+    const forms = [
+      ()=>{ const d=pick([2,4,5,10]); const n=pick([1,3,7,9])%d||1; return {q:`Write ${n}/${d} as a decimal`, a:+(n/d).toFixed(4)}; },
+      ()=>{ const a=pick([0.2,0.25,0.5,0.6,0.75]); const b=pick([0.1,0.2,0.25,0.5]); return {q:`${a} + ${b} =`, a:+(a+b).toFixed(2)}; },
+      ()=>{ const d=pick([2,4,5]); const n=pick([1,2,3]); const whole=pick([12,20,24,40]); return {q:`${n}/${d} of ${whole} =`, a:+(whole*n/d).toFixed(2)}; },
+      ()=>{ const a=pick([0.5,0.75,1.2,1.5]); const b=pick([0.2,0.4,0.5]); return {q:`${a} − ${b} =`, a:+(a-b).toFixed(2)}; },
+    ];
+    for(let i=0;i<4;i++){ items.push(pick(forms)()); }
+  }
+  return items;
+}
+function fmt(n){ return n<0 ? `(${n})` : `${n}`; }
+
+/* ---------------- worked example (fixed teaching model) ---------------- */
+const WORKED = {
+  scenario:"Worked example: A bakery sells muffins for $3 each. A box costs $2. Maria has $20. How many muffins fit her budget if she buys one box?",
+  steps:[
+    {q:"1. What is being asked?", a:"How many muffins Maria can afford."},
+    {q:"2. Useful numbers?", a:"$3 per muffin, $2 box, $20 total."},
+    {q:"3. Words → equation", a:"3 × (muffins) + 2 ≤ 20"},
+    {q:"4. Solve, then check", a:"3m ≤ 18, so m ≤ 6. Check: 3×6 + 2 = 20. ✓ Answer: 6 muffins."},
+  ]
+};
+
+/* ---------------- word problem generator (infinite, same 5-step frame) ---------------- */
+const WORD_TEMPLATES = [
+  {item:'hockey sticks', unit:'sticks',  fee:'shipping',   verb:'buy', trap:d=>`${d} km away`,       trapText:'how far away the store is'},
+  {item:'concert tickets',unit:'tickets', fee:'booking fee',verb:'buy', trap:d=>`${d} minutes away`,  trapText:'how long the drive is'},
+  {item:'notebooks',     unit:'notebooks',fee:'delivery',   verb:'get', trap:d=>`${d} pages each`,     trapText:'how many pages each has'},
+];
+const NAMES = ['Jordan','Maya','Alex','Sam','Priya','Noah','Leo','Zoe'];
+function genWord(){
+  const t = pick(WORD_TEMPLATES);
+  const name = pick(NAMES);
+  const price = pick([15,18,20,25,30,35,40,45]);
+  const fee   = pick([8,10,12,15]);
+  const n     = pick([3,4,5,6]);
+  const remainder = pick([0, Math.floor(price/2), price-1]);
+  const budget = price*n + fee + remainder;
+  const trapNum = pick([5,6,7,8,9,10,12]);
+  const divExact = +((budget-fee)/price).toFixed(2);
+
+  const scenario = `A store sells <b>${t.item}</b> for <b>$${price}</b> each. ${cap(t.fee)} is <b>$${fee}</b> total, no matter how many you buy. `+
+    `${name} has <b>$${budget}</b>. The store is <b>${t.trap(trapNum)}</b>. How many ${t.item} can ${name} ${t.verb}?`;
+
+  const steps = [
+    { chip:'Ask', type:'choice',
+      prompt:'Step 1 — What is the problem actually asking?',
+      options:[
+        {t:`How much the ${t.fee} costs`, ok:false, fb:"That's a number in the problem, but not the goal. Read the last sentence again."},
+        {t:`How many ${t.item} ${name} can ${t.verb}`, ok:true, fb:"Yes — it's a 'how many' question, so the answer is a whole number."},
+        {t:`Basically, ${t.trapText}`, ok:false, fb:"That detail is in there, but the question isn't about it. Check the last sentence."},
+      ],
+      hint:"Look only at the <b>last sentence</b>. What does it ask for?" },
+
+    { chip:'Find', type:'multi',
+      prompt:'Step 2 — Which numbers do you actually need? Pick all that help. Leave out any trap.',
+      options:[
+        {t:`$${price} per ${t.unit.replace(/s$/,'')}`, ok:true},
+        {t:`$${fee} ${t.fee}`, ok:true},
+        {t:`$${budget} ${name} has`, ok:true},
+        {t:`${t.trap(trapNum)}`, ok:false},
+      ],
+      correctSet:[0,1,2],
+      okFb:"Exactly. That last one is a <b>trap number</b> — true, but useless here. Spotting traps is a real skill.",
+      noFb:"Close. One number has nothing to do with money. Which one?",
+      hint:"You're spending money. Which number is <b>not about money</b>?" },
+
+    { chip:'Build', type:'choice',
+      prompt:`Step 3 — Turn the words into an equation. (n = number of ${t.item})`,
+      options:[
+        {t:`${price} + ${fee} + n ≤ ${budget}`, ok:false, fb:`The $${price} is for <i>each</i> ${t.unit.replace(/s$/,'')}, so it multiplies by n.`},
+        {t:`${price}n + ${fee} ≤ ${budget}`, ok:true, fb:`That's it. $${price} per item, plus the one-time $${fee}, stays within $${budget}.`},
+        {t:`${price}n + ${fee}n ≤ ${budget}`, ok:false, fb:`The $${fee} is charged <i>once</i>, not per item — it shouldn't multiply by n.`},
+      ],
+      hint:`Cost = ($${price} × items) + ($${fee} once). Keep it <b>at or under</b> $${budget}.` },
+
+    { chip:'Solve', type:'num', answer:n, unit:t.unit,
+      prompt:`Step 4 — Solve ${price}n + ${fee} ≤ ${budget}. How many ${t.item} can ${name} ${t.verb}?`,
+      slips:[
+        ...(divExact!==n ? [{val:divExact, msg:"Your setup and thinking are spot on. But you can't buy part of one — round <b>down</b> to a whole number."}] : []),
+        {val:n+1, msg:`Your equation was right — nice reasoning. Just recheck: ${price} × ${n+1} = ${price*(n+1)}, already over the budget once you add ${fee}. Try ${n}.`}
+      ],
+      hint:`Subtract ${fee} from ${budget} first (that's ${budget-fee}). Then divide by ${price}. Then round <b>down</b>.` },
+
+    { chip:'Check', type:'num', answer:price*n+fee, unit:'dollars',
+      prompt:`Step 5 — Does ${n} make sense? What does ${price} × ${n} + ${fee} equal?`,
+      slips:[],
+      hint:`Multiply ${price} × ${n}, then add the ${fee}.` },
+  ];
+  return { scenario, steps };
+}
+
+/* ---------------- Claude coach (via proxy) ---------------- */
+async function claudeCall_(system, userText, maxTokens){
+  const res = await fetch(CONFIG.PROXY_URL, {
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'}, // simple request → no CORS preflight
+    body: JSON.stringify({
+      token: CONFIG.APP_TOKEN, model: CONFIG.MODEL,
+      max_tokens: maxTokens||300, system,
+      messages:[{role:'user', content:userText}]
+    })
+  });
+  const data = await res.json();
+  if(data.error) throw new Error(typeof data.error==='string'?data.error:JSON.stringify(data.error));
+  return (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
+}
+const COACH_SYSTEM =
+  "You are a warm, patient math coach for a 14-year-old in grade 9. He has a learning disability: "+
+  "he is strong at step-by-step procedures but finds multi-step reasoning hard, and he gets frustrated and quits when stuck. "+
+  "Give exactly ONE short hint, max 2 sentences, in simple friendly English. "+
+  "Never give the final answer or do the whole step for him — just nudge the single next move. Be encouraging, never say the problem is easy.";
+
+async function coachHint(contextText, hintBoxId, btn){
+  S.coachUses++; save();
+  const box = document.getElementById(hintBoxId);
+  if(!COACH_ON()){ if(box){ box.classList.add('show'); } return; } // fallback: reveal static hint
+  if(btn){ btn.disabled = true; btn.textContent = 'Coach is thinking…'; }
+  try{
+    const hint = await claudeCall_(COACH_SYSTEM, contextText, 200);
+    if(box){ box.innerHTML = hint; box.classList.add('show'); }
+  }catch(e){
+    if(box){ box.classList.add('show'); } // fall back to whatever static text is already there
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = 'Ask the coach for another hint'; }
+  }
+}
+
+/* ---------------- router ---------------- */
+let VIEW = {name:'home'};
+const app = document.getElementById('app');
+function go(v){ VIEW=v; render(); window.scrollTo(0,0); }
+function topbar(){
+  return `<div class="topbar"><div class="logo"><span class="mark"></span>Math Dojo</div>
+    <div class="spacer"></div>
+    <button class="ghostbtn" onclick="go({name:'parent'})">Parent view</button></div>`;
+}
+
+/* ---------------- HOME ---------------- */
+function renderHome(){
+  const bi=S.beltIndex, belt=BELTS[Math.min(bi,BELTS.length-1)], rc=belt.color;
+  const ladder=BELTS.map((b,i)=>`<div class="rung ${i<bi?'done':(i===bi?'current':'')}" style="--rc:${b.color}"></div>`).join('');
+  const labels=BELTS.map((b,i)=>`<span class="${i===bi?'current':''}">${b.key}</span>`).join('');
+  let ctaLabel = belt.kind==='locked' ? 'More belts coming soon' : (bi===0?'Start white belt →':`Continue: ${belt.name} →`);
+  const btnStyle = `background:${rc==='var(--belt-white)'?'var(--brand)':rc}; ${rc==='var(--belt-yellow)'||rc==='var(--belt-orange)'?'color:#4a3400':''}`;
+  return topbar()+`
+  <div class="card">
+    <p class="eyebrow">Number belt · Grade 9 (Ontario)</p>
+    <h1>Earn your Number black belt</h1>
+    <p class="sub">One belt at a time. One step at a time. Just like the dojang.</p>
+    <div class="ladder-labels" style="margin-top:16px">${labels}</div>
+    <div class="ladder">${ladder}</div>
+    <div style="margin-top:16px"><span class="beltbadge"><span class="dot" style="background:${rc}"></span>You are here: ${belt.name}</span></div>
+    <div style="margin-top:18px">
+      ${belt.kind==='locked'
+        ? `<button class="cta calm" disabled style="cursor:default; opacity:.7">${ctaLabel}</button>`
+        : `<button class="cta" style="${btnStyle}" onclick="startBelt(${bi})">${ctaLabel}</button>`}
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="n">${S.beltsEarned}</div><div class="l">Belts earned</div></div>
+      <div class="stat"><div class="n">${S.xp}</div><div class="l">XP</div></div>
+      <div class="stat"><div class="n" style="color:var(--grit)">${S.gritBadges}</div><div class="l">Grit badges</div></div>
+    </div>
+    <p class="micro">Progress saves automatically on this device.${COACH_ON()?' · Coach is on.':''}</p>
+  </div>
+  <div class="card">
+    <h2>The five moves</h2>
+    <div class="frame" style="margin-bottom:0">
+      <div class="fstep"><span class="fn">1</span>Ask</div><div class="fstep"><span class="fn">2</span>Find</div>
+      <div class="fstep"><span class="fn">3</span>Build</div><div class="fstep"><span class="fn">4</span>Solve</div>
+      <div class="fstep"><span class="fn">5</span>Check</div>
+    </div>
+    <p class="note">Every word problem uses the same five moves. Once they feel familiar, hard problems stop being scary — they become routine.</p>
+  </div>`;
+}
+function startBelt(i){
+  const belt=BELTS[i];
+  if(belt.kind==='drill'){ VIEW._drill=genDrill(belt.key); go({name:'drill', belt:i, idx:0}); }
+  else if(belt.kind==='word'){ go({name:'word-intro', belt:i}); }
+}
+
+/* ---------------- DRILL ---------------- */
+let drillState=null;
+function renderDrill(){
+  const belt=BELTS[VIEW.belt];
+  const items=VIEW._drill || (VIEW._drill=genDrill(belt.key));
+  const item=items[VIEW.idx];
+  if(!drillState || drillState.q!==item.q) drillState={q:item.q, tries:0};
+  return topbar()+`
+  <div class="card">
+    <button class="backlink" onclick="go({name:'home'})">← Dojo</button>
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+      <span class="beltbadge"><span class="dot" style="background:${belt.color}"></span>${belt.name}</span>
+      <span class="spacer"></span><span class="sub" style="font-weight:800">${VIEW.idx+1} / ${items.length}</span>
+    </div>
+    <h2 style="margin-top:8px">${belt.title}</h2>
+    <div class="qbox" style="font-size:22px; text-align:center; font-weight:800; padding:26px">${item.q}</div>
+    <div class="numrow" style="justify-content:center"><input class="numin" id="drillIn" inputmode="decimal" autocomplete="off" placeholder="?" /></div>
+    <div id="drillCoachRow"></div>
+    <div class="hint" id="drillHint">${DRILL_INTRO[belt.key]||''}</div>
+    <button class="cta" id="drillBtn" onclick="checkDrill()">Check answer</button>
+    <div class="fb" id="drillFb"></div>
+  </div>`;
+}
+function checkDrill(){
+  const items=VIEW._drill, item=items[VIEW.idx];
+  const raw=document.getElementById('drillIn').value.trim(); if(raw==='') return;
+  const val=parseFloat(raw), fb=document.getElementById('drillFb'), btn=document.getElementById('drillBtn');
+  const correct=Math.abs(val-item.a)<1e-9;
+  S.attempts++;
+  if(correct){
+    if(drillState.tries===0) S.correctFirstTry++;
+    S.xp+=5; S.stepsCleared++; save();
+    fb.className='fb ok show';
+    fb.innerHTML=`<span class="fbtitle">Nice +5 XP</span>${drillState.tries>0?"You stuck with it and got there. That's what counts.":"Correct. Clean work."}`;
+    btn.textContent=(VIEW.idx+1<items.length)?'Next →':'Finish belt →'; btn.onclick=nextDrill;
+    document.getElementById('drillIn').setAttribute('disabled','');
+  } else {
+    drillState.tries++; save();
+    fb.className='fb no show';
+    if(drillState.tries>=2){
+      fb.innerHTML=`<span class="fbtitle">Not yet — and that's fine</span>The answer is <b>${item.a}</b>. Type it in — we're building the habit of doing, not of being perfect.`;
+    } else {
+      fb.innerHTML=`<span class="fbtitle">Close — try once more</span>Check the sign (+ or −) and take it slow.`;
+      const row=document.getElementById('drillCoachRow');
+      row.innerHTML=`<button class="coachbtn" onclick="coachHint('The student is solving: ${item.q.replace(/'/g,'')} . Give one small hint about the method, not the answer.','drillHint',this)">Ask the coach for a hint</button>`;
+    }
+  }
+}
+function nextDrill(){
+  const items=VIEW._drill;
+  if(VIEW.idx+1<items.length) go({name:'drill', belt:VIEW.belt, idx:VIEW.idx+1, _drill:items});
+  else earnBelt(VIEW.belt);
+}
+
+/* ---------------- WORD intro ---------------- */
+function renderWordIntro(){
+  const belt=BELTS[VIEW.belt];
+  const stepsHtml=WORKED.steps.map(s=>`<div class="we-step"><p class="we-q">${s.q}</p><p class="we-a">${s.a}</p></div>`).join('');
+  return topbar()+`
+  <div class="card">
+    <button class="backlink" onclick="go({name:'home'})">← Dojo</button>
+    <span class="beltbadge"><span class="dot" style="background:${belt.color}"></span>${belt.name}</span>
+    <h2 style="margin-top:12px">Watch one first</h2>
+    <p class="sub" style="margin-bottom:16px">Here's the whole routine on an easy one. You'll do the next one yourself, one step at a time.</p>
+    <div class="qbox">${WORKED.scenario}</div>
+    ${stepsHtml}
+    <button class="cta" style="background:${belt.color}; color:#4a3400" onclick="startWord(${VIEW.belt})">I'm ready — my turn →</button>
+  </div>`;
+}
+function startWord(bi){ const w=genWord(); go({name:'word', belt:bi, step:0, _w:w}); }
+
+/* ---------------- WORD solo ---------------- */
+let wordState=null;
+function renderWord(){
+  const belt=BELTS[VIEW.belt], w=VIEW._w, si=VIEW.step, step=w.steps[si];
+  if(!wordState || wordState.step!==si || wordState.owner!==w) wordState={owner:w, step:si, tries:0, sel:[], done:false};
+  const chips=w.steps.map((s,i)=>`<div class="fstep ${i<si?'done':(i===si?'active':'')}"><span class="fn">${i+1}</span>${s.chip}</div>`).join('');
+  let body='';
+  if(step.type==='choice'){
+    body=`<div class="opts" id="opts">`+step.options.map((o,i)=>`<button class="opt" data-i="${i}" onclick="pickChoice(${i})"><span class="box"></span><span>${o.t}</span></button>`).join('')+`</div>`;
+  } else if(step.type==='multi'){
+    body=`<div class="opts" id="opts">`+step.options.map((o,i)=>`<button class="opt" data-i="${i}" onclick="toggleMulti(${i})"><span class="box"></span><span>${o.t}</span></button>`).join('')+
+      `</div><button class="cta" id="multiBtn" style="margin-top:14px" onclick="checkMulti()">Check my picks</button>`;
+  } else {
+    body=`<div class="numrow"><input class="numin" id="wnum" inputmode="decimal" autocomplete="off" placeholder="?" /><span class="numunit">${step.unit||''}</span></div>
+      <button class="cta" id="numBtn" onclick="checkNum()">Check answer</button>`;
+  }
+  return topbar()+`
+  <div class="card">
+    <button class="backlink" onclick="go({name:'home'})">← Dojo</button>
+    <span class="beltbadge"><span class="dot" style="background:${belt.color}"></span>${belt.name}</span>
+    <div class="frame" style="margin-top:14px">${chips}</div>
+    <div class="qbox">${w.scenario}</div>
+    <p class="prompt">${step.prompt}</p>
+    <button class="coachbtn" id="coachBtn" onclick="wordCoach(this)">Ask the coach for a hint</button>
+    <div class="hint" id="wHint">${step.hint||''}</div>
+    ${body}
+    <div class="fb" id="wFb"></div>
+  </div>`;
+}
+function wordCoach(btn){
+  const w=VIEW._w, step=w.steps[VIEW.step];
+  const plain = w.scenario.replace(/<[^>]+>/g,'');
+  const ctx = `Problem: ${plain}\nCurrent step: ${step.prompt}\nThe student is stuck on this step. Give one small hint for THIS step only.`;
+  coachHint(ctx, 'wHint', btn);
+}
+function afterStepClearedUI(msg, cls){
+  const fb=document.getElementById('wFb');
+  fb.className='fb '+cls+' show';
+  const last=VIEW.step===VIEW._w.steps.length-1;
+  fb.innerHTML=`<span class="fbtitle">${cls==='grit'?'You pushed through — Grit badge +1':'Step cleared +8 XP'}</span>${msg}
+    <div class="actionrow"><button class="cta" style="background:${BELTS[VIEW.belt].color}; color:#4a3400" onclick="nextWordStep()">${last?'Finish belt →':'Next step →'}</button></div>`;
+}
+function pickChoice(i){
+  if(wordState.done) return;
+  const step=VIEW._w.steps[VIEW.step], opts=document.querySelectorAll('#opts .opt'), chosen=step.options[i];
+  S.attempts++;
+  if(chosen.ok){
+    if(wordState.tries===0){ S.correctFirstTry++; S.reasoningRight++; }
+    opts.forEach(o=>o.classList.add('locked')); opts[i].classList.remove('locked'); opts[i].classList.add('correct');
+    wordState.done=true; S.stepsCleared++;
+    const g=wordState.tries>0; if(g) S.gritBadges++; S.xp+=8; save();
+    afterStepClearedUI(chosen.fb, g?'grit':'ok');
+  } else {
+    wordState.tries++; save(); opts[i].classList.add('wrong');
+    const fb=document.getElementById('wFb'); fb.className='fb no show';
+    fb.innerHTML=`<span class="fbtitle">Not that one — think again</span>${chosen.fb}`;
+    if(wordState.tries>=2) document.getElementById('wHint').classList.add('show');
+    setTimeout(()=>opts[i].classList.remove('wrong'),900);
+  }
+}
+function toggleMulti(i){
+  if(wordState.done) return;
+  const opt=document.querySelector(`#opts .opt[data-i="${i}"]`), pos=wordState.sel.indexOf(i);
+  if(pos>=0){ wordState.sel.splice(pos,1); opt.classList.remove('sel'); } else { wordState.sel.push(i); opt.classList.add('sel'); }
+}
+function checkMulti(){
+  if(wordState.done) return;
+  const step=VIEW._w.steps[VIEW.step];
+  const want=step.correctSet.slice().sort().join(','), got=wordState.sel.slice().sort().join(',');
+  S.attempts++; const fb=document.getElementById('wFb');
+  if(want===got){
+    if(wordState.tries===0){ S.correctFirstTry++; S.reasoningRight++; }
+    document.querySelectorAll('#opts .opt').forEach((o,i)=>{ o.classList.add('locked'); if(step.correctSet.includes(i)) o.classList.add('correct'); });
+    document.getElementById('multiBtn').style.display='none';
+    wordState.done=true; S.stepsCleared++;
+    const g=wordState.tries>0; if(g) S.gritBadges++; S.xp+=8; save();
+    afterStepClearedUI(step.okFb, g?'grit':'ok');
+  } else {
+    wordState.tries++; save(); fb.className='fb no show';
+    fb.innerHTML=`<span class="fbtitle">Almost — adjust your picks</span>${step.noFb}`;
+    if(wordState.tries>=2) document.getElementById('wHint').classList.add('show');
+  }
+}
+function checkNum(){
+  if(wordState.done) return;
+  const step=VIEW._w.steps[VIEW.step];
+  const raw=document.getElementById('wnum').value.trim(); if(raw==='') return;
+  const val=parseFloat(raw), fb=document.getElementById('wFb');
+  S.attempts++;
+  if(Math.abs(val-step.answer)<1e-9){
+    if(wordState.tries===0){ S.correctFirstTry++; S.reasoningRight++; }
+    wordState.done=true; S.stepsCleared++;
+    const g=wordState.tries>0; if(g) S.gritBadges++; S.xp+=8; save();
+    document.getElementById('wnum').setAttribute('disabled',''); document.getElementById('numBtn').style.display='none';
+    afterStepClearedUI("Correct — and you checked it yourself. That's exactly how a black belt works.", g?'grit':'ok');
+    return;
+  }
+  const slip=(step.slips||[]).find(s=>Math.abs(val-s.val)<1e-6);
+  wordState.tries++;
+  if(slip){
+    S.calcSlips++; S.reasoningRight++; save();
+    fb.className='fb grit show'; fb.innerHTML=`<span class="fbtitle">Your thinking was right</span>${slip.msg}`;
+  } else {
+    save(); fb.className='fb no show';
+    fb.innerHTML=`<span class="fbtitle">Not yet — no rush</span>Work it out on paper if it helps, then try again.`;
+    if(wordState.tries>=2) document.getElementById('wHint').classList.add('show');
+  }
+}
+function nextWordStep(){
+  if(VIEW.step+1<VIEW._w.steps.length) go({name:'word', belt:VIEW.belt, step:VIEW.step+1, _w:VIEW._w});
+  else earnBelt(VIEW.belt);
+}
+
+/* ---------------- LEVEL UP ---------------- */
+function earnBelt(i){
+  if(S.beltIndex===i){ S.beltIndex=i+1; S.beltsEarned++; S.xp+=20; save(); }
+  go({name:'levelup', earned:i, next:i+1, fromKind:BELTS[i].kind, belt:i});
+}
+function renderLevelUp(){
+  const earned=BELTS[VIEW.earned], next=BELTS[VIEW.next]||null;
+  let replay='';
+  if(VIEW.fromKind==='drill') replay=`<button class="cta secondary" style="margin-top:10px" onclick="(function(){VIEW._drill=genDrill('${earned.key}');go({name:'drill',belt:${VIEW.belt},idx:0,_drill:VIEW._drill});})()">Practice ${earned.name} again</button>`;
+  if(VIEW.fromKind==='word') replay=`<button class="cta secondary" style="margin-top:10px" onclick="startWord(${VIEW.belt})">Try another word problem</button>`;
+  return topbar()+`
+  <div class="card levelup">
+    <div class="confetti">🥋</div>
+    <p class="eyebrow" style="text-align:center">Belt earned</p>
+    <h1 style="font-size:26px">You earned it</h1>
+    <div class="beltbig" style="background:${earned.color}"></div>
+    <p class="sub" style="text-align:center; margin-bottom:2px">You cleared <b style="color:var(--ink)">${earned.title}</b>.</p>
+    <p class="sub" style="text-align:center">+20 XP · Total XP ${S.xp}</p>
+    ${next && next.kind!=='locked'
+      ? `<button class="cta" style="margin-top:20px; background:${next.color}; color:#4a3400" onclick="startBelt(${VIEW.next})">Try ${next.name}: ${next.title} →</button>${replay}
+         <button class="cta calm" style="margin-top:10px" onclick="go({name:'home'})">Back to the dojo</button>`
+      : `<p class="note" style="text-align:center; margin-top:16px">That's the last belt in this prototype. The next ones (${next?next.name:'more'} and beyond) are what we build next.</p>${replay}
+         <button class="cta calm" style="margin-top:12px" onclick="go({name:'home'})">Back to the dojo</button>`}
+  </div>`;
+}
+
+/* ---------------- PARENT ---------------- */
+function renderParent(){
+  const acc=S.attempts?Math.round(100*S.correctFirstTry/S.attempts):0;
+  const reasoningNote=S.calcSlips>0
+    ? `${S.calcSlips} time(s) the reasoning was right but a small arithmetic slip crept in — worth celebrating the thinking, then slowing down the last step.`
+    : `Reasoning steps (finding the question, filtering info, building the equation) are being cleared — that's the target skill.`;
+  return topbar()+`
+  <div class="card">
+    <button class="backlink" onclick="go({name:'home'})">← Back</button>
+    <p class="eyebrow">Parent report</p>
+    <h1>How it's going</h1>
+    <p class="sub">A read on effort and reasoning — not just right answers.</p>
+    <div style="margin-top:18px">
+      <div class="prow"><span class="pl">Belts earned</span><span class="pv">${S.beltsEarned} / ${BELTS.length}</span></div>
+      <div class="prow"><span class="pl">Problems attempted</span><span class="pv">${S.attempts}</span></div>
+      <div class="prow"><span class="pl">Right on first try</span><span class="pv">${acc}%</span></div>
+      <div class="prow"><span class="pl">Reasoning steps cleared</span><span class="pv">${S.reasoningRight}</span></div>
+      <div class="prow"><span class="pl">Pushed through after a stumble (grit)</span><span class="pv" style="color:var(--grit)">${S.gritBadges}</span></div>
+      <div class="prow"><span class="pl">Asked the coach for help</span><span class="pv">${S.coachUses}</span></div>
+      <div class="prow"><span class="pl">Total XP</span><span class="pv">${S.xp}</span></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Reading the signal</h2>
+    <div>
+      <span class="tag good">Strength: procedures</span>
+      <span class="tag grow">Growing: multi-step reasoning</span>
+      ${S.gritBadges>0?'<span class="tag grow">Growing: sticking with hard problems</span>':''}
+      ${S.coachUses>0?'<span class="tag grow">Good habit: asking for help instead of quitting</span>':''}
+    </div>
+    <p class="note">${reasoningNote}</p>
+    <p class="note">The app never punishes a wrong answer or a broken streak. It rewards two things on purpose: <b>moving to the next step</b> and <b>not giving up when it gets hard</b> — the moments that are hardest for him.</p>
+  </div>
+  <div class="card">
+    <h2>Move progress to another device</h2>
+    <p class="sub" style="margin-bottom:12px">Progress is saved on this device only. To continue somewhere else, copy this code and paste it into Math Dojo on the other device.</p>
+    <textarea id="syncCode" readonly onclick="this.select()" style="width:100%; height:74px; resize:none; font-family:var(--font); font-weight:700; font-size:13px; color:var(--ink); background:var(--paper); border:1.5px solid var(--line); border-radius:12px; padding:12px; word-break:break-all;">${exportCode()}</textarea>
+    <button class="cta secondary" style="margin-top:10px" onclick="copySync(this)">Copy my code</button>
+
+    <div style="border-top:1px solid var(--line-soft); margin-top:20px; padding-top:18px;">
+      <p class="sub" style="margin-bottom:12px">Have a code from another device? Paste it here to continue.</p>
+      <textarea id="syncIn" placeholder="DOJO1-..." style="width:100%; height:74px; resize:none; font-family:var(--font); font-weight:700; font-size:13px; color:var(--ink); background:var(--card); border:1.5px solid var(--line); border-radius:12px; padding:12px; word-break:break-all;"></textarea>
+      <button class="cta" style="margin-top:10px" onclick="loadSync()">Load this progress</button>
+      <div class="fb" id="syncFb"></div>
+    </div>
+
+    <div style="border-top:1px solid var(--line-soft); margin-top:20px; padding-top:18px;">
+      <p class="sub" style="margin-bottom:12px">Or back up to a file (for safekeeping).</p>
+      <div class="actionrow" style="margin-top:0">
+        <button class="cta calm" onclick="downloadBackup()">Download backup</button>
+        <button class="cta calm" onclick="document.getElementById('fileIn').click()">Load from file</button>
+      </div>
+      <input type="file" id="fileIn" accept="application/json,.json" style="display:none" onchange="uploadBackup(event)" />
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Reset (for testing)</h2>
+    <p class="sub" style="margin-bottom:14px">Clears all progress on this device.</p>
+    <button class="cta calm" onclick="resetAll()">Reset progress</button>
+  </div>`;
+}
+function resetAll(){ if(confirm('Reset all progress back to white belt?')){ S=Object.assign({},DEFAULT); save(); go({name:'home'}); } }
+
+/* ---------------- sync: export / import progress ---------------- */
+function exportCode(){ try{ return 'DOJO1-' + btoa(JSON.stringify(S)); }catch(e){ return 'DOJO1-'; } }
+function applyImport_(obj){
+  if(!obj || typeof obj.beltIndex!=='number') return false;
+  S = Object.assign({}, DEFAULT, obj); save(); return true;
+}
+function parseCode_(raw){
+  const t=(raw||'').trim();
+  if(!t.startsWith('DOJO1-')) return {ok:false, msg:"That code doesn't look right — it should start with DOJO1-."};
+  try{ const obj=JSON.parse(atob(t.slice(6))); if(!applyImport_(obj)) throw 0; return {ok:true}; }
+  catch(e){ return {ok:false, msg:"Couldn't read that code. Copy the whole thing and try again."}; }
+}
+function copySync(btn){
+  const ta=document.getElementById('syncCode');
+  const done=()=>{ btn.textContent='Copied ✓'; setTimeout(()=>btn.textContent='Copy my code',1500); };
+  try{ navigator.clipboard.writeText(ta.value).then(done, ()=>{ ta.select(); document.execCommand('copy'); done(); }); }
+  catch(e){ ta.select(); document.execCommand('copy'); done(); }
+}
+function loadSync(){
+  const raw=document.getElementById('syncIn').value;
+  const fb=document.getElementById('syncFb');
+  if(!raw.trim()){ return; }
+  if(!confirm('Load this progress? It will replace what is currently on this device.')) return;
+  const r=parseCode_(raw);
+  if(r.ok){ fb.className='fb ok show'; fb.innerHTML='<span class="fbtitle">Progress loaded</span>You can pick up right where you left off.'; setTimeout(()=>go({name:'home'}),1100); }
+  else { fb.className='fb no show'; fb.innerHTML=`<span class="fbtitle">Hmm, not quite</span>${r.msg}`; }
+}
+function downloadBackup(){
+  const blob=new Blob([JSON.stringify(S,null,2)], {type:'application/json'});
+  const url=URL.createObjectURL(blob), a=document.createElement('a');
+  a.href=url; a.download='mathdojo-progress.json'; a.click(); URL.revokeObjectURL(url);
+}
+function uploadBackup(ev){
+  const file=ev.target.files[0]; if(!file) return;
+  const fb=document.getElementById('syncFb'); const rd=new FileReader();
+  rd.onload=()=>{
+    if(!confirm('Load this backup? It will replace progress on this device.')){ ev.target.value=''; return; }
+    try{ if(applyImport_(JSON.parse(rd.result))){ fb.className='fb ok show'; fb.innerHTML='<span class="fbtitle">Backup loaded</span>All set.'; setTimeout(()=>go({name:'home'}),1100); } else throw 0; }
+    catch(e){ fb.className='fb no show'; fb.innerHTML='<span class="fbtitle">Couldn\u2019t read that file</span>Make sure it\u2019s a Math Dojo backup file.'; }
+    ev.target.value='';
+  };
+  rd.readAsText(file);
+}
+
+/* ---------------- render ---------------- */
+function render(){
+  let html='';
+  switch(VIEW.name){
+    case 'home': html=renderHome(); break;
+    case 'drill': html=renderDrill(); break;
+    case 'word-intro': html=renderWordIntro(); break;
+    case 'word': html=renderWord(); break;
+    case 'levelup': html=renderLevelUp(); break;
+    case 'parent': html=renderParent(); break;
+    default: html=renderHome();
+  }
+  app.innerHTML=html;
+  const di=document.getElementById('drillIn'); if(di){ di.focus(); di.addEventListener('keydown',e=>{if(e.key==='Enter')checkDrill();}); }
+  const wn=document.getElementById('wnum'); if(wn){ wn.focus(); wn.addEventListener('keydown',e=>{if(e.key==='Enter')checkNum();}); }
+}
+render();
+</script>
+</body>
+</html>
