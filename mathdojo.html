@@ -131,8 +131,8 @@
    비워두면 앱은 그대로 잘 돌아가고, 힌트는 미리 써둔 것으로 나옵니다.
    ============================================================ */
 const CONFIG = {
-  PROXY_URL: '',   // Apps Script 웹앱 /exec URL (ClaudeProxy.gs 배포 후 붙여넣기)
-  APP_TOKEN: '',   // 프록시 Script Property의 APP_TOKEN 과 동일한 값
+  PROXY_URL: 'https://script.google.com/macros/s/AKfycbylmWaNLR5Zu1-DzxfxH_FXLGN7Hh8jYCFvAqOKI4vxoyu25az7zvaQ2l3uyJi2m4-JQA/exec',   // Apps Script 웹앱 /exec URL
+  APP_TOKEN: 'dojo-7Xq2m9Kp4Rt8vBn3',   // 프록시 Script Property의 APP_TOKEN 과 동일한 값
   MODEL: 'claude-haiku-4-5-20251001'  // 더 똑똑한 힌트: 'claude-sonnet-5'
 };
 const COACH_ON = () => CONFIG.PROXY_URL && CONFIG.APP_TOKEN;
