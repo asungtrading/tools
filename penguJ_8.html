@@ -213,7 +213,7 @@ function celebrate(kind){
 }
 
 /* ---------------- adaptive engine ---------------- */
-const LMAX = { int:5, frac:5, word:4 };            // 최고 난이도 레벨
+const LMAX = { int:5, frac:5, word:4, wsolve:4 };            // 최고 난이도 레벨
 const GOAL = { int:5, frac:5, word:3 };            // 벨트 획득에 필요한 mastery
 function skill(k){
   if(!S.skills[k]) S.skills[k]={ level:1, maxLevel:1, mastery:0, seen:0, clean:0, struggles:0, edge:0, streak:0, missRun:0 };
@@ -259,7 +259,24 @@ const s1   = () => Math.random()<.5?-1:1;
 
 /* ---------------- drill generators (by level) ---------------- */
 function genItem(skillKey, level){
-  return skillKey==='int' ? genInt(level) : genFrac(level);
+  if(skillKey==='int') return genInt(level);
+  if(skillKey==='frac') return genFrac(level);
+  if(skillKey==='wsolve') return genSolveDrill(level);
+  return genInt(level);
+}
+/* isolated "solving step" practice — Joel's hardest move (rounding down after dividing) */
+function genSolveDrill(level){
+  const priceSet = level<=1?[10,12,15]: level===2?[15,18,20,25]: level===3?[24,28,35,45]:[36,44,52,65];
+  const price=pick(priceSet), fee=pick(level<=2?[8,10,12]:[12,15,20]);
+  const n=pick([3,4,5,6]);
+  const remainder = level<=1?0:pick([1, Math.floor(price/2), price-1]);
+  const budget=price*n+fee+remainder;
+  const divExact=+((budget-fee)/price).toFixed(2);
+  return { q:`${price}n + ${fee} ≤ ${budget}<br><span style="font-size:14px; color:var(--ink-soft); font-weight:700">biggest whole number n?</span>`,
+    a:n,
+    slips:[ {val:n+1, msg:`Recheck: ${price} × ${n+1} = ${price*(n+1)} — that's over once you add ${fee}. Round <b>down</b> to ${n}.`},
+            ...(divExact!==n?[{val:divExact, msg:"Right idea — you divided correctly. Now round <b>down</b> to a whole number, since n has to be whole."}]:[]) ],
+    hint:`Take ${budget} − ${fee} = ${budget-fee}. Divide by ${price}. Then round <b>down</b> to a whole number.` };
 }
 function genInt(level){
   if(level<=1){ const a=pick([3,4,5,6,7,8]), b=pick([2,3,4,5,6]); return {q:`${a} + ${b} =`, a:a+b}; }
@@ -362,6 +379,22 @@ let VIEW={name:'home'};
 let parentUnlocked=false;
 let CUR=null;   // 현재 드릴 문제
 let RUN=null;   // 현재 서술형 문제 진행 기록 {stumbles, coach}
+let PRACTICE=false;  // Sharpen(집중훈련) 모드: 벨트 획득 없이 무한 연습
+let SHARP=null;      // Sharpen 진행 상태 {skill, item, tries, done}
+/* 가장 약한 스킬 자동 감지 — struggle 많고 레벨 낮은 순 */
+function weakestSkill(){
+  const cands=[['word','Word problems'],['wsolve','Solving step'],['frac','Fractions & decimals'],['int','Integers']];
+  let best=null, worst=1e9;
+  cands.forEach(([k])=>{ const sk=S.skills[k]; if(!sk) return;
+    const score = sk.level*10 - (sk.struggles||0)*3;  // 낮을수록 약함
+    if(sk.seen>0 && score<worst){ worst=score; best=k; }
+  });
+  // word problems에서 특정 단계가 많이 막히면 그 단계(solving)를 우선
+  const m=S.wordStepMiss||[]; const maxMiss=Math.max(...m,0);
+  if(maxMiss>=3 && m.indexOf(maxMiss)===3) return 'wsolve';
+  return best || 'word';
+}
+const SKILL_LABEL={int:'Integers', frac:'Fractions & decimals', word:'Word problems', wsolve:'Solving step'};
 const app=document.getElementById('app');
 function go(v){ VIEW=v; render(); window.scrollTo(0,0); }
 function topbar(){ return `<div class="topbar"><div class="logo"><span class="mark"></span>PenguJ_8</div><div class="spacer"></div>
@@ -407,6 +440,13 @@ function renderHome(){
     <p class="micro">Progress saves on this device.${COACH_ON()?' · Coach is on.':''}</p>
   </div>
   <div class="card">
+    <p class="eyebrow">Sharpen your edge</p>
+    <h2>Train the tricky part 🎯</h2>
+    <p class="sub" style="margin-bottom:14px">Belts are fun, but getting stronger where it's hard is what really counts. Right now that's: <b style="color:var(--ink)">${SKILL_LABEL[weakestSkill()]}</b>.</p>
+    <button class="cta" style="background:var(--grit)" onclick="go({name:'sharpen-pick'})">Sharpen this →</button>
+    <p class="note">No belts here — just focused reps on the exact thing that's tricky, at the right level, for as long as you want.</p>
+  </div>
+  <div class="card">
     <h2>The five moves</h2>
     <div class="frame" style="margin-bottom:0">
       <div class="fstep"><span class="fn">1</span>Ask</div><div class="fstep"><span class="fn">2</span>Find</div>
@@ -417,6 +457,7 @@ function renderHome(){
   </div>`;
 }
 function startBelt(i){
+  PRACTICE=false;
   const belt=BELTS[i];
   if(belt.kind==='drill'){ CUR=genItem(belt.skill, skill(belt.skill).level); go({name:'drill', belt:i}); }
   else if(belt.kind==='word'){ go({name:'word-intro', belt:i}); }
@@ -616,7 +657,7 @@ function finishWord(){
   const struggled = RUN.stumbles>=2 || RUN.coach;
   const sk=skill('word'), before=sk.level;
   recordResult('word', clean, struggled);
-  if(sk.mastery>=GOAL.word){ earnBelt(VIEW.belt); return; }
+  if(!PRACTICE && sk.mastery>=GOAL.word && S.beltIndex===VIEW.belt){ earnBelt(VIEW.belt); return; }
   go({name:'word-next', belt:VIEW.belt, leveled:sk.level-before});
 }
 function renderWordNext(){
@@ -682,8 +723,8 @@ function tryPin(){
 }
 function edgeSummary(){
   const parts=[];
-  ['int','frac','word'].forEach(k=>{ const sk=S.skills[k]; if(sk && sk.seen>0){
-    const label={int:'Integers',frac:'Fractions & decimals',word:'Word problems'}[k];
+  ['int','frac','word','wsolve'].forEach(k=>{ const sk=S.skills[k]; if(sk && sk.seen>0){
+    const label=SKILL_LABEL[k];
     parts.push(`${label}: solid to level ${sk.maxLevel}${sk.edge>sk.maxLevel-0?`, edge around level ${Math.max(sk.edge,sk.level)}`:''}`);
   }});
   return parts.length?parts.join(' · '):'Not enough data yet — a few sessions will reveal the edge.';
@@ -697,9 +738,9 @@ function hardestStep(){
 function renderParent(){
   if(!parentUnlocked) return renderPinGate();
   const acc=S.attempts?Math.round(100*S.correctFirstTry/S.attempts):0;
-  const skillsHtml=['int','frac','word'].map(k=>{ const sk=S.skills[k]; if(!sk||sk.seen===0) return '';
-    const belt=BELTS.find(b=>b.skill===k), label={int:'Integers',frac:'Fractions & decimals',word:'Word problems'}[k];
-    return `<div class="skrow"><span class="skdot" style="background:${belt.color}"></span>
+  const skillsHtml=['int','frac','word','wsolve'].map(k=>{ const sk=S.skills[k]; if(!sk||sk.seen===0) return '';
+    const belt=BELTS.find(b=>b.skill===k), color=belt?belt.color:'var(--grit)', label=SKILL_LABEL[k];
+    return `<div class="skrow"><span class="skdot" style="background:${color}"></span>
       <div style="flex:1"><div class="skname">${label}</div>
         <div class="skmeta">Now at level ${sk.level} · reached level ${sk.maxLevel} · ${sk.clean} clean solves · ${sk.struggles} struggles</div></div></div>`;
   }).join('') || `<p class="sub">No practice yet.</p>`;
@@ -844,6 +885,81 @@ function onBgFile(ev){
   ev.target.value='';
 }
 
+/* ---------------- SHARPEN (weak-spot focused practice, no belts) ---------------- */
+function renderSharpenPick(){
+  const weak=weakestSkill();
+  const opt=(sk,label,desc,handler)=>`<button class="cta ${sk===weak?'':'secondary'}" style="${sk===weak?'background:var(--grit);':''} text-align:left; margin-top:10px" onclick="${handler}">
+    ${label}${sk===weak?' ⭐':''}<div style="font-weight:700; font-size:12.5px; opacity:.85; margin-top:3px">${desc}</div></button>`;
+  return topbar()+`
+  <div class="card">
+    <button class="backlink" onclick="go({name:'home'})">← Dojo</button>
+    <p class="eyebrow">Sharpen 🎯</p>
+    <h1>What do you want to get stronger at?</h1>
+    <p class="sub">⭐ is what the dojo thinks is trickiest for you right now.</p>
+    <div style="margin-top:10px">
+      ${opt('wsolve','Solving step','Solve the equation, then round to a whole number',"startSharpen('wsolve')")}
+      ${opt('word','Full word problems','The whole five-move routine',"sharpenWord()")}
+      ${opt('int','Integers','Positive and negative number practice',"startSharpen('int')")}
+      ${opt('frac','Fractions & decimals','Fraction and decimal practice',"startSharpen('frac')")}
+    </div>
+  </div>`;
+}
+function startSharpen(sk){ PRACTICE=true; SHARP={skill:sk, tries:0}; CUR=genItem(sk, skill(sk).level); go({name:'sharpen', skill:sk}); }
+function sharpenWord(){ PRACTICE=true; startWord(2); }
+function renderSharpen(){
+  const sk=VIEW.skill, s=skill(sk);
+  if(!SHARP || SHARP.skill!==sk){ SHARP={skill:sk, tries:0}; }
+  if(!CUR) CUR=genItem(sk, s.level);
+  return topbar()+`
+  <div class="card">
+    <button class="backlink" onclick="go({name:'home'})">← Dojo</button>
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+      <span class="beltbadge">🎯 ${SKILL_LABEL[sk]}</span>
+      <span class="spacer"></span><span class="levelchip">Level ${s.level}</span>
+    </div>
+    <p class="sub" style="margin-bottom:14px">Focused practice — no belts, just getting stronger. ${s.clean} clean solves so far.</p>
+    <div class="qbox" style="font-size:22px; text-align:center; font-weight:800; padding:26px">${CUR.q}</div>
+    <div class="numrow"><input class="numin" id="shIn" inputmode="decimal" autocomplete="off" placeholder="?" /></div>
+    <button class="coachbtn" id="shCoach" onclick="sharpenCoach(this)">Ask the coach for a hint</button>
+    <div class="hint" id="shHint">${CUR.hint||''}</div>
+    <button class="cta" id="shBtn" style="background:var(--grit)" onclick="checkSharpen()">Check answer</button>
+    <div class="fb" id="shFb"></div>
+  </div>`;
+}
+function sharpenCoach(btn){
+  const plain=(''+CUR.q).replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+  coachHint(`The student is practising: ${plain}. Give one small hint about the method (especially: divide, then round DOWN to a whole number). Do not give the answer.`, 'shHint', btn);
+}
+function checkSharpen(){
+  const sk=VIEW.skill, s=skill(sk);
+  const raw=document.getElementById('shIn').value.trim(); if(raw==='') return;
+  const val=parseFloat(raw), fb=document.getElementById('shFb'), btn=document.getElementById('shBtn');
+  S.attempts++;
+  if(Math.abs(val-CUR.a)<1e-6){
+    const clean=SHARP.tries===0; if(clean) S.correctFirstTry++;
+    S.xp+=5;
+    const before=s.level, struggled=SHARP.tries>=2;
+    recordResult(sk, clean, struggled);
+    if(struggled) S.gritBadges++;
+    save(); celebrate('small');
+    document.getElementById('shIn').setAttribute('disabled','');
+    const leveled=s.level-before;
+    let msg = clean?"Nailed it.":"You stuck with it — that's the whole point.";
+    if(leveled>0) msg+=" Level up — a tougher one next.";
+    if(leveled<0) msg+=" Let's ease down a notch and rebuild.";
+    fb.className='fb ok show'; fb.innerHTML=`<span class="fbtitle">+5 XP</span>${msg}`;
+    btn.textContent='Next →'; btn.onclick=nextSharpen;
+  } else {
+    const slip=(CUR.slips||[]).find(x=>Math.abs(val-x.val)<1e-6);
+    SHARP.tries++;
+    if(slip){ S.calcSlips++; S.reasoningRight++; save(); fb.className='fb grit show'; fb.innerHTML=`<span class="fbtitle">Your thinking was right</span>${slip.msg}`; }
+    else { save(); fb.className='fb no show';
+      if(SHARP.tries>=2){ fb.innerHTML=`<span class="fbtitle">Not yet — take your time</span>Work it out on paper, then try again.`; document.getElementById('shHint').classList.add('show'); }
+      else fb.innerHTML=`<span class="fbtitle">Close — try once more</span>Slow it down a step.`; }
+  }
+}
+function nextSharpen(){ const sk=VIEW.skill; SHARP={skill:sk, tries:0}; CUR=genItem(sk, skill(sk).level); go({name:'sharpen', skill:sk}); }
+
 /* ---------------- render ---------------- */
 function render(){
   applyBackground();
@@ -857,10 +973,13 @@ function render(){
     case 'levelup': html=renderLevelUp(); break;
     case 'parent': html=renderParent(); break;
     case 'customize': html=renderCustomize(); break;
+    case 'sharpen-pick': html=renderSharpenPick(); break;
+    case 'sharpen': html=renderSharpen(); break;
     default: html=renderHome();
   }
   app.innerHTML=html;
   const di=document.getElementById('drillIn'); if(di){ di.focus(); di.addEventListener('keydown',e=>{if(e.key==='Enter')checkDrill();}); }
+  const sh=document.getElementById('shIn'); if(sh){ sh.focus(); sh.addEventListener('keydown',e=>{if(e.key==='Enter')checkSharpen();}); }
   const wn=document.getElementById('wnum'); if(wn){ wn.focus(); wn.addEventListener('keydown',e=>{if(e.key==='Enter')checkNum();}); }
   const pn=document.getElementById('pinIn'); if(pn){ pn.focus(); pn.addEventListener('keydown',e=>{if(e.key==='Enter')tryPin();}); }
 }
