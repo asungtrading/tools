@@ -169,13 +169,37 @@ const store = {
 };
 const DEFAULT = { beltIndex:0, xp:0, gritBadges:0, attempts:0, correctFirstTry:0,
   stepsCleared:0, reasoningRight:0, calcSlips:0, beltsEarned:0, coachUses:0,
-  skills:{}, wordStepMiss:[0,0,0,0,0], profile:{name:'',bday:''}, bg:{type:'none',value:''} };
+  skills:{}, wordStepMiss:[0,0,0,0,0], profile:{name:'',bday:''}, bg:{type:'none',value:''},
+  daily:{} };   // daily['YYYY-MM-DD'] = { sec: 공부초, done: 푼문제수 }
 let S = Object.assign({}, JSON.parse(JSON.stringify(DEFAULT)), store.get('mathdojo_number', {}));
 if(!S.skills) S.skills={};
 if(!S.wordStepMiss) S.wordStepMiss=[0,0,0,0,0];
 if(!S.profile) S.profile={name:'',bday:''};
 if(!S.bg) S.bg={type:'none',value:''};
+if(!S.daily) S.daily={};
 function save(){ S._ts=Date.now(); store.set('mathdojo_number', S); cloudSave(); }
+
+/* ---------------- study-time tracking (activity-based) ---------------- */
+function todayKey(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function dayRec_(k){ if(!S.daily[k]) S.daily[k]={sec:0, done:0}; return S.daily[k]; }
+let _lastActive=0;                       // 마지막 활동 시각(ms)
+const IDLE_MS = 90000;                    // 90초 이상 무활동이면 시간 카운트 정지
+// 활동이 있을 때 호출: 직전 활동과의 간격을 오늘 공부시간에 더함(단, 유휴 초과분은 제외)
+function markActive(){
+  const now=Date.now();
+  if(_lastActive){
+    const gap=now-_lastActive;
+    if(gap>0 && gap<IDLE_MS){ dayRec_(todayKey()).sec += Math.round(gap/1000); }
+  }
+  _lastActive=now;
+}
+function logProblemDone(){ markActive(); dayRec_(todayKey()).done += 1; }
+// 사용자가 화면을 실제로 만질 때마다 활동으로 기록(시간 누적). 저장은 throttle된 cloudSave가 처리.
+['click','keydown','pointerdown'].forEach(ev=>{
+  window.addEventListener(ev, ()=>{ markActive(); }, {passive:true});
+});
+// 탭이 백그라운드로 가면 타이머 리셋(안 보는 시간은 카운트 안 함)
+document.addEventListener('visibilitychange', ()=>{ if(document.hidden){ _lastActive=0; save(); } else { _lastActive=Date.now(); } });
 
 /* ---------------- cloud sync (BigQuery via proxy) ---------------- */
 const CLOUD_ON = () => COACH_ON() && CONFIG.CLOUD;
@@ -259,6 +283,7 @@ function skill(k){
 }
 /* clean = 첫 시도 정답, 코치 안 씀 / struggled = 2회 이상 막힘 또는 코치 사용 */
 function recordResult(k, clean, struggled){
+  logProblemDone();
   const sk=skill(k);
   sk.seen++;
   sk.mastery++;                         // 문제를 끝냈다 = 전진 (절대 후퇴 없음: 이 아이에게 중요)
@@ -477,6 +502,7 @@ function renderHome(){
     </div>
     <p class="micro">${CLOUD_ON()?'Syncs across your devices.':'Progress saves on this device.'}${COACH_ON()?' · Coach is on.':''}</p>
   </div>
+  ${streakCard()}
   <div class="card">
     <p class="eyebrow">Sharpen your edge</p>
     <h2>Train the tricky part 🎯</h2>
@@ -998,6 +1024,83 @@ function checkSharpen(){
 }
 function nextSharpen(){ const sk=VIEW.skill; SHARP={skill:sk, tries:0}; CUR=genItem(sk, skill(sk).level); go({name:'sharpen', skill:sk}); }
 
+/* ---------------- study calendar ---------------- */
+function fmtMin_(sec){ const m=Math.round((sec||0)/60); if(m<60) return m+'m'; return Math.floor(m/60)+'h '+(m%60)+'m'; }
+function dayColor_(sec){ const m=(sec||0)/60;
+  if(m<=0) return {bg:'var(--line-soft)', fg:'var(--ink-faint)'};
+  if(m<10) return {bg:'#dcdaf4', fg:'var(--ink)'};
+  if(m<20) return {bg:'#b9b2ea', fg:'var(--ink)'};
+  if(m<40) return {bg:'#8880d6', fg:'#fff'};
+  return {bg:'var(--brand)', fg:'#fff'};
+}
+function studyStreak_(){
+  let n=0; const d=new Date();
+  for(;;){ const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const r=S.daily[k]; if(r && ((r.sec||0)>0 || (r.done||0)>0)){ n++; d.setDate(d.getDate()-1); } else break; }
+  return n;
+}
+function streakCard(){
+  const t=S.daily[todayKey()]||{sec:0,done:0}, st=studyStreak_();
+  return `<div class="card">
+    <p class="eyebrow">Your streak</p>
+    <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap">
+      <div style="font-size:34px; font-weight:900; color:var(--grit)">🔥 ${st}</div>
+      <div style="flex:1; min-width:150px">
+        <div class="skname">${st>0?`${st}-day streak`:'Start your streak today'}</div>
+        <div class="skmeta">Today: ${fmtMin_(t.sec)} · ${t.done||0} problems</div>
+      </div>
+      <button class="cta secondary" style="width:auto; padding:12px 18px" onclick="openCalendar()">📅 Calendar</button>
+    </div>
+  </div>`;
+}
+function openCalendar(){ const d=new Date(); go({name:'calendar', calY:d.getFullYear(), calM:d.getMonth()}); }
+function calShift(delta){
+  let y=VIEW.calY, m=VIEW.calM+delta;
+  if(m<0){ m=11; y--; } if(m>11){ m=0; y++; }
+  const now=new Date(); if(y>now.getFullYear() || (y===now.getFullYear()&&m>now.getMonth())) return;
+  go({name:'calendar', calY:y, calM:m});
+}
+function renderCalendar(){
+  const y=VIEW.calY, m=VIEW.calM;
+  const monthName=new Date(y,m,1).toLocaleString('en-US',{month:'long', year:'numeric'});
+  const first=new Date(y,m,1).getDay(), days=new Date(y,m+1,0).getDate();
+  const heads=['S','M','T','W','T','F','S'].map(h=>`<div style="text-align:center; font-size:11px; font-weight:800; color:var(--ink-faint)">${h}</div>`).join('');
+  let cells='', monthSec=0, monthDone=0;
+  for(let i=0;i<first;i++) cells+='<div></div>';
+  const tk=todayKey();
+  for(let dn=1; dn<=days; dn++){
+    const k=y+'-'+String(m+1).padStart(2,'0')+'-'+String(dn).padStart(2,'0');
+    const r=S.daily[k]||{sec:0,done:0}; monthSec+=r.sec||0; monthDone+=r.done||0;
+    const c=dayColor_(r.sec), isToday=(k===tk);
+    const num=(r.done||0)>0?`<span style="position:absolute; top:3px; right:5px; font-size:10px; font-weight:900; color:${c.fg}">${r.done}</span>`:'';
+    cells+=`<div style="position:relative; aspect-ratio:1; background:${c.bg}; border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; color:${c.fg}; ${isToday?'box-shadow:0 0 0 2px var(--grit)':''}">${dn}${num}</div>`;
+  }
+  const now=new Date(), isThisMonth=(y===now.getFullYear()&&m===now.getMonth());
+  return topbar()+`
+  <div class="card">
+    <button class="backlink" onclick="go({name:'home'})">← Dojo</button>
+    <p class="eyebrow">Study calendar</p>
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px">
+      <button class="ghostbtn" onclick="calShift(-1)">←</button>
+      <h2 style="flex:1; text-align:center; margin:0">${monthName}</h2>
+      <button class="ghostbtn" onclick="calShift(1)" ${isThisMonth?'disabled style="opacity:.4; cursor:default"':''}>→</button>
+    </div>
+    <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:6px; margin-bottom:6px">${heads}</div>
+    <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:6px">${cells}</div>
+    <div class="mlabel" style="margin-top:16px"><span>This month</span><span>${fmtMin_(monthSec)} · ${monthDone} problems</span></div>
+    <div style="display:flex; align-items:center; gap:8px; margin-top:14px; font-size:11px; font-weight:800; color:var(--ink-faint)">
+      Less
+      <span style="width:16px;height:16px;border-radius:4px;background:var(--line-soft)"></span>
+      <span style="width:16px;height:16px;border-radius:4px;background:#dcdaf4"></span>
+      <span style="width:16px;height:16px;border-radius:4px;background:#b9b2ea"></span>
+      <span style="width:16px;height:16px;border-radius:4px;background:#8880d6"></span>
+      <span style="width:16px;height:16px;border-radius:4px;background:var(--brand)"></span>
+      More
+    </div>
+    <p class="note">Colour = how long you studied that day. The number = problems solved. 🔥 ${studyStreak_()}-day streak going.</p>
+  </div>`;
+}
+
 /* ---------------- render ---------------- */
 function render(){
   applyBackground();
@@ -1013,6 +1116,7 @@ function render(){
     case 'customize': html=renderCustomize(); break;
     case 'sharpen-pick': html=renderSharpenPick(); break;
     case 'sharpen': html=renderSharpen(); break;
+    case 'calendar': html=renderCalendar(); break;
     default: html=renderHome();
   }
   app.innerHTML=html;
@@ -1021,6 +1125,7 @@ function render(){
   const wn=document.getElementById('wnum'); if(wn){ wn.focus(); wn.addEventListener('keydown',e=>{if(e.key==='Enter')checkNum();}); }
   const pn=document.getElementById('pinIn'); if(pn){ pn.focus(); pn.addEventListener('keydown',e=>{if(e.key==='Enter')tryPin();}); }
 }
+_lastActive=Date.now();
 render();
 
 /* 시작 시: 로컬로 즉시 그린 뒤, 클라우드(BQ)에서 최신 진도를 확인해 더 최신이면 교체 */
