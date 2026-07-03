@@ -276,7 +276,7 @@ function celebrate(kind){
 
 /* ---------------- adaptive engine ---------------- */
 const LMAX = { int:5, frac:5, word:4, wsolve:4 };            // 최고 난이도 레벨
-const GOAL = { int:5, frac:5, word:3 };            // 벨트 획득에 필요한 mastery
+const GOAL = { int:8, frac:8, word:5 };            // 벨트 획득에 필요한 mastery (문제 수)
 function skill(k){
   if(!S.skills[k]) S.skills[k]={ level:1, maxLevel:1, mastery:0, seen:0, clean:0, struggles:0, edge:0, streak:0, missRun:0 };
   return S.skills[k];
@@ -341,13 +341,28 @@ function genSolveDrill(level){
             ...(divExact!==n?[{val:divExact, msg:"Right idea — you divided correctly. Now round <b>down</b> to a whole number, since n has to be whole."}]:[]) ],
     hint:`Take ${budget} − ${fee} = ${budget-fee}. Divide by ${price}. Then round <b>down</b> to a whole number.` };
 }
-function genInt(level){
-  if(level<=1){ const a=pick([3,4,5,6,7,8]), b=pick([2,3,4,5,6]); return {q:`${a} + ${b} =`, a:a+b}; }
-  if(level===2){ const a=pick([5,7,9,11,13])*s1(), b=pick([2,4,6,8])*s1(); return {q:`${fmt(a)} + ${fmt(b)} =`, a:a+b}; }
-  if(level===3){ const a=pick([6,8,10,12,15])*s1(), b=pick([3,5,7,9])*s1(); return {q:`${fmt(a)} − ${fmt(b)} =`, a:a-b}; }
-  if(level===4){ const a=pick([3,4,5,6,7,8])*s1(), b=pick([2,3,4,5,6])*s1(); return {q:`${fmt(a)} × ${fmt(b)} =`, a:a*b}; }
-  const b=pick([2,3,4,5,6]), q=pick([2,3,4,5,6,7,8]), sign=s1(); const a=b*q*sign; return {q:`${fmt(a)} ÷ ${fmt(b)} =`, a:a/b};
-}
+const ri=(lo,hi)=>lo+Math.floor(Math.random()*(hi-lo+1));
+/* atomic operation generators — each returns {q, a, slips?} with integer answers */
+function gAddPos(){ const a=ri(2,9),b=ri(2,9); return {q:`${a} + ${b} =`, a:a+b}; }
+function gSubPos(){ const a=ri(6,15),b=ri(1,a); return {q:`${a} − ${b} =`, a:a-b}; }
+function gMissAdd(){ const a=ri(2,9),c=a+ri(2,9); return {q:`${a} + ? = ${c}`, a:c-a, slips:[{val:c,msg:`That is the total. The missing part is ${c} − ${a}.`}]}; }
+function gAddNeg(){ const a=ri(3,12)*s1(), b=ri(2,9)*s1(); return {q:`${fmt(a)} + ${fmt(b)} =`, a:a+b}; }
+function gSubNeg(){ const a=ri(3,14)*s1(), b=ri(2,9)*s1(); return {q:`${fmt(a)} − ${fmt(b)} =`, a:a-b}; }
+function gMulSmall(){ const a=ri(2,6),b=ri(2,6); return {q:`${a} × ${b} =`, a:a*b}; }
+function gMulSigned(){ const a=ri(2,8)*s1(), b=ri(2,7)*s1(); return {q:`${fmt(a)} × ${fmt(b)} =`, a:a*b}; }
+function gDivClean(){ const b=ri(2,9), q=ri(2,9), a=b*q*s1(); return {q:`${fmt(a)} ÷ ${fmt(b)} =`, a:a/b}; }
+function gMissMul(){ const b=ri(2,9), q=ri(2,9), c=b*q; return {q:`? × ${b} = ${c}`, a:q, slips:[{val:c*b,msg:`That multiplies again. The missing number is ${c} ÷ ${b}.`}]}; }
+function gOrderAddMul(){ const a=ri(2,9),b=ri(2,6),c=ri(2,6); return {q:`${a} + ${b} × ${c} =`, a:a+b*c, slips:[{val:(a+b)*c,msg:`Do × before +. Work out ${b} × ${c} first, then add ${a}.`}]}; }
+function gOrderMulSub(){ const a=ri(2,7),b=ri(2,7),c=ri(1,9); return {q:`${a} × ${b} − ${c} =`, a:a*b-c, slips:[{val:a*(b-c),msg:`Do × before −. Work out ${a} × ${b} first, then subtract ${c}.`}]}; }
+function gOrderParen(){ const a=ri(2,7),b=ri(2,7),c=ri(2,5); return {q:`(${a} + ${b}) × ${c} =`, a:(a+b)*c, slips:[{val:a+b*c,msg:`Brackets go first: add ${a} + ${b}, then × ${c}.`}]}; }
+const INT_GENS = {
+  1:[gAddPos,gSubPos,gMissAdd],
+  2:[gAddNeg,gSubNeg,gMissAdd,gAddPos],
+  3:[gSubNeg,gMulSmall,gMissMul,gAddNeg],
+  4:[gMulSigned,gDivClean,gMissMul,gOrderAddMul],
+  5:[gOrderParen,gOrderMulSub,gDivClean,gOrderAddMul]
+};
+function genInt(level){ return pick(INT_GENS[Math.max(1,Math.min(5,level))])(); }
 function genFrac(level){
   if(level<=1){ const p=pick([[1,2,0.5],[1,4,0.25],[3,4,0.75],[1,5,0.2],[2,5,0.4],[3,5,0.6],[1,10,0.1],[7,10,0.7]]); return {q:`Write ${p[0]}/${p[1]} as a decimal`, a:p[2]}; }
   if(level===2){ const a=pick([0.2,0.25,0.5,0.75,0.6]), b=pick([0.1,0.2,0.25,0.5]); return {q:`${a} + ${b} =`, a:+(a+b).toFixed(2)}; }
@@ -368,50 +383,185 @@ const WORKED = {
 };
 const STEP_NAMES = ['finding the question','picking the useful numbers','building the equation','solving','checking'];
 
-/* ---------------- word problem generator (by level) ---------------- */
-const WORD_TEMPLATES = [
-  {item:'hockey sticks', unit:'stick', fee:'shipping',   verb:'buy', trap:d=>`${d} km away`,      trapText:'how far away the store is'},
-  {item:'concert tickets',unit:'ticket',fee:'booking fee',verb:'buy', trap:d=>`${d} minutes away`, trapText:'how long the drive is'},
-  {item:'notebooks',     unit:'notebook',fee:'delivery',  verb:'get', trap:d=>`${d} pages each`,    trapText:'how many pages each has'},
-];
-const NAMES = ['Jordan','Maya','Alex','Sam','Priya','Noah','Leo','Zoe'];
-function genWord(level){
-  const t=pick(WORD_TEMPLATES), name=pick(NAMES);
-  const priceSet = level<=1?[10,12,15]: level===2?[15,18,20,25]: level===3?[24,28,35,45]:[36,44,52,65];
-  const price=pick(priceSet), fee=pick(level<=2?[8,10,12]:[12,15,20]);
+/* ---------------- word problem generator: multiple structures ---------------- */
+const NAMES = ['Jordan','Maya','Alex','Sam','Priya','Noah','Leo','Zoe','Mia','Owen'];
+function name2_(a){ let b=pick(NAMES); if(b===a) b=NAMES[(NAMES.indexOf(a)+1)%NAMES.length]; return b; }
+
+/* 1) 예산형: price·n + fee ≤ budget */
+function wBudget(level){
+  const items=[['hockey sticks','stick','shipping','buy'],['concert tickets','ticket','a booking fee','buy'],['notebooks','notebook','delivery','get']];
+  const t=pick(items), name=pick(NAMES);
+  const price=pick(level<=1?[10,12,15]:level===2?[15,18,20,25]:level===3?[24,28,35,45]:[36,44,52,65]);
+  const fee=pick(level<=2?[8,10,12]:[12,15,20]);
   const n=pick([3,4,5,6]);
-  const remainder = level<=1 ? 0 : pick([1, Math.floor(price/2), price-1]); // L1은 딱 떨어짐(반올림 X)
-  const budget=price*n+fee+remainder, trapNum=pick([5,6,7,8,9,10,12]);
-  const divExact=+((budget-fee)/price).toFixed(2);
-  const scenario=`A store sells <b>${t.item}</b> for <b>$${price}</b> each. ${cap(t.fee)} is <b>$${fee}</b> total, no matter how many you buy. `+
-    `${name} has <b>$${budget}</b>. The store is <b>${t.trap(trapNum)}</b>. How many ${t.item} can ${name} ${t.verb}?`;
-  const steps=[
-    { chip:'Ask', type:'choice', prompt:'Step 1 — What is the problem actually asking?',
-      options:[
-        {t:`How much the ${t.fee} costs`, ok:false, fb:"That's a number in the problem, but not the goal. Read the last sentence again."},
-        {t:`How many ${t.item} ${name} can ${t.verb}`, ok:true, fb:"Yes — it's a 'how many' question, so the answer is a whole number."},
-        {t:`Basically, ${t.trapText}`, ok:false, fb:"That detail is in there, but the question isn't about it. Check the last sentence."},
-      ], hint:"Look only at the <b>last sentence</b>. What does it ask for?" },
-    { chip:'Find', type:'multi', prompt:'Step 2 — Which numbers do you actually need? Pick all that help. Leave out any trap.',
-      options:[ {t:`$${price} per ${t.unit}`, ok:true},{t:`$${fee} ${t.fee}`, ok:true},{t:`$${budget} ${name} has`, ok:true},{t:`${t.trap(trapNum)}`, ok:false} ],
-      correctSet:[0,1,2],
-      okFb:"Exactly. That last one is a <b>trap number</b> — true, but useless here. Spotting traps is a real skill.",
-      noFb:"Close. One number has nothing to do with money. Which one?",
-      hint:"You're spending money. Which number is <b>not about money</b>?" },
-    { chip:'Build', type:'choice', prompt:`Step 3 — Turn the words into an equation. (n = number of ${t.item})`,
-      options:[
-        {t:`${price} + ${fee} + n ≤ ${budget}`, ok:false, fb:`The $${price} is for <i>each</i> ${t.unit}, so it multiplies by n.`},
-        {t:`${price}n + ${fee} ≤ ${budget}`, ok:true, fb:`That's it. $${price} per item, plus the one-time $${fee}, stays within $${budget}.`},
-        {t:`${price}n + ${fee}n ≤ ${budget}`, ok:false, fb:`The $${fee} is charged <i>once</i>, not per item — it shouldn't multiply by n.`},
-      ], hint:`Cost = ($${price} × items) + ($${fee} once). Keep it <b>at or under</b> $${budget}.` },
-    { chip:'Solve', type:'num', answer:n, unit:t.unit+'s', prompt:`Step 4 — Solve ${price}n + ${fee} ≤ ${budget}. How many ${t.item} can ${name} ${t.verb}?`,
-      slips:[ ...(divExact!==n?[{val:divExact, msg:"Your setup and thinking are spot on. But you can't buy part of one — round <b>down</b> to a whole number."}]:[]),
-              {val:n+1, msg:`Your equation was right — nice reasoning. Just recheck: ${price} × ${n+1} = ${price*(n+1)}, already over budget once you add ${fee}. Try ${n}.`} ],
-      hint:`Subtract ${fee} from ${budget} first (that's ${budget-fee}). Then divide by ${price}. Then round <b>down</b>.` },
-    { chip:'Check', type:'num', answer:price*n+fee, unit:'dollars', prompt:`Step 5 — Does ${n} make sense? What does ${price} × ${n} + ${fee} equal?`,
-      slips:[], hint:`Multiply ${price} × ${n}, then add the ${fee}.` },
-  ];
-  return { scenario, steps };
+  const remainder=level<=1?0:pick([1,Math.floor(price/2),price-1]);
+  const budget=price*n+fee+remainder, trap=pick([5,6,7,8,9,10,12]);
+  const div=+((budget-fee)/price).toFixed(2);
+  const scenario=`A store sells <b>${t[0]}</b> for <b>$${price}</b> each. ${cap(t[2])} is <b>$${fee}</b> total, no matter how many you buy. ${name} has <b>$${budget}</b>. The store is <b>${trap} km away</b>. How many ${t[0]} can ${name} ${t[3]}?`;
+  return {scenario, steps:[
+    {chip:'Ask',type:'choice',prompt:'Step 1 — What is the problem asking?',
+      options:[{t:`How much the ${t[2]} costs`,ok:false,fb:"A number in the problem, but not the goal. Re-read the last sentence."},
+               {t:`How many ${t[0]} ${name} can ${t[3]}`,ok:true,fb:"Yes — a 'how many' question, so the answer is a whole number."},
+               {t:`How far away the store is`,ok:false,fb:"The distance is a detail, not the goal."}],
+      hint:"Read the <b>last sentence</b>. What does it ask for?"},
+    {chip:'Find',type:'multi',prompt:'Step 2 — Which numbers do you need? Leave out the trap.',
+      options:[{t:`$${price} per ${t[1]}`,ok:true},{t:`$${fee} ${t[2]}`,ok:true},{t:`$${budget} ${name} has`,ok:true},{t:`${trap} km away`,ok:false}],
+      correctSet:[0,1,2],okFb:"Right — the distance is the trap. It's true but useless here.",noFb:"One number isn't about money. Which one?",hint:"Which number has nothing to do with money?"},
+    {chip:'Build',type:'choice',prompt:`Step 3 — Build the equation. (n = number of ${t[0]})`,
+      options:[{t:`${price} + ${fee} + n ≤ ${budget}`,ok:false,fb:`The $${price} is for <i>each</i> one, so it multiplies by n.`},
+               {t:`${price}n + ${fee} ≤ ${budget}`,ok:true,fb:`Yes — $${price} per item plus the one-time $${fee}, kept within $${budget}.`},
+               {t:`${price}n + ${fee}n ≤ ${budget}`,ok:false,fb:`The $${fee} is charged <i>once</i>, not per item.`}],
+      hint:`Cost = ($${price} × items) + ($${fee} once), at or under $${budget}.`},
+    {chip:'Solve',type:'num',answer:n,unit:t[0],prompt:`Step 4 — Solve ${price}n + ${fee} ≤ ${budget}. How many ${t[0]}?`,
+      slips:[...(div!==n?[{val:div,msg:"Your thinking's right — now round <b>down</b>, you can't buy part of one."}]:[]),
+             {val:n+1,msg:`Equation was right. But ${price} × ${n+1} = ${price*(n+1)}, over budget once you add ${fee}. Try ${n}.`}],
+      hint:`Do ${budget} − ${fee} = ${budget-fee}, divide by ${price}, round <b>down</b>.`},
+    {chip:'Check',type:'num',answer:price*n+fee,unit:'dollars',prompt:`Step 5 — Check: ${price} × ${n} + ${fee} = ?`,slips:[],hint:`Multiply, then add ${fee}.`},
+  ]};
+}
+
+/* 2) 나눠 갖기: total ÷ people */
+function wShare(level){
+  const name=pick(NAMES), things=pick([['stickers','sticker'],['cookies','cookie'],['marbles','marble'],['trading cards','card']]);
+  const p=pick([3,4,5,6]), each=pick(level<=1?[3,4,5]:[4,5,6,7,8]), leftover=level<=1?0:pick([0,1,2]);
+  const total=p*each+leftover, trap=pick([2,3,4]);
+  const scenario=`${name} has <b>${total} ${things[0]}</b> to share equally among <b>${p} friends</b>. The get-together lasts <b>${trap} hours</b>. How many ${things[0]} does each friend get?`;
+  return {scenario, steps:[
+    {chip:'Ask',type:'choice',prompt:'Step 1 — What is the problem asking?',
+      options:[{t:`How many friends there are`,ok:false,fb:"That's given. Read what the last sentence wants."},
+               {t:`How many ${things[0]} each friend gets`,ok:true,fb:"Right — the amount per friend."},
+               {t:`How long the get-together lasts`,ok:false,fb:"The hours are a detail, not the goal."}],
+      hint:"'How many ... each' means per person."},
+    {chip:'Find',type:'multi',prompt:'Step 2 — Which numbers do you need? Leave out the trap.',
+      options:[{t:`${total} ${things[0]}`,ok:true},{t:`${p} friends`,ok:true},{t:`${trap} hours`,ok:false}],
+      correctSet:[0,1],okFb:"Yes — the hours are the trap. Time doesn't affect sharing.",noFb:"One number is about time, not sharing.",hint:"Hours don't matter for splitting things up."},
+    {chip:'Build',type:'choice',prompt:`Step 3 — How do you find each friend's share?`,
+      options:[{t:`${total} ÷ ${p}`,ok:true,fb:"Sharing equally = divide total by number of friends."},
+               {t:`${total} × ${p}`,ok:false,fb:"Multiplying makes it bigger — sharing makes each share smaller."},
+               {t:`${total} − ${p}`,ok:false,fb:"Subtraction doesn't make equal groups."}],
+      hint:"Equal sharing is division."},
+    {chip:'Solve',type:'num',answer:each,unit:things[0],prompt:`Step 4 — ${total} ÷ ${p} = ? (round down to a whole ${things[1]})`,
+      slips:[...(leftover>0?[{val:+(total/p).toFixed(2),msg:"Good division — round <b>down</b> to a whole number."}]:[]),
+             {val:each+1,msg:`Too many: ${p} × ${each+1} = ${p*(each+1)}, more than ${total}. Try ${each}.`}],
+      hint:`How many times does ${p} fit into ${total}? Round down.`},
+    {chip:'Check',type:'num',answer:p*each,unit:things[0],prompt:`Step 5 — Check: ${p} × ${each} = ? (should be ≤ ${total})`,slips:[],hint:`Multiply ${p} × ${each}.`},
+  ]};
+}
+
+/* 3) 비교형(합과 차): smaller = (S − d) ÷ 2 */
+function wCompare(level){
+  const a=pick(NAMES), b=name2_(a), thing=pick(['stickers','points','coins','cards']);
+  const smaller=pick(level<=2?[3,4,5,6]:[6,7,8,9,10]), d=pick([2,4,6]);
+  const bigger=smaller+d, S=smaller+bigger, trap=pick([2,3,4,5]);
+  const scenario=`${a} and ${b} have <b>${S} ${thing}</b> altogether. ${a} has <b>${d} more</b> than ${b}. They played <b>${trap} rounds</b>. How many ${thing} does ${b} (the smaller share) have?`;
+  return {scenario, steps:[
+    {chip:'Ask',type:'choice',prompt:'Step 1 — What is the problem asking?',
+      options:[{t:`How many ${thing} altogether`,ok:false,fb:"That's given. Read the last sentence."},
+               {t:`How many ${b} has (the smaller share)`,ok:true,fb:"Right — the smaller of the two shares."},
+               {t:`How many rounds they played`,ok:false,fb:"Rounds are a detail, not the goal."}],
+      hint:"The last sentence asks for the smaller share."},
+    {chip:'Find',type:'multi',prompt:'Step 2 — Which numbers do you need? Leave out the trap.',
+      options:[{t:`${S} altogether`,ok:true},{t:`${d} more`,ok:true},{t:`${trap} rounds`,ok:false}],
+      correctSet:[0,1],okFb:"Yes — the rounds are the trap.",noFb:"One number doesn't help. Which is about the game, not the counts?",hint:"Rounds played don't matter here."},
+    {chip:'Build',type:'choice',prompt:`Step 3 — How do you find the smaller share?`,
+      options:[{t:`(${S} − ${d}) ÷ 2`,ok:true,fb:"Yes — take the extra off, then split the rest evenly."},
+               {t:`(${S} + ${d}) ÷ 2`,ok:false,fb:"That gives the <i>bigger</i> share, not the smaller."},
+               {t:`${S} ÷ 2`,ok:false,fb:"That would be right only if they were equal — but one has more."}],
+      hint:"Remove the difference first, then halve."},
+    {chip:'Solve',type:'num',answer:smaller,unit:thing,prompt:`Step 4 — (${S} − ${d}) ÷ 2 = ?`,
+      slips:[{val:bigger,msg:`That's the bigger share. The smaller is ${d} less: try ${smaller}.`}],
+      hint:`First ${S} − ${d} = ${S-d}. Then ÷ 2.`},
+    {chip:'Check',type:'num',answer:S,unit:thing,prompt:`Step 5 — Check: your answer + (your answer + ${d}) = ? (should be ${S})`,slips:[],hint:`Add the smaller and the bigger; you should get ${S}.`},
+  ]};
+}
+
+/* 4) 거리·속도·시간: distance = speed × time */
+function wRate(level){
+  const name=pick(NAMES), sp=pick(level<=2?[20,30,40,50]:[45,55,60,70]), t=pick([2,3,4,5]);
+  const dist=sp*t, trap=pick([2,3,4]);
+  const scenario=`${name} rides a bike at <b>${sp} km/h</b> for <b>${t} hours</b>. There are <b>${trap} water bottles</b> in the bag. How far does ${name} travel?`;
+  return {scenario, steps:[
+    {chip:'Ask',type:'choice',prompt:'Step 1 — What is the problem asking?',
+      options:[{t:`How fast ${name} rides`,ok:false,fb:"The speed is given. Read the last sentence."},
+               {t:`How far ${name} travels`,ok:true,fb:"Right — the distance."},
+               {t:`How many water bottles`,ok:false,fb:"Bottles are a detail, not the goal."}],
+      hint:"'How far' means distance."},
+    {chip:'Find',type:'multi',prompt:'Step 2 — Which numbers do you need? Leave out the trap.',
+      options:[{t:`${sp} km/h`,ok:true},{t:`${t} hours`,ok:true},{t:`${trap} water bottles`,ok:false}],
+      correctSet:[0,1],okFb:"Yes — the bottles are the trap.",noFb:"One number has nothing to do with distance.",hint:"Distance needs speed and time only."},
+    {chip:'Build',type:'choice',prompt:`Step 3 — How do you find distance?`,
+      options:[{t:`${sp} × ${t}`,ok:true,fb:"Distance = speed × time."},
+               {t:`${sp} ÷ ${t}`,ok:false,fb:"Dividing speed by time doesn't give distance."},
+               {t:`${sp} + ${t}`,ok:false,fb:"You can't add km/h and hours."}],
+      hint:"Distance = speed × time."},
+    {chip:'Solve',type:'num',answer:dist,unit:'km',prompt:`Step 4 — ${sp} × ${t} = ? km`,slips:[],hint:`Multiply ${sp} × ${t}.`},
+    {chip:'Check',type:'num',answer:t,unit:'hours',prompt:`Step 5 — Check: ${dist} ÷ ${sp} = ? (should be the hours)`,slips:[],hint:`Divide the distance back by the speed.`},
+  ]};
+}
+
+/* 5) 할인(%) : final = P × (100 − r) ÷ 100 */
+function wDiscount(level){
+  const name=pick(NAMES), item=pick(['jacket','video game','backpack','helmet']);
+  const r=pick([10,20,25,50]), P=pick([20,40,60,80,100,120]);
+  const final=P*(100-r)/100, disc=P*r/100, aisle=pick([2,3,4,5]);
+  const scenario=`A <b>${item}</b> costs <b>$${P}</b>. Today it is <b>${r}% off</b>. It's on the shelf in <b>aisle ${aisle}</b>. What is the sale price ${name} pays?`;
+  return {scenario, steps:[
+    {chip:'Ask',type:'choice',prompt:'Step 1 — What is the problem asking?',
+      options:[{t:`The original price`,ok:false,fb:"The original price is given ($"+P+")."},
+               {t:`The sale price ${name} pays`,ok:true,fb:"Right — the price after the discount."},
+               {t:`Which aisle it's in`,ok:false,fb:"The aisle is a detail, not the goal."}],
+      hint:"Read the last sentence — the price you actually pay."},
+    {chip:'Find',type:'multi',prompt:'Step 2 — Which numbers do you need? Leave out the trap.',
+      options:[{t:`$${P} original`,ok:true},{t:`${r}% off`,ok:true},{t:`aisle ${aisle}`,ok:false}],
+      correctSet:[0,1],okFb:"Yes — the aisle is the trap.",noFb:"One number isn't about price or discount.",hint:"The aisle number doesn't affect price."},
+    {chip:'Build',type:'choice',prompt:`Step 3 — How do you find the sale price?`,
+      options:[{t:`${P} × (100 − ${r}) ÷ 100`,ok:true,fb:`Yes — you pay ${100-r}% of the price.`},
+               {t:`${P} × ${r} ÷ 100`,ok:false,fb:"That's how much you <i>save</i>, not the price you pay."},
+               {t:`${P} × (100 + ${r}) ÷ 100`,ok:false,fb:"Adding the percent makes it more expensive, not discounted."}],
+      hint:`${r}% off means you pay ${100-r}% of $${P}.`},
+    {chip:'Solve',type:'num',answer:final,unit:'dollars',prompt:`Step 4 — ${P} × ${100-r} ÷ 100 = ? dollars`,
+      slips:[...(disc!==final?[{val:disc,msg:`That's the discount (how much off). The question wants the price paid: $${P} − $${disc} = $${final}.`}]:[])],
+      hint:`Find ${100-r}% of ${P}: multiply ${P} × ${100-r}, then ÷ 100.`},
+    {chip:'Check',type:'num',answer:disc,unit:'dollars',prompt:`Step 5 — Check: ${P} − ${final} = ? (that's the discount)`,slips:[],hint:`Subtract the sale price from the original.`},
+  ]};
+}
+
+/* 6) 2단계형: (n × p) ÷ g */
+function wTwoStep(level){
+  const name=pick(NAMES), g=pick([2,3]), p=g*pick([2,3,4]), n=pick([2,3,4]);
+  const total=n*p, each=total/g, trap=pick([2,3,4]);
+  const food=pick(['pizzas','sandwiches','burgers']);
+  const scenario=`${name} buys <b>${n} ${food}</b> at <b>$${p} each</b>. Then ${name} and friends — <b>${g} people</b> total — split the whole cost equally. Each ${food.slice(0,-1)} has <b>${trap} toppings</b>. How much does each person pay?`;
+  return {scenario, steps:[
+    {chip:'Ask',type:'choice',prompt:'Step 1 — What is the problem asking?',
+      options:[{t:`How many ${food} there are`,ok:false,fb:"That's given. Read the last sentence."},
+               {t:`How much each person pays`,ok:true,fb:"Right — the cost per person."},
+               {t:`How many toppings`,ok:false,fb:"Toppings are a detail, not the goal."}],
+      hint:"'How much does each person pay' — cost per person."},
+    {chip:'Find',type:'multi',prompt:'Step 2 — Which numbers do you need? Leave out the trap.',
+      options:[{t:`${n} ${food}`,ok:true},{t:`$${p} each`,ok:true},{t:`${g} people`,ok:true},{t:`${trap} toppings`,ok:false}],
+      correctSet:[0,1,2],okFb:"Yes — the toppings are the trap.",noFb:"One number has nothing to do with the cost split.",hint:"Toppings don't affect the bill."},
+    {chip:'Build',type:'choice',prompt:`Step 3 — How do you find each person's cost? (two steps)`,
+      options:[{t:`(${n} × ${p}) ÷ ${g}`,ok:true,fb:"Yes — total cost first, then split among people."},
+               {t:`${n} × ${p} × ${g}`,ok:false,fb:"Multiplying by people makes it bigger — splitting makes it smaller."},
+               {t:`${n} × ${p} + ${g}`,ok:false,fb:"Adding the people doesn't split the cost."}],
+      hint:`First the total (${n} × ${p}), then divide by ${g}.`},
+    {chip:'Solve',type:'num',answer:each,unit:'dollars',prompt:`Step 4 — (${n} × ${p}) ÷ ${g} = ? dollars`,
+      slips:[{val:total,msg:`That's the total cost. Now split it among ${g} people: ${total} ÷ ${g} = ${each}.`}],
+      hint:`First ${n} × ${p} = ${total}. Then ÷ ${g}.`},
+    {chip:'Check',type:'num',answer:total,unit:'dollars',prompt:`Step 5 — Check: ${each} × ${g} = ? (should be the total cost)`,slips:[],hint:`Multiply each person's share by ${g}.`},
+  ]};
+}
+
+const WORD_STRUCTURES = {
+  1:[wBudget,wShare],
+  2:[wBudget,wShare,wCompare,wRate],
+  3:[wShare,wCompare,wRate,wDiscount],
+  4:[wCompare,wRate,wDiscount,wTwoStep]
+};
+function genWord(level){
+  const list=WORD_STRUCTURES[Math.max(1,Math.min(4,level))]||WORD_STRUCTURES[1];
+  return pick(list)(level);
 }
 
 /* ---------------- Claude coach ---------------- */
@@ -423,18 +573,46 @@ async function claudeCall_(system, userText, maxTokens){
   return (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
 }
 const COACH_SYSTEM =
-  "You are a warm, patient math coach for a 14-year-old in grade 9. He has a learning disability: strong at step-by-step "+
-  "procedures but finds multi-step reasoning hard, and he gets frustrated and quits when stuck. Give exactly ONE short hint, "+
-  "max 2 sentences, simple friendly English. Never give the final answer or do the whole step — just nudge the single next move. "+
-  "Be encouraging; never say the problem is easy.";
+  "You are a warm, patient math coach for a 14-year-old in grade 9 who is also practising his reading. He is strong at step-by-step "+
+  "procedures but finds multi-step reasoning hard, and he gets frustrated and quits when stuck. Explain the METHOD clearly in a few short, "+
+  "simple sentences (3 to 5 lines). Break the thinking into small steps and put each step on its own line. Use easy, friendly English he can "+
+  "read comfortably. You may set up the first step or show the idea on a similar tiny example. But do NOT do the final calculation and do NOT "+
+  "reveal the answer to HIS problem — leave the last move for him. Be encouraging; never say the problem is easy.";
 async function coachHint(contextText, hintBoxId, btn){
   S.coachUses++; if(RUN) RUN.coach=true; save();
   const box=document.getElementById(hintBoxId);
   if(!COACH_ON()){ if(box) box.classList.add('show'); return; }
   if(btn){ btn.disabled=true; btn.textContent='Coach is thinking…'; }
-  try{ const hint=await claudeCall_(COACH_SYSTEM, contextText, 200); if(box){ box.innerHTML=hint; box.classList.add('show'); } }
+  try{ const hint=await claudeCall_(COACH_SYSTEM, contextText, 500); if(box){ box.innerHTML=(hint||'').replace(/\n/g,'<br>'); box.classList.add('show'); } }
   catch(e){ if(box) box.classList.add('show'); }
   finally{ if(btn){ btn.disabled=false; btn.textContent='Ask the coach for another hint'; } }
+}
+
+/* ---------------- worked solution (after finishing a drill) ---------------- */
+const SOLUTION_SYSTEM =
+  "You are a friendly math teacher writing a clear worked solution for a 14-year-old in grade 9 who is practising reading as well as math. "+
+  "Write the solution as 2 to 4 numbered steps. Each step is ONE short, simple sentence in easy English, and shows the actual arithmetic for that step. "+
+  "Do not skip the middle steps. Then write the final line exactly as: Answer: <the answer>. "+
+  "After that, add ONE more line starting with 'Real life: ' that says, in one friendly sentence, where a kid would actually use this kind of math "+
+  "(prefer examples about video games, sports, food, money, or phones when they fit). Keep it warm; never say it was easy.";
+let LAST={q:'',a:0};
+async function explainSolution(boxId, btn){
+  const box=document.getElementById(boxId); if(!box) return;
+  if(!COACH_ON()){ box.innerHTML='<b>Answer:</b> '+LAST.a+'<br><span class="note">Turn on the internet to see the full step-by-step.</span>'; box.classList.add('show'); if(btn) btn.style.display='none'; return; }
+  if(btn){ btn.disabled=true; btn.textContent='Writing the solution…'; }
+  try{
+    const sol=await claudeCall_(SOLUTION_SYSTEM, 'Problem: '+LAST.q+'\nThe correct answer is '+LAST.a+'. Show the full step-by-step solution.', 500);
+    let html=(sol||('Answer: '+LAST.a)).replace(/\n/g,'<br>');
+    html=html.replace(/Real life:/i,'<span style="display:inline-block; margin-top:8px; font-weight:800; color:var(--grit)">🌍 Real life:</span>');
+    box.innerHTML='<div style="font-weight:800; margin-bottom:6px; color:var(--ink)">Full solution</div>'+html; box.classList.add('show');
+  }catch(e){ box.innerHTML='<b>Answer:</b> '+LAST.a; box.classList.add('show'); }
+  finally{ if(btn) btn.style.display='none'; }
+}
+function solutionUI(boxId, clean){
+  // 틀린 문제(clean=false)는 풀이 자동 표시, 맞힌 문제(clean=true)는 버튼
+  const box=document.getElementById(boxId); if(!box) return;
+  if(clean){ box.innerHTML=`<button class="coachbtn" onclick="explainSolution('${boxId}', this)">See the full solution</button>`; box.classList.add('show'); }
+  else { explainSolution(boxId, null); }
 }
 
 /* ---------------- router ---------------- */
@@ -511,6 +689,13 @@ function renderHome(){
     <p class="note">No belts here — just focused reps on the exact thing that's tricky, at the right level, for as long as you want.</p>
   </div>
   <div class="card">
+    <p class="eyebrow">Mixed practice</p>
+    <h2>Keep me guessing 🎲</h2>
+    <p class="sub" style="margin-bottom:14px">Calculation and word problems, all shuffled together. You never know which is next — so you have to <b style="color:var(--ink)">figure out the type first</b>. That's the real skill.</p>
+    <button class="cta" style="background:var(--ink)" onclick="startMixed()">Start mixed practice →</button>
+    <p class="note">No belts — just a workout that mixes everything, at your level.</p>
+  </div>
+  <div class="card">
     <h2>The five moves</h2>
     <div class="frame" style="margin-bottom:0">
       <div class="fstep"><span class="fn">1</span>Ask</div><div class="fstep"><span class="fn">2</span>Find</div>
@@ -548,6 +733,7 @@ function renderDrill(){
     <div class="hint" id="drillHint"></div>
     <button class="cta" id="drillBtn" onclick="checkDrill()">Check answer</button>
     <div class="fb" id="drillFb"></div>
+    <div class="hint" id="drillSol"></div>
   </div>`;
 }
 function checkDrill(){
@@ -565,6 +751,7 @@ function checkDrill(){
     recordResult(belt.skill, clean, struggled);
     if(struggled) S.gritBadges++;
     save();
+    LAST={q:(''+CUR.q).replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim(), a:CUR.a};
     const leveled=sk.level-before;
     document.getElementById('drillIn').setAttribute('disabled','');
     celebrate('small');
@@ -579,15 +766,19 @@ function checkDrill(){
       fb.innerHTML=`<span class="fbtitle">Nice +5 XP</span>${msg}`;
       btn.textContent='Next →'; btn.onclick=nextDrill;
     }
+    solutionUI('drillSol', clean);
   } else {
     drillTries++; save();
-    fb.className='fb no show';
-    if(drillTries>=2){
+    const slip=(CUR.slips||[]).find(s=>Math.abs(val-s.val)<1e-6);
+    fb.className='fb '+(slip?'grit':'no')+' show';
+    if(slip){
+      fb.innerHTML=`<span class="fbtitle">Your thinking was close</span>${slip.msg}`;
+    } else if(drillTries>=2){
       fb.innerHTML=`<span class="fbtitle">Not yet — and that's fine</span>The answer is <b>${CUR.a}</b>. Type it in — we're building the habit of doing, not of being perfect.`;
     } else {
       fb.innerHTML=`<span class="fbtitle">Close — try once more</span>Check the sign (+ or −) and take it slow.`;
       document.getElementById('drillCoachRow').innerHTML=
-        `<button class="coachbtn" onclick="coachHint('The student is solving this and got it wrong once: ${CUR.q.replace(/[^0-9+\\-×÷=/ ]/g,'')} . Give one small hint about the method, not the answer.','drillHint',this)">Ask the coach for a hint</button>`;
+        `<button class="coachbtn" onclick="coachHint('The student is solving this and got it wrong once: ${CUR.q.replace(/[^0-9+\\-×÷=/ ]/g,'')} . Explain the method step by step in a few short lines, but do NOT give the final answer.','drillHint',this)">Ask the coach for a hint</button>`;
     }
   }
 }
@@ -614,7 +805,8 @@ function startWord(bi){ const lvl=skill('word').level; RUN={stumbles:0, coach:fa
 /* ---------------- WORD solo (5-step gated) ---------------- */
 let wordState=null;
 function renderWord(){
-  const belt=BELTS[VIEW.belt], w=VIEW._w, si=VIEW.step, step=w.steps[si], sk=skill('word');
+  const belt = VIEW.mix ? {color:'var(--grit)', name:'Mixed practice'} : BELTS[VIEW.belt];
+  const w=VIEW._w, si=VIEW.step, step=w.steps[si], sk=skill('word');
   if(!wordState || wordState.step!==si || wordState.owner!==w) wordState={owner:w, step:si, tries:0, sel:[], done:false};
   const chips=w.steps.map((s,i)=>`<div class="fstep ${i<si?'done':(i===si?'active':'')}"><span class="fn">${i+1}</span>${s.chip}</div>`).join('');
   let body='';
@@ -645,14 +837,15 @@ function renderWord(){
 }
 function wordCoach(btn){
   const w=VIEW._w, step=w.steps[VIEW.step], plain=w.scenario.replace(/<[^>]+>/g,'');
-  coachHint(`Problem: ${plain}\nCurrent step: ${step.prompt}\nThe student is stuck on this step. Give one small hint for THIS step only.`, 'wHint', btn);
+  coachHint(`Problem: ${plain}\nCurrent step: ${step.prompt}\nThe student is stuck on THIS step. Explain how to think about this one step, in a few short simple lines. Do NOT do the later steps and do NOT give the final answer.`, 'wHint', btn);
 }
 function afterStepClearedUI(msg, cls){
   celebrate('small');
   const fb=document.getElementById('wFb'), last=VIEW.step===VIEW._w.steps.length-1;
+  const col=VIEW.mix?'var(--grit)':BELTS[VIEW.belt].color, colTxt=VIEW.mix?'':beltColorText(BELTS[VIEW.belt].color);
   fb.className='fb '+cls+' show';
   fb.innerHTML=`<span class="fbtitle">${cls==='grit'?'You pushed through — Grit badge +1':'Step cleared +8 XP'}</span>${msg}
-    <div class="actionrow"><button class="cta" style="background:${BELTS[VIEW.belt].color}; ${beltColorText(BELTS[VIEW.belt].color)}" onclick="${last?'finishWord()':'nextWordStep()'}">${last?'Finish problem →':'Next step →'}</button></div>`;
+    <div class="actionrow"><button class="cta" style="background:${col}; ${colTxt}" onclick="${last?'finishWord()':'nextWordStep()'}">${last?'Finish problem →':'Next step →'}</button></div>`;
 }
 function noteStepMiss(){ const i=VIEW.step; if(S.wordStepMiss[i]==null) S.wordStepMiss[i]=0; S.wordStepMiss[i]++; }
 function pickChoice(i){
@@ -715,12 +908,13 @@ function checkNum(){
   else { save(); fb.className='fb no show'; fb.innerHTML=`<span class="fbtitle">Not yet — no rush</span>Work it out on paper if it helps, then try again.`;
     if(wordState.tries>=2) document.getElementById('wHint').classList.add('show'); }
 }
-function nextWordStep(){ go({name:'word', belt:VIEW.belt, step:VIEW.step+1, _w:VIEW._w}); }
+function nextWordStep(){ go({name:'word', belt:VIEW.belt, step:VIEW.step+1, _w:VIEW._w, mix:VIEW.mix}); }
 function finishWord(){
   const clean = RUN.stumbles===0 && !RUN.coach;
   const struggled = RUN.stumbles>=2 || RUN.coach;
   const sk=skill('word'), before=sk.level;
   recordResult('word', clean, struggled);
+  if(VIEW.mix){ mixNext(); return; }
   if(!PRACTICE && sk.mastery>=GOAL.word && S.beltIndex===VIEW.belt){ earnBelt(VIEW.belt); return; }
   go({name:'word-next', belt:VIEW.belt, leveled:sk.level-before});
 }
@@ -740,7 +934,67 @@ function renderWordNext(){
   </div>`;
 }
 
-/* ---------------- LEVEL UP (belt) ---------------- */
+/* ---------------- MIXED practice (alternates ops + word problems) ---------------- */
+let MIX=null, mixTries=0;
+function startMixed(){ PRACTICE=true; MIX={n:0}; mixNext(); }
+function exitMixed(){ PRACTICE=false; MIX=null; go({name:'home'}); }
+function mixNext(){
+  if(!MIX) MIX={n:0};
+  MIX.n++;
+  const kind=pick(['int','frac','word','int','frac']); // 연산이 조금 더 자주, 서술형이 가끔
+  if(kind==='word'){ RUN={stumbles:0,coach:false}; go({name:'word', belt:2, step:0, mix:true, _w:genWord(skill('word').level)}); }
+  else { CUR=genItem(kind, skill(kind).level); go({name:'mixdrill', skill:kind}); }
+}
+function mixCoach(btn){ const q=(CUR.q||'').replace(/<[^>]+>/g,'').replace(/[^0-9+\-×÷=/ n?]/g,''); coachHint('The student got this wrong once: '+q+' . Explain the method step by step in a few short lines, but do NOT give the final answer.','mixHint',btn); }
+function renderMixDrill(){
+  const k=VIEW.skill, sk=skill(k); if(!CUR) CUR=genItem(k,sk.level); mixTries=0;
+  const label = k==='int'?'Numbers':'Fractions & decimals';
+  return topbar()+`
+  <div class="card">
+    <button class="backlink" onclick="exitMixed()">← Dojo</button>
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+      <span class="beltbadge"><span class="dot" style="background:var(--grit)"></span>Mixed practice</span>
+      <span class="spacer"></span><span class="levelchip">${label} · Level ${sk.level}</span>
+    </div>
+    <h2 style="margin-top:6px">Solve it 🎲</h2>
+    <p class="sub" style="margin-bottom:14px">Calculation and word problems, mixed up. Read carefully — figure out what kind it is first.</p>
+    <div class="qbox" style="font-size:22px; text-align:center; font-weight:800; padding:26px">${CUR.q}</div>
+    <div class="numrow"><input class="numin" id="mixIn" inputmode="decimal" autocomplete="off" placeholder="?" /></div>
+    <div id="mixCoachRow"></div>
+    <div class="hint" id="mixHint"></div>
+    <button class="cta" id="mixBtn" style="background:var(--grit)" onclick="checkMixDrill()">Check answer</button>
+    <div class="fb" id="mixFb"></div>
+    <div class="hint" id="mixSol"></div>
+  </div>`;
+}
+function checkMixDrill(){
+  const k=VIEW.skill, sk=skill(k);
+  const raw=document.getElementById('mixIn').value.trim(); if(raw==='') return;
+  const val=parseFloat(raw), fb=document.getElementById('mixFb'), btn=document.getElementById('mixBtn');
+  S.attempts++;
+  if(Math.abs(val-CUR.a)<1e-6){
+    const clean=mixTries===0; if(clean) S.correctFirstTry++;
+    S.xp+=5; S.stepsCleared++;
+    const struggled=mixTries>=2;
+    recordResult(k, clean, struggled);
+    if(struggled) S.gritBadges++;
+    save();
+    document.getElementById('mixIn').setAttribute('disabled','');
+    celebrate('small'); fb.className='fb ok show';
+    fb.innerHTML=`<span class="fbtitle">Nice +5 XP</span>${clean?'Clean work.':'You stuck with it — that counts.'}`;
+    btn.textContent='Next →'; btn.onclick=mixNext;
+    LAST={q:(''+CUR.q).replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim(), a:CUR.a};
+    solutionUI('mixSol', clean);
+  } else {
+    mixTries++; save();
+    const slip=(CUR.slips||[]).find(s=>Math.abs(val-s.val)<1e-6);
+    fb.className='fb '+(slip?'grit':'no')+' show';
+    if(slip){ fb.innerHTML=`<span class="fbtitle">Your thinking was close</span>${slip.msg}`; }
+    else if(mixTries>=2){ fb.innerHTML=`<span class="fbtitle">Not yet — and that's fine</span>The answer is <b>${CUR.a}</b>. Type it in to keep the habit going.`; }
+    else { fb.innerHTML=`<span class="fbtitle">Close — try once more</span>Take it slow.`;
+      document.getElementById('mixCoachRow').innerHTML=`<button class="coachbtn" onclick="mixCoach(this)">Ask the coach for a hint</button>`; }
+  }
+}
 function earnBelt(i){
   if(S.beltIndex===i){ S.beltIndex=i+1; S.beltsEarned++; S.xp+=20; save(); }
   celebrate('big');
@@ -988,11 +1242,12 @@ function renderSharpen(){
     <div class="hint" id="shHint">${CUR.hint||''}</div>
     <button class="cta" id="shBtn" style="background:var(--grit)" onclick="checkSharpen()">Check answer</button>
     <div class="fb" id="shFb"></div>
+    <div class="hint" id="shSol"></div>
   </div>`;
 }
 function sharpenCoach(btn){
   const plain=(''+CUR.q).replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
-  coachHint(`The student is practising: ${plain}. Give one small hint about the method (especially: divide, then round DOWN to a whole number). Do not give the answer.`, 'shHint', btn);
+  coachHint(`The student is practising: ${plain}. Explain the method step by step in a few short lines (especially: divide, then round DOWN to a whole number). Do NOT give the final answer.`, 'shHint', btn);
 }
 function checkSharpen(){
   const sk=VIEW.skill, s=skill(sk);
@@ -1013,6 +1268,8 @@ function checkSharpen(){
     if(leveled<0) msg+=" Let's ease down a notch and rebuild.";
     fb.className='fb ok show'; fb.innerHTML=`<span class="fbtitle">+5 XP</span>${msg}`;
     btn.textContent='Next →'; btn.onclick=nextSharpen;
+    LAST={q:(''+CUR.q).replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim(), a:CUR.a};
+    solutionUI('shSol', clean);
   } else {
     const slip=(CUR.slips||[]).find(x=>Math.abs(val-x.val)<1e-6);
     SHARP.tries++;
@@ -1116,6 +1373,7 @@ function render(){
     case 'customize': html=renderCustomize(); break;
     case 'sharpen-pick': html=renderSharpenPick(); break;
     case 'sharpen': html=renderSharpen(); break;
+    case 'mixdrill': html=renderMixDrill(); break;
     case 'calendar': html=renderCalendar(); break;
     default: html=renderHome();
   }
