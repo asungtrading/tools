@@ -155,7 +155,9 @@ const CONFIG = {
   PROXY_URL: 'https://script.google.com/macros/s/AKfycbylmWaNLR5Zu1-DzxfxH_FXLGN7Hh8jYCFvAqOKI4vxoyu25az7zvaQ2l3uyJi2m4-JQA/exec',
   APP_TOKEN: 'dojo-7Xq2m9Kp4Rt8vBn3',
   MODEL: 'claude-haiku-4-5-20251001',
-  PARENT_PIN: '1234'   // ← 부모용 PIN. 꼭 바꾸세요. (소스에 보이므로 강한 잠금이 아니라, 실수 리셋·무단 접근 방지용 가벼운 게이트)
+  PARENT_PIN: '1234',   // ← 부모용 PIN. 꼭 바꾸세요.
+  USER_ID: 'joel',      // 이 앱을 쓰는 사람 식별자 (한 명이면 고정값이면 됨). 기기가 달라도 이 ID로 진도를 이어감.
+  CLOUD: true           // BigQuery 동기화 on/off. 프록시 BQ 셋업 전이면 false로 둬도 앱은 로컬로 동작.
 };
 const COACH_ON = () => CONFIG.PROXY_URL && CONFIG.APP_TOKEN;
 
@@ -173,7 +175,43 @@ if(!S.skills) S.skills={};
 if(!S.wordStepMiss) S.wordStepMiss=[0,0,0,0,0];
 if(!S.profile) S.profile={name:'',bday:''};
 if(!S.bg) S.bg={type:'none',value:''};
-function save(){ store.set('mathdojo_number', S); }
+function save(){ S._ts=Date.now(); store.set('mathdojo_number', S); cloudSave(); }
+
+/* ---------------- cloud sync (BigQuery via proxy) ---------------- */
+const CLOUD_ON = () => COACH_ON() && CONFIG.CLOUD;
+function cloudStateForSave(){ const c=JSON.parse(JSON.stringify(S)); if(c.bg && c.bg.type==='image') c.bg={type:'none',value:''}; return c; }
+async function cloudLoad(){
+  if(!CLOUD_ON()) return null;
+  try{
+    const res=await fetch(CONFIG.PROXY_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({action:'load', token:CONFIG.APP_TOKEN, userId:CONFIG.USER_ID})});
+    const d=await res.json();
+    if(d && d.ok && d.found) return d.state || null;
+  }catch(e){}
+  return null;
+}
+let _cloudTimer=null, _cloudPending=false;
+function cloudSave(){
+  if(!CLOUD_ON()) return;
+  _cloudPending=true;
+  if(_cloudTimer) return;
+  _cloudTimer=setTimeout(flushCloud, 4000);   // throttle: 잦은 저장을 4초에 한 번으로 묶음
+}
+async function flushCloud(){
+  _cloudTimer=null;
+  if(!_cloudPending) return;
+  _cloudPending=false;
+  try{
+    await fetch(CONFIG.PROXY_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({action:'save', token:CONFIG.APP_TOKEN, userId:CONFIG.USER_ID, state:cloudStateForSave()})});
+  }catch(e){}
+}
+// 창을 닫을 때 마지막 변경을 확실히 밀어 올림
+window.addEventListener('beforeunload', ()=>{
+  if(_cloudPending && CLOUD_ON() && navigator.sendBeacon){
+    try{ navigator.sendBeacon(CONFIG.PROXY_URL, new Blob([JSON.stringify({action:'save', token:CONFIG.APP_TOKEN, userId:CONFIG.USER_ID, state:cloudStateForSave()})],{type:'text/plain;charset=utf-8'})); }catch(e){}
+  }
+});
 
 /* ---------------- personalization: background, birthday, celebrations ---------------- */
 const THEMES = {
@@ -437,7 +475,7 @@ function renderHome(){
       <div class="stat"><div class="n">${S.xp}</div><div class="l">XP</div></div>
       <div class="stat"><div class="n" style="color:var(--grit)">${S.gritBadges}</div><div class="l">Grit badges</div></div>
     </div>
-    <p class="micro">Progress saves on this device.${COACH_ON()?' · Coach is on.':''}</p>
+    <p class="micro">${CLOUD_ON()?'Syncs across your devices.':'Progress saves on this device.'}${COACH_ON()?' · Coach is on.':''}</p>
   </div>
   <div class="card">
     <p class="eyebrow">Sharpen your edge</p>
@@ -984,6 +1022,27 @@ function render(){
   const pn=document.getElementById('pinIn'); if(pn){ pn.focus(); pn.addEventListener('keydown',e=>{if(e.key==='Enter')tryPin();}); }
 }
 render();
+
+/* 시작 시: 로컬로 즉시 그린 뒤, 클라우드(BQ)에서 최신 진도를 확인해 더 최신이면 교체 */
+async function boot(){
+  if(!CLOUD_ON()) return;
+  const cloud=await cloudLoad();
+  if(cloud){
+    const localTs=S._ts||0, cloudTs=cloud._ts||0;
+    if(!localTs || cloudTs>=localTs){          // 클라우드가 더 최신(또는 이 기기 진도 없음) → 이어받기
+      const localBg=S.bg;                      // 배경 사진은 기기별이라 유지
+      S=Object.assign({}, JSON.parse(JSON.stringify(DEFAULT)), cloud);
+      if(!S.skills)S.skills={}; if(!S.wordStepMiss)S.wordStepMiss=[0,0,0,0,0];
+      if(!S.profile)S.profile={name:'',bday:''}; if(!S.bg)S.bg={type:'none',value:''};
+      if(localBg && localBg.type==='image') S.bg=localBg;
+      store.set('mathdojo_number', S);
+      render();
+      return;
+    }
+  }
+  cloudSave();                                 // 이 기기 진도가 더 최신 → 클라우드에 밀어 올림
+}
+boot();
 </script>
 </body>
 </html>
