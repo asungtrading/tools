@@ -1204,14 +1204,17 @@ async function loadSalesDataFromBQ(){
       LEFT JOIN p4 ON s.SKU = p4.SKU
     `;
 
-    // ── 백오더 쿼리 (2026-07 개편)
+    // ── 백오더 쿼리 (2026-07 개편, rev2)
     //   테이블이 append-only(streaming insert)라 같은 주문의 옛 상태 행이 남는다.
     //   1단계 latest_state: (Order_Number, SKU)별 최신 행 1건만 채택
     //     → 해소된 백오더의 유령 행(Backordered 잔재) 제거
-    //     → asung_sales_unified VIEW의 dedup 패턴과 동일 (loaded_at DESC)
+    //     → cin7_updated 없는(null) 행은 뒤로 밀어 진짜 최신 행이 대표가 되게 함
+    //       (COALESCE(cin7_updated, loaded_at)만 쓰면 null 행이 loaded_at으로
+    //        최신처럼 뽑혀 옛 상태가 대표가 되는 버그가 있었음)
     //   2단계 customer_latest: 동일 고객+SKU는 가장 최근 주문 1건만
-    //     → 같은 고객이 재차 백오더 걸면 "새 수량"이 반영됨 (기존 MAX(Quantity)는
-    //       옛 대량 주문이 영구히 이겨서 재발 백오더가 묻히는 버그가 있었음)
+    //     → 같은 고객이 재차 백오더 걸면 "새 수량"이 반영됨
+    //   ⚠️ 상태 비교는 반드시 UPPER()로 — BQ에 'ORDERED'(대문자)와 'Ordered'가
+    //      섞여 있어, Status='Ordered'로 걸면 대문자 행이 통째로 누락됨 (실제 사고 원인).
     const boSQL = `
       WITH latest_state AS (
         SELECT
@@ -1219,7 +1222,10 @@ async function loadSalesDataFromBQ(){
           Order_Progress, Status,
           ROW_NUMBER() OVER (
             PARTITION BY Order_Number, SKU
-            ORDER BY COALESCE(cin7_updated, loaded_at) DESC, loaded_at DESC
+            ORDER BY
+              CASE WHEN cin7_updated IS NULL THEN 1 ELSE 0 END ASC,
+              cin7_updated DESC,
+              loaded_at DESC
           ) AS rn
         FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_ORDERS}\`
         WHERE Order_Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
@@ -1229,8 +1235,8 @@ async function loadSalesDataFromBQ(){
         SELECT SKU, Customer, Quantity AS qty, Order_Date AS last_order_date
         FROM latest_state
         WHERE rn = 1
-          AND Order_Progress = 'Backordered'
-          AND Status = 'Ordered'
+          AND UPPER(TRIM(Order_Progress)) = 'BACKORDERED'
+          AND UPPER(TRIM(Status)) = 'ORDERED'
       ),
       customer_latest AS (
         SELECT SKU, qty, last_order_date,
@@ -3232,7 +3238,10 @@ async function loadSupplierIntelligence(supplier){
             Quantity AS qty,
             ROW_NUMBER() OVER (
               PARTITION BY Order_Number, SKU
-              ORDER BY COALESCE(cin7_updated, loaded_at) DESC, loaded_at DESC
+              ORDER BY
+                CASE WHEN cin7_updated IS NULL THEN 1 ELSE 0 END ASC,
+                cin7_updated DESC,
+                loaded_at DESC
             ) AS rn,
             Order_Progress, Status
           FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_ORDERS}\`
@@ -3240,8 +3249,8 @@ async function loadSupplierIntelligence(supplier){
             AND SKU IN (SELECT sku FROM supplier_skus)
         )
         WHERE rn = 1
-          AND Order_Progress = 'Backordered'
-          AND Status = 'Ordered'
+          AND UPPER(TRIM(Order_Progress)) = 'BACKORDERED'
+          AND UPPER(TRIM(Status)) = 'ORDERED'
         GROUP BY sku
       )
       SELECT
