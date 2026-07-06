@@ -1204,20 +1204,41 @@ async function loadSalesDataFromBQ(){
       LEFT JOIN p4 ON s.SKU = p4.SKU
     `;
 
-    // ── 백오더 쿼리 (동일 고객+SKU 중복 주문 제거: 최신 1건만)
+    // ── 백오더 쿼리 (2026-07 개편)
+    //   테이블이 append-only(streaming insert)라 같은 주문의 옛 상태 행이 남는다.
+    //   1단계 latest_state: (Order_Number, SKU)별 최신 행 1건만 채택
+    //     → 해소된 백오더의 유령 행(Backordered 잔재) 제거
+    //     → asung_sales_unified VIEW의 dedup 패턴과 동일 (loaded_at DESC)
+    //   2단계 customer_latest: 동일 고객+SKU는 가장 최근 주문 1건만
+    //     → 같은 고객이 재차 백오더 걸면 "새 수량"이 반영됨 (기존 MAX(Quantity)는
+    //       옛 대량 주문이 영구히 이겨서 재발 백오더가 묻히는 버그가 있었음)
     const boSQL = `
-      WITH latest_orders AS (
+      WITH latest_state AS (
         SELECT
-          SKU,
-          Customer,
-          MAX(Quantity) AS qty,
-          MAX(Order_Date) AS last_order_date
+          SKU, Customer, Order_Number, Quantity, Order_Date,
+          Order_Progress, Status,
+          ROW_NUMBER() OVER (
+            PARTITION BY Order_Number, SKU
+            ORDER BY COALESCE(cin7_updated, loaded_at) DESC, loaded_at DESC
+          ) AS rn
         FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_ORDERS}\`
-        WHERE Order_Progress = 'Backordered'
-          AND Status = 'Ordered'
-          AND Order_Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
+        WHERE Order_Date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
           AND Quantity > 0
-        GROUP BY SKU, Customer
+      ),
+      open_backorders AS (
+        SELECT SKU, Customer, Quantity AS qty, Order_Date AS last_order_date
+        FROM latest_state
+        WHERE rn = 1
+          AND Order_Progress = 'Backordered'
+          AND Status = 'Ordered'
+      ),
+      customer_latest AS (
+        SELECT SKU, qty, last_order_date,
+          ROW_NUMBER() OVER (
+            PARTITION BY SKU, Customer
+            ORDER BY last_order_date DESC
+          ) AS rn2
+        FROM open_backorders
       )
       SELECT
         SKU,
@@ -1227,7 +1248,8 @@ async function loadSalesDataFromBQ(){
         SUM(CASE WHEN last_order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
                   AND last_order_date < DATE_SUB(CURRENT_DATE(), INTERVAL 60 DAY) THEN qty ELSE 0 END) AS bo_60_90,
         SUM(qty) AS bo_qty
-      FROM latest_orders
+      FROM customer_latest
+      WHERE rn2 = 1
       GROUP BY SKU
     `;
 
@@ -3200,16 +3222,27 @@ async function loadSupplierIntelligence(supplier){
         GROUP BY SKU
       ),
       -- ── 현재 미처리 백오더 (이 공급사 SKU 한정)
+      --    append-only 테이블이므로 (Order_Number, SKU)별 최신 상태 행만 채택
+      --    → 해소된 백오더의 유령 행 제외 (발주추천 boSQL과 동일 패턴)
       backorders AS (
-        SELECT
-          SKU AS sku,
-          SUM(Quantity) AS bo_qty
-        FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_ORDERS}\`
-        WHERE Order_Progress = 'Backordered'
+        SELECT sku, SUM(qty) AS bo_qty
+        FROM (
+          SELECT
+            SKU AS sku,
+            Quantity AS qty,
+            ROW_NUMBER() OVER (
+              PARTITION BY Order_Number, SKU
+              ORDER BY COALESCE(cin7_updated, loaded_at) DESC, loaded_at DESC
+            ) AS rn,
+            Order_Progress, Status
+          FROM \`${BQ_PROJECT}.${BQ_DATASET}.${BQ_ORDERS}\`
+          WHERE Quantity > 0
+            AND SKU IN (SELECT sku FROM supplier_skus)
+        )
+        WHERE rn = 1
+          AND Order_Progress = 'Backordered'
           AND Status = 'Ordered'
-          AND Quantity > 0
-          AND SKU IN (SELECT sku FROM supplier_skus)
-        GROUP BY SKU
+        GROUP BY sku
       )
       SELECT
         p.sku,
