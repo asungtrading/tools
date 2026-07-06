@@ -511,7 +511,22 @@ const fmt  = n => '$'+(parseFloat(n)||0).toLocaleString('en-CA',{minimumFraction
 const fmtK = n => { n=parseFloat(n)||0; return n>=1e6?'$'+(n/1e6).toFixed(2)+'M':n>=1e3?'$'+(n/1e3).toFixed(1)+'K':fmt(n); };
 const fmtN = n => (parseInt(n)||0).toLocaleString();
 const pct  = (a,b) => b>0?((parseFloat(a)||0)/(parseFloat(b)||1)*100).toFixed(1)+'%':'—';
-const d    = s => s ? new Date(s).toLocaleDateString('en-CA',{year:'numeric',month:'short',day:'numeric'}) : '—';
+
+// ── 타임존-안전 날짜 파서 ────────────────────────────────
+// BQ가 내려주는 'YYYY-MM-DD'를 new Date()에 그대로 넣으면 UTC 자정으로
+// 해석되어, Edmonton(UTC-6/-7) 등에서 표시할 때 하루가 당겨지는 버그가 있음.
+// (예: '2026-07-02' → 화면에 Jul 1 로 표시)
+// 날짜만 있는 문자열은 로컬 자정으로 파싱해서 시프트를 제거한다.
+function _localDate(s){
+  if(!s) return null;
+  const str = String(s).trim();
+  const m = str.match(/^(\d{4})-(\d{2})-(\d{2})/);   // YYYY-MM-DD (시각 유무 무관)
+  if(m) return new Date(+m[1], +m[2]-1, +m[3]);       // 로컬 자정
+  const dt = new Date(str);                            // 그 외(타임스탬프 등)는 기존대로
+  return isNaN(dt) ? null : dt;
+}
+const _fmtDateOpts = (s,opts) => { const dt=_localDate(s); return dt ? dt.toLocaleDateString('en-CA',opts) : '—'; };
+const d    = s => _fmtDateOpts(s,{year:'numeric',month:'short',day:'numeric'});
 
 function mkChart(id,cfg){ if(charts[id]) charts[id].destroy(); const c=document.getElementById(id); if(c) charts[id]=new Chart(c,cfg); }
 function baseOpts(rot){ return { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:'#94a3b8', font:{size:10} } }, tooltip:TOOLTIP }, scales:{ x:{ grid:{color:'#1a2233'}, ticks:{color:'#475569',font:{size:10},maxRotation:rot||0} }, y:{ grid:{color:'#1a2233'}, ticks:{color:'#475569',font:{size:10}} } } }; }
@@ -788,8 +803,8 @@ function renderOverview(kpi, trend, storeCompare) {
       </div>
       <div class="kpi teal">
         <div class="kpi-lbl">Active Since</div>
-        <div class="kpi-val" style="font-size:15px">${k.first_order ? new Date(k.first_order).toLocaleDateString('en-CA',{year:'numeric',month:'short'}) : '—'}</div>
-        <div class="kpi-sub">Last order: ${k.last_order ? new Date(k.last_order).toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'}) : '—'}</div>
+        <div class="kpi-val" style="font-size:15px">${k.first_order ? _fmtDateOpts(k.first_order,{year:'numeric',month:'short'}) : '—'}</div>
+        <div class="kpi-sub">Last order: ${k.last_order ? _fmtDateOpts(k.last_order,{month:'short',day:'numeric',year:'numeric'}) : '—'}</div>
       </div>
     </div>
 
@@ -1191,7 +1206,7 @@ function renderDrawer(sku, product, data) {
   const buyingLess = avgQtyBuyer > 0 && myTotalQty < avgQtyBuyer * 0.7;
 
   // Last / first purchase dates
-  const fmtDate = d => d ? new Date(d).toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'}) : '—';
+  const fmtDate = d => _fmtDateOpts(d,{month:'short',day:'numeric',year:'numeric'});
   const lastDate  = s.last_date ? fmtDate(s.last_date) : (my_history.length ? my_history[my_history.length-1].month : '—');
 
   document.getElementById('drawerContent').innerHTML = `
@@ -1589,7 +1604,7 @@ function renderOrdersByOrder(rows) {
                 <tr style="cursor:pointer;background:${open?'var(--surface2)':'transparent'}" onclick="toggleOrder('${onumEsc}')">
                   <td style="text-align:center;color:var(--blue2);font-weight:700">${open?'▾':'▸'}</td>
                   <td style="font-family:monospace;font-size:12px;font-weight:600;color:var(--blue2)">${o.order_number}</td>
-                  <td>${o.date ? new Date(o.date).toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
+                  <td>${o.date ? _fmtDateOpts(o.date,{month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
                   <td class="${o.location==='Asung - Edmonton'?'loc-edm':'loc-tor'}">${o.location==='Asung - Edmonton'?'Edmonton':'Toronto'}</td>
                   ${showStore ? `<td style="font-size:11px;color:var(--mid)">${o.customer||'—'}</td>` : ''}
                   <td class="num">${o.lines.length}</td>
@@ -1662,7 +1677,7 @@ function renderOrderTable(rows) {
               const skuEsc  = (r.SKU||'').replace(/'/g,"\\'");
               const prodEsc = (r.product||'').replace(/'/g,"\\'");
               return `<tr>
-              <td>${r.date ? new Date(r.date).toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
+              <td>${r.date ? _fmtDateOpts(r.date,{month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
               <td style="font-family:monospace;font-size:11px;color:var(--mid)">${r.order_number||'—'}</td>
               <td class="sku-tag" style="cursor:pointer" onmouseenter="showSkuPreview(event,'${skuEsc}','${prodEsc}')" onmouseleave="hideSkuPreview()" onclick="openSkuDrawer('${skuEsc}','${prodEsc}')">${r.SKU||'—'}</td>
               <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis">${r.product||'—'}</td>
