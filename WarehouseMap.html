@@ -19,8 +19,23 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
 #svgWrap.anim{transition:transform .32s cubic-bezier(.4,0,.2,1)}
 .wrap.pan{cursor:grab}.wrap.pan.panning{cursor:grabbing}.wrap.edit{cursor:default}
 /* drill card grid overlay */
-#drill{position:absolute;inset:0;overflow:auto;padding:22px;background:var(--bg);display:none;z-index:10}
-#drill.show{display:block}
+/* ===== 밀러 컬럼 ===== */
+#cols{position:absolute;inset:0;display:flex;align-items:stretch}
+.col{display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--border);background:var(--bg)}
+.col[hidden]{display:none}
+#colMap{flex:1;position:relative;overflow:hidden;background:var(--bg)}
+.col-list{flex:1;overflow:hidden}
+.col-head{padding:9px 14px;border-bottom:1px solid var(--border);background:#fff;flex-shrink:0}
+.col-head .dtitle{margin:0}
+.col-head .dsub{margin:2px 0 0}
+.col-body{flex:1;overflow:auto;padding:16px}
+.col.mini{flex:0 0 46px;cursor:pointer;background:#fff;align-items:center;overflow:hidden}
+.col.mini:hover{background:#f0f6ff}
+.col.mini .col-head,.col.mini .col-body{display:none}
+.col.mini .vlabel{display:flex}
+.vlabel{display:none;writing-mode:vertical-rl;text-orientation:mixed;font-weight:800;font-size:13px;letter-spacing:2px;color:var(--mid);margin-top:16px;gap:8px;align-items:center;white-space:nowrap}
+.vlabel .vico{writing-mode:horizontal-tb;font-size:15px}
+#colMap.mini svg,#colMap.mini #svgWrap{display:none}
 .dtitle{font-size:14px;font-weight:800;margin:0 0 4px}
 .dsub{font-size:12px;color:var(--dim);margin:0 0 16px}
 .dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;max-width:1100px}
@@ -115,14 +130,33 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
   <div class="divider"></div>
   <div class="grp"><button class="tbtn" onclick="openImport()">⬇ 제품 매핑 가져오기</button></div>
   <div class="divider"></div>
-  <div class="grp"><button class="tbtn green" onclick="saveLayout()">💾 저장</button><button class="tbtn danger" onclick="resetAll()">↩ 초기화</button></div>
+  <div class="grp"><button class="tbtn green" onclick="saveLayout()">💾 저장</button><button class="tbtn" onclick="openLayout()">🧭 레이아웃</button><button class="tbtn danger" onclick="resetAll()">↩ 초기화</button></div>
   <div class="spacer"></div>
   <div class="grp"><button class="tbtn" onclick="zoomBy(1/1.2)">−</button><span class="zoomv" id="zoomv">100%</span><button class="tbtn" onclick="zoomBy(1.2)">+</button><button class="tbtn" onclick="fitZones()">리셋 뷰</button></div>
 </header>
 <div class="crumbs" id="crumbs"></div>
 <div class="wrap pan" id="wrap">
-  <div id="svgWrap"></div>
-  <div id="drill"></div>
+  <div id="cols">
+    <div class="col" id="colMap" onclick="colMapClick(event)">
+      <div class="vlabel" id="vlabMap"><span class="vico">🗺️</span>전체 존</div>
+      <div id="svgWrap"></div>
+    </div>
+    <div class="col col-list" id="colRacks" hidden onclick="colMiniClick(event,'racks')">
+      <div class="vlabel" id="vlabRacks"></div>
+      <div class="col-head" id="headRacks"></div>
+      <div class="col-body" id="bodyRacks"></div>
+    </div>
+    <div class="col col-list" id="colBays" hidden onclick="colMiniClick(event,'bays')">
+      <div class="vlabel" id="vlabBays"></div>
+      <div class="col-head" id="headBays"></div>
+      <div class="col-body" id="bodyBays"></div>
+    </div>
+    <div class="col col-list" id="colLocs" hidden onclick="colMiniClick(event,'locs')">
+      <div class="vlabel" id="vlabLocs"></div>
+      <div class="col-head" id="headLocs"></div>
+      <div class="col-body" id="bodyLocs"></div>
+    </div>
+  </div>
   <div id="locPanel">
     <div class="lp-head"><span class="code" id="lpCode">—</span><button class="x" onclick="closeLoc()">×</button></div>
     <div class="lp-body">
@@ -130,6 +164,12 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
       <div id="lpView"></div>
     </div>
   </div>
+  <div id="layoutModal"><div class="mbox">
+    <h3>존 레이아웃 (팀 공유용)</h3>
+    <p>아래는 <b>현재 창고의 배치</b>입니다. <b>복사</b>해서 전달하면 파일에 기본값으로 넣어 모두가 같은 배치를 봅니다. 다른 배치 JSON을 붙여넣고 <b>적용</b>하면 즉시 반영됩니다.</p>
+    <textarea id="layoutText" spellcheck="false"></textarea>
+    <div class="row"><button class="tbtn" onclick="copyLayout()">📋 복사</button><button class="tbtn" onclick="closeLayout()">닫기</button><button class="tbtn green" onclick="applyLayout()">적용</button></div>
+  </div></div>
   <div id="modal"><div class="mbox">
     <h3>제품 매핑 가져오기</h3>
     <p>CSV(줄마다 <b>location,sku,name,비고</b> · 같은 로케이션 여러 줄=여러 SKU) 또는 JSON(<b>{"A010101":{"sku":"...","name":"..."}}</b>). BQ product master export를 그대로 넣으면 됩니다.</p>
@@ -226,6 +266,12 @@ const ZONE_COLORS={A:'#b52626',B:'#6b23a0',C:'#c45200',D:'#145a8f',E:'#0e7a66',F
 // ===== constants / state =====
 const BAY_W=48, LEVEL_H=26, SNAP=12;
 const LAYOUT_KEY='asung_whzone_layout_v1', PROD_KEY='asung_whclean_prod_v1';
+// 팀 공유 기본 레이아웃 — localStorage에 저장본이 없을 때 이 값으로 그린다.
+// (도구에서 '🧭 레이아웃 → 복사'한 JSON을 여기에 붙여넣으면 모두가 같은 배치를 본다)
+const DEFAULT_LAYOUT = {
+  toronto:  {"zpos":{"A":{"x":144,"y":780,"w":420,"h":180},"B":{"x":696,"y":60,"w":300,"h":696},"C":{"x":144,"y":300,"w":516,"h":336},"D":{"x":132,"y":12,"w":252,"h":240},"E":{"x":1056,"y":132,"w":336,"h":456},"F":{"x":1416,"y":132,"w":396,"h":456},"G":{"x":1056,"y":720,"w":216,"h":264},"H":{"x":1296,"y":624,"w":444,"h":72},"J":{"x":1056,"y":0,"w":300,"h":96},"K":{"x":1596,"y":732,"w":180,"h":96},"R":{"x":1296,"y":720,"w":108,"h":264},"W":{"x":1500,"y":0,"w":300,"h":96},"Z":{"x":360,"y":672,"w":300,"h":72}},"structs":[{"id":"Smraq2ng1","label":"구역","x":1428,"y":720,"w":384,"h":264},{"id":"Smraq8i9x","label":"구역","x":696,"y":792,"w":300,"h":180},{"id":"Smraq8szg","label":"구역","x":444,"y":84,"w":216,"h":180}]},
+  edmonton: null
+};
 let mode='view';                 // 'view' | 'edit'
 let level='zones';               // 'zones' | 'racks' | 'bays' | 'locs'
 let curZone=null, curRack=null, curBay=null, curLoc=null, curItemIdx=-1;
@@ -296,7 +342,10 @@ function loadSaved(){
   STRUCTS=[];
   let _raw=localStorage.getItem(layoutKey());
   if(!_raw && curWH.id==='toronto') _raw=localStorage.getItem(LAYOUT_KEY); // 구버전 마이그레이션
-  try{const l=JSON.parse(_raw||'null'); if(l&&l.zpos&&Object.keys(l.zpos).length){ZPOS=l.zpos; STRUCTS=l.structs||[];} else ZPOS=defaultZPOS();}catch(e){ZPOS=defaultZPOS();}
+  try{const l=JSON.parse(_raw||'null');
+    if(l&&l.zpos&&Object.keys(l.zpos).length){ZPOS=l.zpos; STRUCTS=l.structs||[];}
+    else { const dl=DEFAULT_LAYOUT[curWH.id]; if(dl&&dl.zpos&&Object.keys(dl.zpos).length){ZPOS=JSON.parse(JSON.stringify(dl.zpos)); STRUCTS=dl.structs?JSON.parse(JSON.stringify(dl.structs)):[];} else ZPOS=defaultZPOS(); }
+  }catch(e){ZPOS=defaultZPOS();}
   // ensure every zone has a pos
   const d=defaultZPOS(); zonesList().forEach(z=>{ if(!ZPOS[z])ZPOS[z]=d[z]; });
   try{const p=JSON.parse(localStorage.getItem(PROD_KEY)||'null'); if(p)OVER=p;}catch(e){}
@@ -308,6 +357,10 @@ function saveLayout(){
   localStorage.setItem(PROD_KEY,JSON.stringify(OVER));
   const el=document.getElementById('sbSave'); el.textContent='✓ 저장됨'; el.className='sb-ok'; setTimeout(()=>{el.textContent='';el.className='';},1500);
 }
+function openLayout(){ document.getElementById('layoutText').value=JSON.stringify({zpos:ZPOS,structs:STRUCTS},null,2); document.getElementById('layoutModal').classList.add('show'); }
+function closeLayout(){ document.getElementById('layoutModal').classList.remove('show'); }
+function copyLayout(){ const t=document.getElementById('layoutText'); t.select(); try{document.execCommand('copy'); setInfo('레이아웃 JSON 복사됨');}catch(e){ setInfo('직접 선택해 복사하세요'); } }
+function applyLayout(){ try{ const o=JSON.parse(document.getElementById('layoutText').value); if(!o.zpos||!Object.keys(o.zpos).length){alert('zpos 없음');return;} ZPOS=o.zpos; STRUCTS=o.structs||[]; const _d=defaultZPOS(); zonesList().forEach(z=>{ if(!ZPOS[z])ZPOS[z]=_d[z]; }); saveLayout(); buildZones(); fitZones(); closeLayout(); setInfo('레이아웃 적용됨'); }catch(e){ alert('JSON 오류: '+e.message); } }
 function resetAll(){ if(!confirm('존 위치와 내 수정(제품 매핑)을 초기화할까요?\n(BQ 자동 데이터 bins.json은 그대로 유지됩니다)'))return; localStorage.removeItem(LAYOUT_KEY); WAREHOUSES.forEach(w=>localStorage.removeItem(LAYOUT_KEY+':'+w.id)); localStorage.removeItem(PROD_KEY); location.reload(); }
 
 // ===== transform (zones floor only) =====
@@ -360,7 +413,7 @@ function addStruct(){
 function deleteStruct(id){ STRUCTS=STRUCTS.filter(s=>s.id!==id); if(selEnt&&selEnt.id===id)selEnt=null; buildZones(); setInfo('구조물 삭제 · 저장'); }
 function renameStruct(id){ const st=STRUCTS.find(s=>s.id===id); if(!st)return; const v=prompt('구조물 이름',st.label); if(v!=null){st.label=v; buildZones(); setInfo('이름 변경 · 저장');} }
 function drawZoneBlock(z){
-  const p=ZPOS[z]; const col=ZONE_COLORS[z]||'#666';
+  let p=ZPOS[z]; if(!p){ p=ZPOS[z]=defaultZPOS()[z]; if(!p)return; } const col=ZONE_COLORS[z]||'#666';
   const nR=zoneRacks(z).length, tot=zoneTotal(z), mp=zoneMapped(z);
   const g=mkSVG('g'); g.classList.add('zoneblk'); g.dataset.kind='zone'; g.dataset.id=z; g.dataset.z=z; g.style.cursor=mode==='edit'?'move':'pointer';
   g.setAttribute('transform',`translate(${p.x},${p.y})`);
@@ -378,10 +431,36 @@ function drawZoneBlock(z){
   svgEl.appendChild(g);
 }
 
-// ===== drill (cards) =====
-function drillEl(){return document.getElementById('drill');}
-function showDrill(html){ const d=drillEl(); d.innerHTML=html; d.classList.add('show'); d.scrollTop=0; }
-function hideDrill(){ drillEl().classList.remove('show'); }
+// ===== 밀러 컬럼 상태기계 =====
+// state: 'zones' 맵만 / 'racks' 맵mini+랙 / 'bays' +베이 / 'locs' +로케이션
+function colEl(n){return document.getElementById(n);}
+function setColumns(){
+  const map=colEl('colMap'), cr=colEl('colRacks'), cb=colEl('colBays'), cl=colEl('colLocs');
+  const mini=(el,on)=>el.classList.toggle('mini',on);
+  const show=(el,on)=>{ if(on)el.removeAttribute('hidden'); else el.setAttribute('hidden',''); };
+  const hasBay=!!curBay || level==='bays';   // 파렛트 랙은 베이 컬럼 없음
+  if(level==='zones'){ mini(map,false); show(cr,false); show(cb,false); show(cl,false); return; }
+  mini(map,true); document.getElementById('vlabMap').innerHTML='<span class="vico">🗺️</span>Zone '+esc(curZone||'');
+  show(cr,true);
+  if(level==='racks'){ mini(cr,false); show(cb,false); show(cl,false); return; }
+  mini(cr,true); document.getElementById('vlabRacks').textContent=curWH.prefix+(curRack||'');
+  if(level==='bays'){ show(cb,true); mini(cb,false); show(cl,false); return; }
+  // level==='locs'
+  if(curBay){ show(cb,true); mini(cb,true); document.getElementById('vlabBays').textContent=curWH.prefix+curBay; }
+  else show(cb,false);
+  show(cl,true); mini(cl,false);
+}
+function fillCol(which,title,sub,cardsHtml){
+  document.getElementById('head'+which).innerHTML=`<div class="dtitle">${title}</div><div class="dsub">${sub}</div>`;
+  const b=document.getElementById('body'+which); b.innerHTML=`<div class="dgrid">${cardsHtml}</div>`; b.scrollTop=0;
+}
+function colMapClick(e){ if(colEl('colMap').classList.contains('mini')) backTo('zones'); }
+function colMiniClick(e,lv){
+  const map={racks:'colRacks',bays:'colBays',locs:'colLocs'}[lv];
+  if(!colEl(map).classList.contains('mini'))return;   // 펼쳐진 컬럼 클릭은 무시(카드가 처리)
+  if(lv==='racks')backTo('racks'); else if(lv==='bays')backTo('bays');
+}
+function hideDrill(){ /* 밀러 컬럼에선 setColumns 가 담당 */ setColumns(); }
 function card(id,sub,mapped,tot,prod){
   const ratio=tot?` <span style="color:#146a52">${mapped}/${tot}</span>`:'';
   const bar=tot?`<div class="dbar"><i style="width:${Math.round(mapped/tot*100)}%"></i></div>`:'';
@@ -400,7 +479,7 @@ function enterZone(z){
       <div class="c-id" style="color:${col}">${curWH.prefix}${r.id}</div><div class="c-sub">${sub} · <b style="color:#146a52">${mp}/${tot}</b></div>
       ${tot?`<div class="dbar"><i style="width:${Math.round(mp/tot*100)}%"></i></div>`:''}</div>`;
   }).join('');
-  showDrill(`<div class="dtitle">${curWH.prefix}Zone ${z} — 랙 선택</div><div class="dsub">랙을 클릭하면 베이가 열립니다</div><div class="dgrid">${cards}</div>`);
+  fillCol('Racks',`${curWH.prefix}Zone ${z} — 랙`,'랙 클릭 → 베이',cards); setColumns();
   updateCrumbs(); setInfo(`Zone ${z}`);
 }
 function enterRack(id){
@@ -408,7 +487,7 @@ function enterRack(id){
   if(isPallet(r)){ // pallets are locations directly
     level='locs';
     const cards=(r.pallets||[]).map(code=>locCardHtml(code,col)).join('');
-    showDrill(`<div class="dtitle">${curWH.prefix}${id} — 파렛트 로케이션</div><div class="dsub">로케이션을 클릭하면 제품 매핑</div><div class="dgrid">${cards}</div>`);
+    fillCol('Locs',`${curWH.prefix}${id} — 파렛트`,'로케이션 클릭 → 제품',cards); setColumns();
     updateCrumbs(); setInfo(id); return;
   }
   level='bays';
@@ -419,14 +498,14 @@ function enterRack(id){
       <div class="c-id" style="color:${col}">${curWH.prefix}${b.bay}</div><div class="c-sub">${tot} 로케이션 · <b style="color:#146a52">${mp}/${tot}</b></div>
       <div class="dbar"><i style="width:${Math.round(mp/tot*100)}%"></i></div></div>`;
   }).join('');
-  showDrill(`<div class="dtitle">${curWH.prefix}${id} — 베이 선택</div><div class="dsub">베이를 클릭하면 로케이션이 열립니다</div><div class="dgrid">${cards}</div>`);
+  fillCol('Bays',`${curWH.prefix}${id} — 베이`,'베이 클릭 → 로케이션',cards); setColumns();
   updateCrumbs(); setInfo(id);
 }
 function enterBay(bayId){
   curBay=bayId; level='locs'; const r=byId(curRack); const col=ZONE_COLORS[r.z]||'#666';
   const codes=locsInBay(r,bayId);
   const cards=codes.map(code=>locCardHtml(code,col)).join('');
-  showDrill(`<div class="dtitle">${curWH.prefix}${bayId} — 로케이션</div><div class="dsub">로케이션을 클릭하면 제품 매핑</div><div class="dgrid">${cards}</div>`);
+  fillCol('Locs',`${curWH.prefix}${bayId} — 로케이션`,'클릭 → 제품 매핑',cards); setColumns();
   updateCrumbs(); setInfo(bayId);
 }
 function locCardHtml(code,col){
