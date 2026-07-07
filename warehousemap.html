@@ -60,6 +60,7 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
   #locPanel{width:100%;left:0;right:0;top:auto;bottom:0;height:84vh;border-left:none;border-top:1px solid var(--border);border-radius:16px 16px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.14);transform:translateY(100%)}
   #locPanel.show{transform:none}
   #locPanel .lp-body{padding-bottom:56px}
+  .pcard img{width:104px;height:104px}
   /* 헤더 압축: 세로 공간 최소화 */
   header{padding:5px 8px;gap:5px}
   .logo{font-size:13px}
@@ -115,7 +116,7 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
 .lp-item.zero{opacity:.62}
 .lp-item .p-row1{display:flex;gap:8px;align-items:center}
 .pcard{display:flex;gap:12px;border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;background:#fafbfc}
-.pcard img{width:72px;height:72px;object-fit:cover;border-radius:8px;background:#eef0f3;cursor:zoom-in}
+.pcard img{width:120px;height:120px;object-fit:contain;border-radius:8px;background:#fff;border:1px solid var(--border);cursor:zoom-in;flex-shrink:0}
 .pcard .pc-name{font-weight:800;font-size:13px;line-height:1.35}
 .pcard .pc-sku{font-family:'DM Mono',monospace;font-size:11px;color:var(--mid);margin-top:2px}
 .pcard table{font-size:11px;margin-top:6px;border-collapse:collapse}
@@ -139,6 +140,8 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
 .sr-bin{font-family:'DM Mono',monospace;font-size:10px;font-weight:800;color:#0e5a8a;background:#e8f1fa;border-radius:5px;padding:2px 6px;cursor:pointer}
 .sr-bin:hover{background:#1a6fd4;color:#fff}
 .sr-bin.zero{color:#8a90a2;background:#eef0f3}
+.sr-bin.other{background:#fff;border:1px dashed #b9c2d4;color:#4a5570}
+.sr-bin.other:hover{background:#1a6fd4;color:#fff;border-color:#1a6fd4}
 .sr-empty{padding:14px;font-size:12px;color:var(--dim)}
 .al-row{display:flex;gap:6px;position:relative}
 .al-row input{flex:1}
@@ -309,7 +312,7 @@ const EXTRAS = ["Aoneroom","B0601002","CASHIER0201","CASHIER0202","CASHIER0203",
 const ZONE_COLORS={A:'#b52626',B:'#6b23a0',C:'#c45200',D:'#145a8f',E:'#0e7a66',F:'#5a8c00',G:'#b02060',H:'#106438',J:'#9a7500',K:'#0e5a8a',R:'#b84800',W:'#5a2a80',Z:'#3a4460'};
 // ===== constants / state =====
 const BAY_W=48, LEVEL_H=26, SNAP=12;
-const APP_VER='v29.0';
+const APP_VER='v29.2';
 const LAYOUT_KEY='asung_whzone_layout_v1', PROD_KEY='asung_whclean_prod_v1';
 // 팀 공유 기본 레이아웃 — localStorage에 저장본이 없을 때 이 값으로 그린다.
 // (도구에서 '🧭 레이아웃 → 복사'한 JSON을 여기에 붙여넣으면 모두가 같은 배치를 본다)
@@ -341,10 +344,10 @@ const WAREHOUSES=[
 let curWH=WAREHOUSES[0];
 function whDefs(){return curWH.defs;}
 function layoutKey(){return LAYOUT_KEY+':'+curWH.id;}
-// 코드가 현재 창고 소속인지 (토론토=다른 접두 없는 코드, 그 외=자기 접두로 시작)
-function inWH(code){ const p=curWH.prefix;
-  if(p) return code.indexOf(p)===0;
-  return !WAREHOUSES.some(w=>w.prefix && code.indexOf(w.prefix)===0); }
+// 에드먼턴 코드 = 'E' + 알파벳 (EA010101, EInOffice…). 토론토 Zone E('E010101')와 구분!
+function isEdmontonCode(code){ return /^E[A-Z]/.test(code); }
+function whOfCode(code){ return WAREHOUSES.find(w=>w.id===(isEdmontonCode(code)?'edmonton':'toronto')); }
+function inWH(code){ return curWH.id==='edmonton' ? isEdmontonCode(code) : !isEdmontonCode(code); }
 
 // ===== helpers =====
 function mkSVG(t){return document.createElementNS('http://www.w3.org/2000/svg',t);}
@@ -730,16 +733,18 @@ function runSearch(q){
   if(q.length<2){box.classList.remove('show');box.innerHTML='';return;}
   const bySku={};
   for(const bin in locMap){
-    if(!inWH(bin))continue;                 // 현재 브랜치(창고)의 로케이션만 검색
+    const cur=inWH(bin);
     locItems(bin).forEach(it=>{
       const sku=(it.sku||'').trim(); if(!sku)return;
-      const e=(bySku[sku]=bySku[sku]||{sku,name:it.name||'',bins:[]});
-      e.bins.push({bin,past:itemIsPast(it)});
+      const e=(bySku[sku]=bySku[sku]||{sku,name:it.name||'',binsCur:[],binsAll:[]});
+      const rec={bin,past:itemIsPast(it),cur};
+      e.binsAll.push(rec); if(cur)e.binsCur.push(rec);
       if(!e.name&&it.name)e.name=it.name;
     });
   }
   const res=[];
   for(const sku in bySku){
+    if(!bySku[sku].binsCur.length)continue;  // 매칭은 현재 브랜치에 있는 제품만 (요약과 일치)
     const P=prodOf(sku)||{};
     const hay=(sku+' '+(bySku[sku].name||P.name||'')+' '+(P.barcode||'')+' '+(P.brand||'')+' '+(P.supplier||'')).toLowerCase();
     if(hay.indexOf(q)!==-1){ res.push({...bySku[sku],P}); if(res.length>=25)break; }
@@ -747,7 +752,7 @@ function runSearch(q){
   if(!res.length){box.innerHTML='<div class="sr-empty">검색 결과 없음 — 매핑된 로케이션의 제품에서 찾습니다</div>';box.classList.add('show');return;}
   // 로케이션 요약: 이 검색에 걸린 SKU들이 깔린 로케이션 전체 (중복 제거)
   const binSet=new Map();
-  res.forEach(r=>r.bins.forEach(b=>{ if(!binSet.has(b.bin))binSet.set(b.bin,b.past); }));
+  res.forEach(r=>r.binsCur.forEach(b=>{ if(!binSet.has(b.bin))binSet.set(b.bin,b.past); }));
   const binArr=[...binSet.entries()];
   const MAXCH=14;
   const summary=res.length>1?`<div class="sr-row" style="background:#f7f9fc">
@@ -757,7 +762,12 @@ function runSearch(q){
       </div></div>`:'';
   box.innerHTML=summary+res.map(r=>{
     const img=r.P.image?`<img src="${esc(r.P.image)}" loading="lazy" onerror="this.style.visibility='hidden'">`:'<img style="visibility:hidden">';
-    const bins=r.bins.map(b=>`<span class="sr-bin${b.past?' zero':''}" onclick="gotoLoc('${b.bin}')">${b.bin}${b.past?' (0)':''}</span>`).join('');
+    const ordered=r.binsAll.slice().sort((a,b)=>(a.cur===b.cur)?0:(a.cur?-1:1));
+    const bins=ordered.map(b=>{
+      const other=!b.cur;
+      const tag=other?`<b style="opacity:.7">${isEdmontonCode(b.bin)?'에':'토'}</b> `:'';
+      return `<span class="sr-bin${b.past?' zero':''}${other?' other':''}" onclick="gotoLoc('${b.bin}')">${tag}${b.bin}${b.past?' (0)':''}</span>`;
+    }).join('');
     return `<div class="sr-row">${img}<div class="sr-main">
       <div class="sr-name">${esc(r.name||r.P.name||r.sku)}${r.P.is_new?'<span class="badge-new">NEW</span>':''}</div>
       <div class="sr-sub">${esc(r.sku)}${r.P.barcode?' · '+esc(r.P.barcode):''}${r.P.brand?' · '+esc(r.P.brand):''}${r.P.supplier?' · '+esc(r.P.supplier):''}</div>
@@ -767,11 +777,12 @@ function runSearch(q){
 }
 function closeSearch(){ const box=document.getElementById('srchRes'); if(box){box.classList.remove('show');} const i=document.getElementById('srch'); if(i)i.blur(); }
 function findLocPath(code){
+  const edm=isEdmontonCode(code);
   for(const w of WAREHOUSES){
+    if(w.id==='edmonton'&&!edm)continue;
+    if(w.id==='toronto'&&edm)continue;
     if(!w.defs||!w.defs.length)continue;
-    if(w.prefix){ if(code.indexOf(w.prefix)!==0)continue; }
-    else { if(WAREHOUSES.some(x=>x.prefix&&code.indexOf(x.prefix)===0))continue; }
-    const raw=w.prefix?code.slice(w.prefix.length):code;
+    const raw=(w.prefix&&code.indexOf(w.prefix)===0)?code.slice(w.prefix.length):code;
     const m=/^([A-Z])(\d{2})(\d{2})(\d{2})$/.exec(raw);
     if(m){ const d=w.defs.find(x=>x.id===m[1]+m[2]); if(d)return {wh:w,rack:d,bay:d.id+m[3]}; continue; }
     const d=w.defs.find(x=>(x.pallets||[]).indexOf(raw)!==-1);
