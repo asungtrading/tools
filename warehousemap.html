@@ -148,8 +148,8 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
 .al-sug div:active,.al-sug div:hover{background:#e8f1fa}
 .lp-sec{border-top:1px dashed var(--border);margin-top:14px;padding-top:12px}
 .lp-sec h4{margin:0 0 8px;font-size:11px;color:var(--mid)}
-#modal{position:absolute;inset:0;background:rgba(20,26,40,.4);z-index:40;display:none;align-items:center;justify-content:center}
-#modal.show{display:flex}
+#modal,#layoutModal{position:absolute;inset:0;background:rgba(20,26,40,.4);z-index:40;display:none;align-items:center;justify-content:center}
+#modal.show,#layoutModal.show{display:flex}
 .mbox{background:#fff;border-radius:14px;width:min(560px,92vw);padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
 .mbox h3{margin:0 0 6px;font-size:16px}.mbox p{margin:0 0 12px;font-size:12px;color:var(--mid);line-height:1.5}
 .mbox textarea{width:100%;height:180px;border:1px solid var(--border);border-radius:8px;padding:10px;font-family:'DM Mono',monospace;font-size:12px;resize:vertical}
@@ -172,9 +172,9 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
   <div class="grp"><button class="tbtn" id="modeBtn" onclick="toggleMode()">✏️ 존 위치 편집</button></div>
   <div class="grp" id="structTools" style="display:none"><button class="tbtn" onclick="addStruct()">➕ 구조물</button><span class="hint">선택 후 모서리=크기 · 우상단 ×=삭제 · 더블클릭=이름</span></div>
   <div class="divider"></div>
-  <div class="grp"><button class="tbtn" onclick="openImport()">⬇ 제품 매핑 가져오기</button></div>
+  <div class="grp"></div>
   <div class="divider"></div>
-  <div class="grp"><button class="tbtn green" onclick="saveLayout()">💾 저장</button><button class="tbtn" onclick="openLayout()">🧭 레이아웃</button><button class="tbtn danger" onclick="resetAll()">↩ 초기화</button></div>
+  <div class="grp"><button class="tbtn green" onclick="saveLayout()">💾 저장</button><button class="tbtn" onclick="openLayout()">🧭 레이아웃</button><button class="tbtn danger" onclick="resetAll()">↩ 내 화면 초기화</button></div>
   <div class="spacer"></div>
   <div class="grp"><button class="tbtn" onclick="zoomBy(1/1.2)">−</button><span class="zoomv" id="zoomv">100%</span><button class="tbtn" onclick="zoomBy(1.2)">+</button><button class="tbtn" onclick="fitZones()">리셋 뷰</button></div>
 </header>
@@ -214,13 +214,7 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
     <textarea id="layoutText" spellcheck="false"></textarea>
     <div class="row"><button class="tbtn" onclick="copyLayout()">📋 복사</button><button class="tbtn" onclick="closeLayout()">닫기</button><button class="tbtn green" onclick="applyLayout()">적용</button></div>
   </div></div>
-  <div id="modal"><div class="mbox">
-    <h3>제품 매핑 가져오기</h3>
-    <p>CSV(줄마다 <b>location,sku,name,비고</b> · 같은 로케이션 여러 줄=여러 SKU) 또는 JSON(<b>{"A010101":{"sku":"...","name":"..."}}</b>). BQ product master export를 그대로 넣으면 됩니다.</p>
-    <textarea id="importText" placeholder="A010101,CON64040,Gummy Wax 150ml&#10;A010102,CON64041,Gummy Gel 700ml"></textarea>
-    <div class="row"><button class="tbtn" onclick="closeImport()">취소</button><button class="tbtn green" onclick="applyImport()">적용</button></div>
-  </div></div>
-</div>
+  </div>
 <div class="statusbar"><span id="sbMode">🔒 뷰 모드</span><span id="sbInfo"></span><span id="sbSave"></span><span id="sbAuto"></span><span class="spacer"></span><span id="sbCount"></span></div>
 <script>
 const SHELF_DEFS = [
@@ -309,7 +303,7 @@ const EXTRAS = ["Aoneroom","B0601002","CASHIER0201","CASHIER0202","CASHIER0203",
 const ZONE_COLORS={A:'#b52626',B:'#6b23a0',C:'#c45200',D:'#145a8f',E:'#0e7a66',F:'#5a8c00',G:'#b02060',H:'#106438',J:'#9a7500',K:'#0e5a8a',R:'#b84800',W:'#5a2a80',Z:'#3a4460'};
 // ===== constants / state =====
 const BAY_W=48, LEVEL_H=26, SNAP=12;
-const APP_VER='v28.5';
+const APP_VER='v28.8';
 const LAYOUT_KEY='asung_whzone_layout_v1', PROD_KEY='asung_whclean_prod_v1';
 // 팀 공유 기본 레이아웃 — localStorage에 저장본이 없을 때 이 값으로 그린다.
 // (도구에서 '🧭 레이아웃 → 복사'한 JSON을 여기에 붙여넣으면 모두가 같은 배치를 본다)
@@ -718,16 +712,6 @@ function closeLoc(){ document.getElementById('locPanel').classList.remove('show'
 function refreshDrill(){ if(level==='locs'){ if(curBay)enterBay(curBay); else if(curRack)enterRack(curRack); } }
 
 // ===== import =====
-function openImport(){document.getElementById('modal').classList.add('show');}
-function closeImport(){document.getElementById('modal').classList.remove('show');}
-function applyImport(){
-  const txt=document.getElementById('importText').value.trim(); if(!txt){closeImport();return;} let n=0;
-  const touched=new Set();
-  try{ if(txt[0]==='{'){ const o=JSON.parse(txt); for(const k in o){ let v=o[k]; let arr=(Array.isArray(v)?v:[v]).map(x=>({sku:x.sku||'',name:x.name||'',note:x.note||''})); OVER[k]=arr; n+=arr.length; } }
-    else { txt.split(/\r?\n/).forEach(line=>{const parts=line.split(',');if(parts.length>=2){const code=parts[0].trim();if(!code)return; if(!touched.has(code)){OVER[code]=[];touched.add(code);} OVER[code].push({sku:(parts[1]||'').trim(),name:(parts[2]||'').trim(),note:(parts[3]||'').trim()}); n++; }}); } }
-  catch(e){ alert('형식 오류: '+e.message); return; }
-  saveLayout(); recompute(); closeImport(); setInfo(n+'건 가져옴(내 수정)'); if(level==='zones')buildZones(); else refreshDrill(); updateCount();
-}
 
 // ===== 검색 (SKU/바코드/브랜드/서플라이어 → 로케이션 이동) =====
 function runSearch(q){
