@@ -309,7 +309,7 @@ const EXTRAS = ["Aoneroom","B0601002","CASHIER0201","CASHIER0202","CASHIER0203",
 const ZONE_COLORS={A:'#b52626',B:'#6b23a0',C:'#c45200',D:'#145a8f',E:'#0e7a66',F:'#5a8c00',G:'#b02060',H:'#106438',J:'#9a7500',K:'#0e5a8a',R:'#b84800',W:'#5a2a80',Z:'#3a4460'};
 // ===== constants / state =====
 const BAY_W=48, LEVEL_H=26, SNAP=12;
-const APP_VER='v28.3';
+const APP_VER='v28.5';
 const LAYOUT_KEY='asung_whzone_layout_v1', PROD_KEY='asung_whclean_prod_v1';
 // 팀 공유 기본 레이아웃 — localStorage에 저장본이 없을 때 이 값으로 그린다.
 // (도구에서 '🧭 레이아웃 → 복사'한 JSON을 여기에 붙여넣으면 모두가 같은 배치를 본다)
@@ -332,7 +332,8 @@ const WM_PIN_KEY='asung_whmap_pin', WM_USER_KEY='asung_whmap_user';
 let OVER={};                     // 내 로컬 수정 (localStorage) location->[...]  (빈 배열=자동값 숨김)
 let selEnt=null, dragging=null, isPanning=false, panSX=0,panSY=0,panTX=0,panTY=0,panMoved=false;
 
-// ===== 창고(warehouse) — 에드먼턴은 나중에 EDMONTON_DEFS 만 정의하면 자동 활성화 =====
+const EDMONTON_DEFS=[{"id":"A01","z":"A","bays":["01","02","03","04","05","06"],"nl":5,"binset":["0101","0102","0103","0104","0105","0201","0202","0203","0204","0205","0301","0302","0303","0304","0305","0401","0402","0403","0404","0405","0501","0502","0503","0504","0505","0601","0602","0603","0604","0605"]},{"id":"B00","z":"B","bays":["01"],"nl":6,"binset":["0101","0102","0103","0104","0105","0106"]},{"id":"B01","z":"B","bays":["01","02","03","04","05"],"nl":5,"binset":["0101","0102","0103","0104","0105","0201","0202","0203","0204","0205","0301","0302","0303","0304","0305","0401","0402","0403","0404","0405","0501","0502","0503","0504","0505"]},{"id":"B02","z":"B","bays":["01","02","03","04","05"],"nl":5,"binset":["0101","0102","0103","0104","0105","0201","0202","0203","0204","0205","0301","0302","0303","0304","0305","0401","0402","0403","0404","0405","0501","0502","0503","0504","0505"]},{"id":"B03","z":"B","bays":["01"],"nl":6,"binset":["0101","0102","0103","0104","0105","0106"]},{"id":"C01","z":"C","bays":["01","02","03","04","05","06"],"nl":5,"binset":["0101","0102","0103","0104","0105","0201","0202","0203","0204","0205","0301","0302","0303","0304","0305","0401","0402","0403","0404","0405","0501","0502","0503","0504","0505","0601","0602","0603","0604","0605"]},{"id":"C02","z":"C","bays":["01","02","03","04","05","06"],"nl":5,"binset":["0101","0102","0103","0104","0105","0201","0202","0203","0204","0205","0301","0302","0303","0304","0305","0401","0402","0403","0404","0405","0501","0502","0503","0504","0505","0601","0602","0603","0604","0605"]},{"id":"C03","z":"C","bays":["01"],"nl":6,"binset":["0101","0102","0103","0104","0105","0106"]},{"id":"D00","z":"D","bays":["01"],"nl":6,"binset":["0101","0102","0103","0104","0105","0106"]},{"id":"D01","z":"D","bays":["01","02","03","04","05","06","07","08"],"nl":5,"binset":["0101","0102","0103","0104","0105","0201","0202","0203","0204","0205","0301","0302","0303","0304","0305","0401","0402","0403","0404","0405","0501","0502","0503","0504","0505","0601","0602","0603","0604","0605","0701","0702","0703","0704","0705","0801","0802","0803","0804","0805"]},{"id":"D02","z":"D","bays":["01","02","03","04","05","06","07","08"],"nl":5,"binset":["0101","0102","0103","0104","0105","0201","0202","0203","0204","0205","0301","0302","0303","0304","0305","0401","0402","0403","0404","0405","0501","0502","0503","0504","0505","0601","0602","0603","0604","0605","0701","0702","0703","0704","0705","0801","0802","0803","0804","0805"]},{"id":"D03","z":"D","bays":["01"],"nl":6,"binset":["0101","0102","0103","0104","0105","0106"]},{"id":"E00","z":"E","bays":["01"],"nl":6,"binset":["0101","0102","0103","0104","0105","0106"]},{"id":"E01","z":"E","bays":["01","02","03","04","05","06","07"],"nl":5,"binset":["0101","0102","0103","0104","0105","0201","0202","0203","0204","0205","0301","0302","0303","0304","0305","0401","0402","0403","0404","0405","0501","0502","0503","0504","0505","0601","0602","0603","0604","0605","0701","0702","0703","0704","0705"]},{"id":"E02","z":"E","bays":["01","02","03","04","05","06","07"],"nl":5,"binset":["0101","0102","0103","0104","0105","0201","0202","0203","0204","0205","0301","0302","0303","0304","0305","0401","0402","0403","0404","0405","0501","0502","0503","0504","0505","0601","0602","0603","0604","0605","0701","0702","0703","0704","0705"]},{"id":"E03","z":"E","bays":["01"],"nl":6,"binset":["0101","0102","0103","0104","0105","0106"]},{"id":"F01","z":"F","bays":["01","02","03","04","05","06","07","08","09"],"nl":5,"binset":["0101","0102","0103","0104","0105","0201","0202","0203","0204","0205","0301","0302","0303","0304","0305","0401","0402","0403","0404","0405","0501","0502","0503","0504","0505","0601","0602","0603","0604","0605","0701","0702","0703","0704","0705","0801","0802","0803","0804","0805","0901","0902","0903","0904","0905"]},{"id":"G01","z":"G","bays":["01","02","03"],"nl":6,"binset":["0101","0102","0103","0104","0105","0106","0201","0202","0203","0204","0205","0206","0301","0302","0303","0304","0305","0306"]},{"id":"G02","z":"G","bays":["01","02","03"],"nl":6,"binset":["0101","0102","0103","0104","0105","0106","0201","0202","0203","0204","0205","0206","0301","0302","0303","0304","0305","0306"]},{"id":"G03","z":"G","bays":["01"],"nl":6,"binset":["0101","0102","0103","0104","0105","0106"]},{"id":"U01","z":"U","bays":["01","02","03","04","05"],"nl":5,"binset":["0101","0102","0103","0104","0105","0201","0202","0203","0204","0205","0301","0302","0303","0304","0305","0401","0402","0403","0404","0405","0501","0502","0503","0504","0505"]},{"id":"U02","z":"U","bays":["01","02","03","04","05"],"nl":5,"binset":["0101","0102","0103","0104","0105","0201","0202","0203","0204","0205","0301","0302","0303","0304","0305","0401","0402","0403","0404","0405","0501","0502","0503","0504","0505"]},{"id":"U03","z":"U","bays":["01","02","03","04","05"],"nl":5,"binset":["0101","0102","0103","0104","0105","0201","0202","0203","0204","0205","0301","0302","0303","0304","0305","0401","0402","0403","0404","0405","0501","0502","0503","0504","0505"]},{"id":"U04","z":"U","bays":["01","02","03","04","05"],"nl":5,"binset":["0101","0102","0103","0104","0105","0201","0202","0203","0204","0205","0301","0302","0303","0304","0305","0401","0402","0403","0404","0405","0501","0502","0503","0504","0505"]},{"id":"U05","z":"U","bays":["01","02","03","04","05","06"],"nl":5,"binset":["0101","0102","0103","0104","0105","0201","0202","0203","0204","0205","0301","0302","0303","0304","0305","0401","0402","0403","0404","0405","0501","0502","0503","0504","0505","0601","0602","0603","0604","0605"]},{"id":"U06","z":"U","bays":["01","02","03","04","05","06"],"nl":5,"binset":["0101","0102","0103","0104","0105","0201","0202","0203","0204","0205","0301","0302","0303","0304","0305","0401","0402","0403","0404","0405","0501","0502","0503","0504","0505","0601","0602","0603","0604","0605"]},{"id":"U07","z":"U","bays":["01","02","03"],"nl":5,"binset":["0101","0102","0103","0104","0105","0201","0202","0203","0204","0205","0301","0302","0303","0304","0305"]},{"id":"U08","z":"U","bays":["01","02","03","04"],"nl":5,"binset":["0101","0102","0103","0104","0105","0201","0202","0203","0204","0205","0301","0302","0303","0304","0305","0401","0402","0403","0404","0405"]},{"id":"Z01","z":"Z","bays":["01"],"nl":1,"binset":["0101"]},{"id":"A01P","z":"A","pallets":["A01Pallet01","A01Pallet02"]},{"id":"U01P","z":"U","pallets":["U01Pallet01","U01Pallet02","U01Pallet03"]},{"id":"Z01P","z":"Z","pallets":["Z01Pallet01","Z01Pallet02","Z01Pallet03","Z01Pallet04","Z01Pallet05"]},{"id":"D01050","z":"D","pallets":["D010501ED"]},{"id":"INOFFI","z":"I","pallets":["InOffice"]},{"id":"UHAIR","z":"U","pallets":["UHAIR"]}];
+// ===== 창고(warehouse) =====
 const WAREHOUSES=[
   {id:'toronto', label:'토론토',   prefix:'',  defs:SHELF_DEFS},
   {id:'edmonton',label:'에드먼턴', prefix:'E', defs:(typeof EDMONTON_DEFS!=='undefined'?EDMONTON_DEFS:[])},
@@ -538,7 +539,7 @@ function enterRack(id){
   curRack=id; curBay=null; const r=byId(id); const col=ZONE_COLORS[r.z]||'#666';
   if(isPallet(r)){ // pallets are locations directly
     level='locs';
-    const cards=(r.pallets||[]).map(code=>locCardHtml(code,col)).join('');
+    const cards=rackLocs(r).map(code=>locCardHtml(code,col)).join('');
     fillCol('Locs',`${curWH.prefix}${id} — 파렛트`,'로케이션 클릭 → 제품',cards); setColumns();
     updateCrumbs(); setInfo(id); return;
   }
@@ -632,7 +633,7 @@ function openItem(idx){
     <div class="lp-field"><label>SKU / 코드</label><input id="lpSku" value="${esc(it.sku||'')}" placeholder="예: CON64040"></div>
     <div class="lp-field"><label>제품명</label><input id="lpName" value="${esc(it.name||P.name||'')}" placeholder="예: Gummy Styling Wax 150ml"></div>
     <div class="lp-field"><label>비고</label><input id="lpNote" value="${esc(it.note||'')}" placeholder="선택"></div>
-    <div class="lp-actions"><button class="tbtn green" onclick="saveItem()">저장</button>${idx>=0?'<button class="tbtn danger" onclick="delItem()">삭제</button>':''}</div>`;
+    <div class="lp-actions"><button class="tbtn green" onclick="saveItem()">저장</button>${idx>=0?'<button class="tbtn danger" onclick="delItem()">내 화면에서 숨김</button>':''}</div>`;
 }
 
 // ── 실제위치 수정 (write-back) ──
@@ -640,11 +641,20 @@ function allLocsOfWH(){ const set=new Set(); whDefs().forEach(d=>rackLocs(d).for
 function alSuggest(q){
   const box=document.getElementById('alSug'); if(!box)return;
   q=(q||'').trim().toUpperCase();
-  if(q.length<1){box.classList.remove('show');box.innerHTML='';return;}
   const all=[...allLocsOfWH()];
-  const starts=all.filter(c=>c.indexOf(q)===0);
-  const incl=all.filter(c=>c.indexOf(q)>0);
-  const list=starts.concat(incl).slice(0,40).filter(c=>c!==curLoc);
+  let list;
+  if(q.length<1){
+    // 탭 즉시: 같은 랙 → 같은 존 → 전체 순으로 주변 로케이션 제시
+    const p=parseCode(curLoc)||{};
+    const sameRack=p.rack?all.filter(c=>c.indexOf(curWH.prefix+p.rack)===0):[];
+    const sameZone=p.zone?all.filter(c=>c.indexOf(curWH.prefix+p.zone)===0&&sameRack.indexOf(c)===-1):[];
+    list=sameRack.concat(sameZone,all.filter(c=>sameRack.indexOf(c)===-1&&sameZone.indexOf(c)===-1));
+  } else {
+    const starts=all.filter(c=>c.indexOf(q)===0);
+    const incl=all.filter(c=>c.indexOf(q)>0);
+    list=starts.concat(incl);
+  }
+  list=list.filter(c=>c!==curLoc).slice(0,40);
   if(!list.length){box.innerHTML='<div style="color:#8a90a2;cursor:default">일치하는 로케이션 없음</div>';box.classList.add('show');return;}
   box.innerHTML=list.map(c=>`<div onclick="alPick('${c}')">${c}</div>`).join('');
   box.classList.add('show');
@@ -698,7 +708,9 @@ function saveItem(){
   OVER[curLoc]=arr; saveLayout(); recompute(); renderLocList(); refreshDrill(); updateCount(); setInfo(curLoc+' 저장됨(내 수정)');
 }
 function delItem(){
-  if(curItemIdx<0||!curLoc)return; let arr=locItems(curLoc).slice(); arr.splice(curItemIdx,1);
+  if(curItemIdx<0||!curLoc)return;
+  if(!confirm('이 항목을 내 브라우저 화면에서만 숨깁니다.\nBQ·Cin7·동료 화면의 데이터는 변경되지 않습니다.\n(되돌리려면 ↩ 초기화)\n\n계속할까요?'))return;
+  let arr=locItems(curLoc).slice(); arr.splice(curItemIdx,1);
   OVER[curLoc]=arr;  // 빈 배열이면 자동값도 숨김
   saveLayout(); recompute(); renderLocList(); refreshDrill(); updateCount(); setInfo('삭제됨(내 수정)');
 }
@@ -738,7 +750,17 @@ function runSearch(q){
     if(hay.indexOf(q)!==-1){ res.push({...bySku[sku],P}); if(res.length>=25)break; }
   }
   if(!res.length){box.innerHTML='<div class="sr-empty">검색 결과 없음 — 매핑된 로케이션의 제품에서 찾습니다</div>';box.classList.add('show');return;}
-  box.innerHTML=res.map(r=>{
+  // 로케이션 요약: 이 검색에 걸린 SKU들이 깔린 로케이션 전체 (중복 제거)
+  const binSet=new Map();
+  res.forEach(r=>r.bins.forEach(b=>{ if(!binSet.has(b.bin))binSet.set(b.bin,b.past); }));
+  const binArr=[...binSet.entries()];
+  const MAXCH=14;
+  const summary=res.length>1?`<div class="sr-row" style="background:#f7f9fc">
+      <div class="sr-main">
+        <div class="sr-name">📍 로케이션 요약 — SKU ${res.length}개 · 로케이션 ${binArr.length}곳</div>
+        <div class="sr-bins">${binArr.slice(0,MAXCH).map(([b,past])=>`<span class="sr-bin${past?' zero':''}" onclick="gotoLoc('${b}')">${b}</span>`).join('')}${binArr.length>MAXCH?`<span class="sr-bin" style="cursor:default;background:#eef0f3;color:#8a90a2">외 ${binArr.length-MAXCH}곳</span>`:''}</div>
+      </div></div>`:'';
+  box.innerHTML=summary+res.map(r=>{
     const img=r.P.image?`<img src="${esc(r.P.image)}" loading="lazy" onerror="this.style.visibility='hidden'">`:'<img style="visibility:hidden">';
     const bins=r.bins.map(b=>`<span class="sr-bin${b.past?' zero':''}" onclick="gotoLoc('${b.bin}')">${b.bin}${b.past?' (0)':''}</span>`).join('');
     return `<div class="sr-row">${img}<div class="sr-main">
