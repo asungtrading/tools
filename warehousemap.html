@@ -314,7 +314,7 @@ const EXTRAS = ["Aoneroom","B0601002","CASHIER0201","CASHIER0202","CASHIER0203",
 const ZONE_COLORS={A:'#b52626',B:'#6b23a0',C:'#c45200',D:'#145a8f',E:'#0e7a66',F:'#5a8c00',G:'#b02060',H:'#106438',J:'#9a7500',K:'#0e5a8a',R:'#b84800',W:'#5a2a80',Z:'#3a4460'};
 // ===== constants / state =====
 const BAY_W=48, LEVEL_H=26, SNAP=12;
-const APP_VER='v29.4';
+const APP_VER='v29.5';
 const LAYOUT_KEY='asung_whzone_layout_v1', PROD_KEY='asung_whclean_prod_v1';
 // 팀 공유 기본 레이아웃 — localStorage에 저장본이 없을 때 이 값으로 그린다.
 // (도구에서 '🧭 레이아웃 → 복사'한 JSON을 여기에 붙여넣으면 모두가 같은 배치를 본다)
@@ -629,6 +629,14 @@ function openItem(idx){
         <div class="al-sug" id="alSug"></div>
       </div>
       <div id="alMsg" style="font-size:11px;color:var(--mid);margin-top:6px">${WHMAP_SYNC_URL?'':'⚠️ 연동 URL 미설정 — WHMAP_SYNC_URL 입력 후 사용 가능'}</div>
+    </div>
+    <div class="lp-sec">
+      <h4>📦 실제 재고가 다른가요? (기록 → 구글시트 → 담당자 확인 후 Cin7 수정)</h4>
+      <div class="al-row">
+        <input id="aqVal" type="number" inputmode="numeric" min="0" placeholder="실제 수량 입력 (시스템: ${st===null?'—':st})">
+        <button class="tbtn" onclick="saveActualQty()">기록</button>
+      </div>
+      <div id="aqMsg" style="font-size:11px;color:var(--mid);margin-top:6px"></div>
     </div>`:'';
   document.getElementById('lpView').innerHTML=`
     <button class="lp-back" onclick="renderLocList()">‹ 목록으로</button>
@@ -690,7 +698,7 @@ async function saveActualLoc(){
   let user=localStorage.getItem(WM_USER_KEY); if(!user){user=prompt('이름(기록용)')||''; localStorage.setItem(WM_USER_KEY,user);}
   const _sug=document.getElementById('alSug'); if(_sug)_sug.classList.remove('show');
   msg.textContent='저장 중…';
-  const payload=pin=>({action:'save_correction',pin:pin||'',user,warehouse:curWH.label,sku:it.sku,product_name:it.name||'',system_loc:curLoc,actual_loc:val,memo:''});
+  const payload=pin=>({action:'save_correction',type:'LOC',pin:pin||'',user,warehouse:curWH.label,sku:it.sku,product_name:it.name||'',system_loc:curLoc,actual_loc:val,memo:''});
   try{
     // 1차: 저장된 PIN(없으면 빈 값) — 서버가 open 모드면 그대로 통과
     let r=await wmCall(payload(localStorage.getItem(WM_PIN_KEY)||''));
@@ -701,6 +709,30 @@ async function saveActualLoc(){
       r=await wmCall(payload(pin));
     }
     if(r&&r.ok){msg.textContent='✅ 기록됨: '+it.sku+' → '+val;}
+    else{msg.textContent='⚠️ '+((r&&r.error)||'저장 실패'); if(r&&/PIN/.test(r.error||''))localStorage.removeItem(WM_PIN_KEY);}
+  }catch(e){msg.textContent='⚠️ '+e.message;}
+}
+async function saveActualQty(){
+  const msg=document.getElementById('aqMsg');
+  const items=locItems(curLoc); const it=items[curItemIdx]; if(!it)return;
+  const raw=(document.getElementById('aqVal').value||'').trim();
+  if(raw===''){msg.textContent='실제 수량을 입력하세요';return;}
+  const qty=parseInt(raw,10);
+  if(isNaN(qty)||qty<0){msg.textContent='⚠️ 0 이상의 숫자만';return;}
+  const sysQty=itemStock(it);
+  if(sysQty!==null&&qty===sysQty){msg.textContent='시스템 재고와 동일합니다 ('+sysQty+')';return;}
+  if(!WHMAP_SYNC_URL){msg.textContent='⚠️ 연동 URL 미설정';return;}
+  let user=localStorage.getItem(WM_USER_KEY); if(!user){user=prompt('이름(기록용)')||''; localStorage.setItem(WM_USER_KEY,user);}
+  msg.textContent='저장 중…';
+  const payload=pin=>({action:'save_correction',type:'QTY',pin:pin||'',user,warehouse:curWH.label,sku:it.sku,product_name:it.name||'',system_loc:curLoc,system_qty:(sysQty===null?'':sysQty),actual_qty:qty,memo:''});
+  try{
+    let r=await wmCall(payload(localStorage.getItem(WM_PIN_KEY)||''));
+    if(r&&!r.ok&&/PIN/.test(r.error||'')){
+      const pin=prompt('수정 PIN 입력'); if(!pin){msg.textContent='취소됨';return;}
+      localStorage.setItem(WM_PIN_KEY,pin);
+      r=await wmCall(payload(pin));
+    }
+    if(r&&r.ok){msg.textContent='✅ 기록됨: '+it.sku+' 재고 '+(sysQty===null?'—':sysQty)+' → '+qty;}
     else{msg.textContent='⚠️ '+((r&&r.error)||'저장 실패'); if(r&&/PIN/.test(r.error||''))localStorage.removeItem(WM_PIN_KEY);}
   }catch(e){msg.textContent='⚠️ '+e.message;}
 }
