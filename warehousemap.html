@@ -1,0 +1,877 @@
+<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Asung Warehouse Map</title>
+<style>
+:root{--bg:#f6f7f9;--surface:#fff;--border:#e2e5ea;--text:#1c2333;--dim:#8a90a2;--mid:#5b6480;--accent:#1a6fd4;--green:#1a936f}
+*{box-sizing:border-box}html,body{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:var(--text);background:var(--bg)}
+body{display:flex;flex-direction:column;overflow:hidden}
+header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.logo{font-family:'DM Mono',monospace;font-weight:800;font-size:15px}.logo small{display:block;font-size:9px;color:var(--dim);font-weight:600}
+.tbtn{border:1px solid var(--border);background:#fff;border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer;color:var(--mid)}
+.tbtn:hover{background:#f0f2f5}.tbtn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.tbtn.green{background:var(--green);color:#fff;border-color:var(--green)}.tbtn.danger{color:#e5484d}
+.grp{display:flex;gap:6px;align-items:center}.divider{width:1px;height:24px;background:var(--border);margin:0 4px}
+.spacer{flex:1}.zoomv{font-family:'DM Mono',monospace;font-size:12px;color:var(--mid);min-width:42px;text-align:center}
+.crumbs{padding:8px 16px;background:var(--surface);border-bottom:1px solid var(--border);font-size:12px;font-family:'DM Mono',monospace;display:flex;gap:8px;align-items:center;flex-shrink:0;flex-wrap:wrap}
+.crumb{color:var(--accent);cursor:pointer;font-weight:700}.crumb.cur{color:var(--text);cursor:default}.csep{color:var(--dim)}
+.hint{color:var(--dim);font-weight:600}
+.wrap{flex:1;position:relative;overflow:hidden}
+#svgWrap{position:absolute;inset:0;transform-origin:0 0}
+#svgWrap.anim{transition:transform .32s cubic-bezier(.4,0,.2,1)}
+.wrap.pan{cursor:grab}.wrap.pan.panning{cursor:grabbing}.wrap.edit{cursor:default}
+/* drill card grid overlay */
+/* ===== 밀러 컬럼 ===== */
+#cols{position:absolute;inset:0;display:flex;align-items:stretch}
+.col{display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--border);background:var(--bg);
+  transition:flex-basis .26s cubic-bezier(.4,0,.2,1),background .15s}
+.col[hidden]{display:none}
+#colMap{flex:1 1 0;position:relative;overflow:hidden;background:var(--bg)}
+.col-list{flex:1 1 320px;overflow:hidden}
+.col-list:not([hidden]):not(.mini){animation:colIn .26s cubic-bezier(.4,0,.2,1)}
+@keyframes colIn{from{opacity:.2;transform:translateX(26px)}to{opacity:1;transform:none}}
+.col-head{padding:9px 14px;border-bottom:1px solid var(--border);background:#fff;flex-shrink:0}
+.col-head .dtitle{margin:0}
+.col-head .dsub{margin:2px 0 0}
+.col-body{flex:1;overflow:auto;padding:16px}
+.col-body .dgrid{animation:gridIn .26s ease}
+@keyframes gridIn{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
+.col.mini{flex:0 0 34px;cursor:pointer;background:#fff;align-items:center;overflow:hidden;padding-top:8px}
+.col.mini:hover{background:#eef4fd}
+.col.mini .col-head,.col.mini .col-body{display:none}
+.col.mini .vlabel{display:flex}
+.vlabel{display:none;writing-mode:vertical-rl;text-orientation:mixed;font-weight:800;font-size:13px;letter-spacing:1px;color:#1c2333;gap:7px;align-items:center;white-space:nowrap;font-family:'DM Mono',monospace}
+.vlabel .vico{writing-mode:horizontal-tb;font-size:14px}
+.vlabel .vchip{writing-mode:horizontal-tb;width:16px;height:16px;border-radius:5px;flex-shrink:0}
+#colMap.mini{flex:0 0 34px}
+#colMap.mini svg,#colMap.mini #svgWrap{display:none}
+
+/* ===== 모바일: 컬럼을 세로로 쌓기 (접힌 단계 = 상단 가로 바) ===== */
+@media (max-width:768px){
+  #cols{flex-direction:column}
+  .col{border-right:none;border-bottom:1px solid var(--border)}
+  .col.mini{flex:0 0 42px;width:100%;flex-direction:row;align-items:center;padding:0 14px;gap:10px}
+  #colMap.mini{flex:0 0 42px}
+  .vlabel{writing-mode:horizontal-tb;margin-top:0;letter-spacing:.5px}
+  .vlabel .vchip{width:14px;height:14px}
+  .col-list{flex:1 1 auto}
+  .col-list:not([hidden]):not(.mini){animation:colInV .26s cubic-bezier(.4,0,.2,1)}
+  .col-body{padding:12px}
+  .dgrid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:9px}
+  /* 제품 패널 = 바텀시트 (아래서 올라옴) */
+  #locPanel{width:100%;left:0;right:0;top:auto;bottom:0;height:84vh;border-left:none;border-top:1px solid var(--border);border-radius:16px 16px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.14);transform:translateY(100%)}
+  #locPanel.show{transform:none}
+  #locPanel .lp-body{padding-bottom:56px}
+  /* 헤더 압축: 세로 공간 최소화 */
+  header{padding:5px 8px;gap:5px}
+  .logo{font-size:13px}
+  .logo small{display:none}
+  .divider{display:none}
+  .tbtn{padding:5px 9px;font-size:11px;border-radius:7px}
+  .grp{gap:4px}
+  .srch-wrap{order:9;width:100%}
+  .srch-in{width:100%}
+  #srchRes{width:min(430px,94vw)}
+  .zoomv{min-width:32px;font-size:11px}
+  .crumbs{padding:6px 10px;font-size:11px}
+  .statusbar{display:none}
+}
+@keyframes colInV{from{opacity:.2;transform:translateY(22px)}to{opacity:1;transform:none}}
+.dtitle{font-size:14px;font-weight:800;margin:0 0 4px}
+.dsub{font-size:12px;color:var(--dim);margin:0 0 16px}
+.dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;max-width:1100px}
+.dcard{border:1px solid var(--border);border-left:5px solid var(--accent);border-radius:11px;background:#fff;padding:14px;cursor:pointer;transition:box-shadow .1s,transform .05s}
+.dcard:hover{box-shadow:0 6px 16px rgba(0,0,0,.08);transform:translateY(-1px)}
+.dcard.mapped{background:#f2fbf7}
+.dcard .c-id{font-family:'DM Mono',monospace;font-size:18px;font-weight:800}
+.dcard .c-sub{font-size:11px;color:var(--mid);margin-top:5px;font-weight:600}
+.dcard .c-prod{font-size:11px;color:#146a52;font-weight:700;margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dbar{height:6px;border-radius:3px;background:#eef0f3;margin-top:9px;overflow:hidden}
+.dbar>i{display:block;height:100%;background:var(--green)}
+/* location panel */
+#locPanel{position:absolute;top:0;right:0;bottom:0;width:340px;background:#fff;border-left:1px solid var(--border);box-shadow:-4px 0 20px rgba(0,0,0,.06);transform:translateX(100%);transition:transform .2s,visibility 0s .2s;visibility:hidden;z-index:30;display:flex;flex-direction:column}
+#locPanel.show{visibility:visible;transition:transform .2s}
+#locPanel.show{transform:none}
+.lp-head{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center}
+.lp-head .code{font-family:'DM Mono',monospace;font-size:20px;font-weight:800}
+.lp-head .x{margin-left:auto;cursor:pointer;font-size:20px;color:var(--dim);border:none;background:none}
+.lp-body{padding:16px;overflow:auto;flex:1}
+.lp-meta{font-size:11px;color:var(--dim);font-family:'DM Mono',monospace;margin-bottom:14px;line-height:1.6}
+.lp-field{margin-bottom:12px}.lp-field label{display:block;font-size:11px;font-weight:700;color:var(--mid);margin-bottom:4px}
+.lp-field input{width:100%;border:1px solid var(--border);border-radius:8px;padding:9px 10px;font-size:13px;font-family:inherit}
+.lp-field input:focus{outline:none;border-color:var(--accent)}
+.lp-actions{display:flex;gap:8px;margin-top:8px}.lp-actions .tbtn{flex:1;text-align:center}
+.lp-cur{background:#f0f6ff;border:1px solid #cfe0f7;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:13px}
+.lp-cur .p-name{font-weight:800}.lp-cur .p-sku{font-family:'DM Mono',monospace;font-size:11px;color:var(--mid);margin-top:2px}
+.lp-empty{color:var(--dim);font-size:12px;margin-bottom:14px}
+.lp-item{border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:8px;cursor:pointer;display:flex;flex-direction:column;gap:2px}
+.lp-item:hover{background:#f0f6ff;border-color:var(--accent)}
+.lp-item .p-sku{font-family:'DM Mono',monospace;font-weight:800;font-size:13px;color:var(--text)}
+.lp-item .p-name{font-size:12px;color:var(--mid)}
+.lp-add{width:100%;text-align:center;margin-top:6px}
+.lp-back{background:none;border:none;color:var(--accent);font-weight:700;cursor:pointer;font-size:12px;padding:0;margin-bottom:12px}
+.lp-count{font-size:12px;color:var(--mid);margin-bottom:10px;font-weight:700}
+.lp-item{position:relative}
+.lp-item .stk{margin-left:auto;font-family:'DM Mono',monospace;font-size:11px;font-weight:800;color:#146a52;background:#e7f6ef;border-radius:6px;padding:2px 7px;align-self:flex-start}
+.lp-item .stk.zero{color:#8a90a2;background:#eef0f3}
+.lp-item.zero{opacity:.62}
+.lp-item .p-row1{display:flex;gap:8px;align-items:center}
+.pcard{display:flex;gap:12px;border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;background:#fafbfc}
+.pcard img{width:72px;height:72px;object-fit:cover;border-radius:8px;background:#eef0f3;cursor:zoom-in}
+.pcard .pc-name{font-weight:800;font-size:13px;line-height:1.35}
+.pcard .pc-sku{font-family:'DM Mono',monospace;font-size:11px;color:var(--mid);margin-top:2px}
+.pcard table{font-size:11px;margin-top:6px;border-collapse:collapse}
+.pcard td{padding:1px 8px 1px 0;color:var(--mid)}
+.pcard td.v{color:var(--text);font-weight:600}
+.badge-new{display:inline-block;background:#e5484d;color:#fff;font-size:9px;font-weight:800;border-radius:4px;padding:1px 5px;margin-left:6px;vertical-align:middle}
+.badge-past{display:inline-block;background:#eef0f3;color:#8a90a2;font-size:10px;font-weight:700;border-radius:4px;padding:1px 6px;margin-left:6px}
+.dcard.past{background:#f5f5f7}
+.dcard.past .c-prod{color:#8a90a2}
+.srch-wrap{position:relative}
+.srch-in{border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;width:270px}
+.srch-in:focus{outline:none;border-color:var(--accent)}
+#srchRes{position:absolute;top:34px;left:0;width:430px;max-height:480px;overflow:auto;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.14);z-index:60;display:none}
+#srchRes.show{display:block}
+.sr-row{display:flex;gap:10px;padding:10px 12px;border-bottom:1px solid #f0f1f4;align-items:center}
+.sr-row img{width:40px;height:40px;object-fit:cover;border-radius:6px;background:#eef0f3;flex-shrink:0}
+.sr-main{flex:1;min-width:0}
+.sr-name{font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sr-sub{font-size:10px;color:var(--mid);font-family:'DM Mono',monospace;margin-top:2px}
+.sr-bins{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+.sr-bin{font-family:'DM Mono',monospace;font-size:10px;font-weight:800;color:#0e5a8a;background:#e8f1fa;border-radius:5px;padding:2px 6px;cursor:pointer}
+.sr-bin:hover{background:#1a6fd4;color:#fff}
+.sr-bin.zero{color:#8a90a2;background:#eef0f3}
+.sr-empty{padding:14px;font-size:12px;color:var(--dim)}
+.al-row{display:flex;gap:6px;position:relative}
+.al-row input{flex:1}
+.al-sug{position:absolute;top:38px;left:0;right:74px;max-height:190px;overflow:auto;background:#fff;border:1px solid var(--border);border-radius:9px;box-shadow:0 10px 26px rgba(0,0,0,.14);z-index:50;display:none}
+.al-sug.show{display:block}
+.al-sug div{padding:9px 12px;font-family:'DM Mono',monospace;font-size:13px;font-weight:700;cursor:pointer;border-bottom:1px solid #f0f1f4}
+.al-sug div:active,.al-sug div:hover{background:#e8f1fa}
+.lp-sec{border-top:1px dashed var(--border);margin-top:14px;padding-top:12px}
+.lp-sec h4{margin:0 0 8px;font-size:11px;color:var(--mid)}
+#modal{position:absolute;inset:0;background:rgba(20,26,40,.4);z-index:40;display:none;align-items:center;justify-content:center}
+#modal.show{display:flex}
+.mbox{background:#fff;border-radius:14px;width:min(560px,92vw);padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.mbox h3{margin:0 0 6px;font-size:16px}.mbox p{margin:0 0 12px;font-size:12px;color:var(--mid);line-height:1.5}
+.mbox textarea{width:100%;height:180px;border:1px solid var(--border);border-radius:8px;padding:10px;font-family:'DM Mono',monospace;font-size:12px;resize:vertical}
+.mbox .row{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+.statusbar{padding:5px 14px;background:var(--surface);border-top:1px solid var(--border);font-size:11px;color:var(--mid);font-family:'DM Mono',monospace;display:flex;gap:16px;flex-shrink:0}
+.sb-ok{color:var(--green);font-weight:700}
+.ehandle{fill:#fff;stroke:var(--accent);stroke-width:2.5;cursor:nwse-resize}.ehandle.e{cursor:ew-resize}.ehandle.s{cursor:ns-resize}
+.edel{fill:#e5484d;cursor:pointer}
+</style></head><body>
+<header>
+  <div class="logo">ASUNG WAREHOUSE<small>존 → 랙 → 베이 → 로케이션 → 제품</small></div>
+  <div class="divider"></div>
+  <div class="grp" id="whTabs"></div>
+  <div class="divider"></div>
+  <div class="grp srch-wrap">
+    <input class="srch-in" id="srch" placeholder="🔍 SKU · 바코드 · 브랜드 · 서플라이어 검색" oninput="runSearch(this.value)" onfocus="runSearch(this.value)">
+    <div id="srchRes"></div>
+  </div>
+  <div class="divider"></div>
+  <div class="grp"><button class="tbtn" id="modeBtn" onclick="toggleMode()">✏️ 존 위치 편집</button></div>
+  <div class="grp" id="structTools" style="display:none"><button class="tbtn" onclick="addStruct()">➕ 구조물</button><span class="hint">선택 후 모서리=크기 · 우상단 ×=삭제 · 더블클릭=이름</span></div>
+  <div class="divider"></div>
+  <div class="grp"><button class="tbtn" onclick="openImport()">⬇ 제품 매핑 가져오기</button></div>
+  <div class="divider"></div>
+  <div class="grp"><button class="tbtn green" onclick="saveLayout()">💾 저장</button><button class="tbtn" onclick="openLayout()">🧭 레이아웃</button><button class="tbtn danger" onclick="resetAll()">↩ 초기화</button></div>
+  <div class="spacer"></div>
+  <div class="grp"><button class="tbtn" onclick="zoomBy(1/1.2)">−</button><span class="zoomv" id="zoomv">100%</span><button class="tbtn" onclick="zoomBy(1.2)">+</button><button class="tbtn" onclick="fitZones()">리셋 뷰</button></div>
+</header>
+<div class="crumbs" id="crumbs"></div>
+<div class="wrap pan" id="wrap">
+  <div id="cols">
+    <div class="col" id="colMap" onclick="colMapClick(event)">
+      <div class="vlabel" id="vlabMap"><span class="vico">🗺️</span>전체 존</div>
+      <div id="svgWrap"></div>
+    </div>
+    <div class="col col-list" id="colRacks" hidden onclick="colMiniClick(event,'racks')">
+      <div class="vlabel" id="vlabRacks"></div>
+      <div class="col-head" id="headRacks"></div>
+      <div class="col-body" id="bodyRacks"></div>
+    </div>
+    <div class="col col-list" id="colBays" hidden onclick="colMiniClick(event,'bays')">
+      <div class="vlabel" id="vlabBays"></div>
+      <div class="col-head" id="headBays"></div>
+      <div class="col-body" id="bodyBays"></div>
+    </div>
+    <div class="col col-list" id="colLocs" hidden onclick="colMiniClick(event,'locs')">
+      <div class="vlabel" id="vlabLocs"></div>
+      <div class="col-head" id="headLocs"></div>
+      <div class="col-body" id="bodyLocs"></div>
+    </div>
+  </div>
+  <div id="locPanel">
+    <div class="lp-head"><span class="code" id="lpCode">—</span><button class="x" onclick="closeLoc()">×</button></div>
+    <div class="lp-body">
+      <div class="lp-meta" id="lpMeta"></div>
+      <div id="lpView"></div>
+    </div>
+  </div>
+  <div id="layoutModal"><div class="mbox">
+    <h3>존 레이아웃 (팀 공유용)</h3>
+    <p>아래는 <b>현재 창고의 배치</b>입니다. <b>복사</b>해서 전달하면 파일에 기본값으로 넣어 모두가 같은 배치를 봅니다. 다른 배치 JSON을 붙여넣고 <b>적용</b>하면 즉시 반영됩니다.</p>
+    <textarea id="layoutText" spellcheck="false"></textarea>
+    <div class="row"><button class="tbtn" onclick="copyLayout()">📋 복사</button><button class="tbtn" onclick="closeLayout()">닫기</button><button class="tbtn green" onclick="applyLayout()">적용</button></div>
+  </div></div>
+  <div id="modal"><div class="mbox">
+    <h3>제품 매핑 가져오기</h3>
+    <p>CSV(줄마다 <b>location,sku,name,비고</b> · 같은 로케이션 여러 줄=여러 SKU) 또는 JSON(<b>{"A010101":{"sku":"...","name":"..."}}</b>). BQ product master export를 그대로 넣으면 됩니다.</p>
+    <textarea id="importText" placeholder="A010101,CON64040,Gummy Wax 150ml&#10;A010102,CON64041,Gummy Gel 700ml"></textarea>
+    <div class="row"><button class="tbtn" onclick="closeImport()">취소</button><button class="tbtn green" onclick="applyImport()">적용</button></div>
+  </div></div>
+</div>
+<div class="statusbar"><span id="sbMode">🔒 뷰 모드</span><span id="sbInfo"></span><span id="sbSave"></span><span id="sbAuto"></span><span class="spacer"></span><span id="sbCount"></span></div>
+<script>
+const SHELF_DEFS = [
+  // Zone A
+  {id:'A01',x:2680,y:300,z:'A',rot:0,bays:[1,2,3,4,5],nl:5,binset:["0101","0102","0103","0104","0105","0201","0202","0203","0204","0205","0301","0302","0303","0304","0305","0401","0402","0403","0404","0405","0501","0502","0503","0504","0505"],pallets:["A0100PALLET01"]},
+  {id:'A02',x:2100,y:1352,z:'A',horiz:true,rot:0,bays:[1,2,3],nl:7,binset:["0101","0102","0103","0104","0105","0106","0107","0201","0202","0203","0204","0205","0206","0207","0301","0302","0303","0304","0305","0306","0307"]},
+  {id:'A03',x:2100,y:250,z:'A',horiz:true,rot:0,bays:[1],nl:1,binset:["0101"]},
+  {id:'A05',x:2100,y:296,z:'A',horiz:true,rot:0,bays:[0,1,2,3,4,5,6,7,8,9],nl:7,binset:["0001","0002","0003","0004","0005","0006","0007","0101","0102","0103","0104","0105","0201","0202","0203","0204","0205","0301","0302","0303","0304","0305","0401","0402","0403","0404","0405","0501","0502","0503","0504","0505","0601","0602","0603","0604","0605","0701","0702","0703","0704","0705","0801","0802","0803","0804","0805","0901","0902","0903","0904","0905"]},
+  {id:'A06',x:2100,y:498,z:'A',horiz:true,rot:0,bays:[0,1,2,3,4,5,6,7,8,9],nl:7,binset:["0001","0002","0003","0004","0005","0006","0007","0101","0102","0103","0104","0105","0201","0202","0203","0204","0205","0301","0302","0303","0304","0305","0401","0402","0403","0404","0405","0501","0502","0503","0504","0505","0601","0602","0603","0604","0605","0701","0702","0703","0704","0705","0801","0802","0803","0804","0805","0901","0902","0903","0904","0905"]},
+  {id:'A07',x:2100,y:700,z:'A',horiz:true,rot:0,bays:[0,1,2,3,4,5,6,7,8],nl:5,binset:["0001","0002","0003","0004","0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0505","0601","0602","0603","0604","0605","0701","0702","0703","0704","0705","0801","0802","0803","0804","0805"]},
+  {id:'A08',x:2100,y:850,z:'A',horiz:true,rot:0,bays:[0,1,2,3,4,5,6,7,8],nl:6,binset:["0001","0002","0003","0004","0005","0006","0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0505","0601","0602","0603","0604","0605","0701","0702","0703","0704","0705","0801","0802","0803","0804","0805"]},
+  {id:'A09',x:2100,y:1026,z:'A',horiz:true,rot:0,bays:[0,1,2,3,4,5,6,7,8,9,10,11],nl:7,binset:["0001","0002","0003","0004","0005","0006","0007","0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0701","0702","0703","0704","0801","0802","0803","0804","0901","0902","0903","0904","1001","1002","1003","1004","1101","1102","1103","1104"]},
+  {id:'A10',x:2100,y:1228,z:'A',horiz:true,rot:0,bays:[1,2,3,4,5,6,7,8,9,10,11],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0701","0702","0703","0704","0801","0802","0803","0804","0901","0902","0903","0904","1001","1002","1003","1004","1101","1102","1103","1104"],pallets:["A1012PALLET01"]},
+  {id:'A11',x:2680,y:560,z:'A',rot:0,bays:[1,2,3,4,5,6,7,8,9,11],nl:8,binset:["0101","0102","0103","0104","0105","0201","0202","0203","0204","0205","0301","0302","0303","0304","0305","0401","0402","0403","0404","0405","0501","0502","0503","0504","0505","0601","0602","0603","0604","0605","0701","0702","0703","0704","0705","0801","0802","0803","0804","0805","0901","0902","0903","0904","0905","0906","0907","0908","1101","1102","1103","1104","1105"]},
+  // Zone B
+  {id:'B00',x:1080,y:1186,z:'B',horiz:true,rot:0,bays:[1,2,3,4,5],nl:5,binset:["0101","0102","0103","0104","0105","0201","0202","0203","0204","0205","0301","0302","0303","0304","0305","0401","0402","0403","0404","0405","0501","0502","0503","0504","0505"]},
+  {id:'B01',x:1080,y:240,z:'B',horiz:true,rot:0,bays:[1,2,3,6,7,8,9,10,11,12],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0601","0602","0603","0604","0701","0702","0703","0704","0801","0802","0803","0804","0901","0902","0903","0904","1001","1002","1003","1004","1101","1102","1103","1104","1201","1202","1203","1204"],pallets:["B0104PALLET01","B0105PALLET01"]},
+  {id:'B02',x:1080,y:364,z:'B',horiz:true,rot:0,bays:[1,2,3,4,5,6,7,8,9,10,11,12],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0701","0702","0703","0704","0801","0802","0803","0804","0901","0902","0903","0904","1001","1002","1003","1004","1101","1102","1103","1104","1201","1202","1203","1204"]},
+  {id:'B03',x:1080,y:488,z:'B',horiz:true,rot:0,bays:[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15],nl:7,binset:["0001","0002","0003","0004","0005","0006","0007","0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0701","0702","0703","0704","0801","0802","0803","0804","0901","0902","0903","0904","1001","1002","1003","1004","1101","1102","1103","1104","1201","1202","1203","1204","1301","1401","1501"],pallets:["B0313PALLET01"]},
+  {id:'B04',x:1080,y:690,z:'B',horiz:true,rot:0,bays:[1,2,3,4,5,6,7,8,9,10,11,12,13,14],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0701","0702","0703","0704","0801","0802","0803","0804","0901","0902","0903","0904","1001","1002","1003","1004","1101","1102","1103","1104","1201","1202","1203","1204","1301","1302","1303","1304","1401","1402","1403","1404"],pallets:["B0400PALLET01"]},
+  {id:'B05',x:1080,y:814,z:'B',horiz:true,rot:0,bays:[1,2,3,4,5,6,7,8,9,10,11,12,13,14],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0701","0702","0703","0704","0801","0802","0803","0804","0901","0902","0903","0904","1001","1002","1003","1004","1101","1102","1103","1104","1201","1202","1203","1204","1301","1302","1303","1304","1401","1402","1403","1404"],pallets:["B0500PALLET01","B0506PALLET01"]},
+  {id:'B06',x:1080,y:938,z:'B',horiz:true,rot:0,bays:[1,2,3,4,5,6,7,8,9,10,11,12,13,14],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0701","0702","0703","0704","0801","0802","0803","0804","0901","0902","0903","0904","1001","1002","1003","1004","1101","1102","1103","1104","1201","1202","1203","1204","1301","1302","1303","1304","1401","1402","1403","1404"],pallets:["B0600PALLET01","B0606PALLET01"]},
+  {id:'B07',x:1080,y:1062,z:'B',horiz:true,rot:0,bays:[1,2,3,4,5,6,7,8,9,10,11,12,13,14],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0701","0702","0703","0704","0801","0802","0803","0804","0901","0902","0903","0904","1001","1002","1003","1004","1101","1102","1103","1104","1201","1202","1203","1204","1301","1302","1303","1304","1401","1402","1403","1404"],pallets:["B0700PALLET01"]},
+  // Zone C
+  {id:'C01',x:1080,y:1336,z:'C',horiz:true,rot:0,bays:[1,2,3,4,5,7,8,9,10,11,12,13,14],nl:5,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0505","0701","0702","0703","0704","0801","0802","0803","0804","0901","0902","0903","0904","1001","1002","1003","1004","1101","1102","1103","1104","1201","1202","1203","1204","1301","1302","1303","1304","1401","1402","1403","1404"],pallets:["C0100PALLET01","C0106PALLET01","C0106PALLET02"]},
+  {id:'C02',x:1080,y:2660,z:'C',horiz:true,rot:0,bays:[1,2,3,4],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404"],pallets:["C0200PALLET01"]},
+  {id:'C03',x:1080,y:1486,z:'C',horiz:true,rot:0,bays:[0,1,2,3,4,5],nl:4,binset:["0001","0002","0003","0004","0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504"]},
+  {id:'C04',x:1080,y:1610,z:'C',horiz:true,rot:0,bays:[1,2,3,4,5],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504"]},
+  {id:'C05',x:1080,y:1734,z:'C',horiz:true,rot:0,bays:[0,1,2,3,4,5],nl:5,binset:["0001","0002","0003","0004","0005","0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504"]},
+  {id:'C06',x:1080,y:1884,z:'C',horiz:true,rot:0,bays:[1,2,3,4,5],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504"]},
+  {id:'C07',x:1080,y:2008,z:'C',horiz:true,rot:0,bays:[0,1,2,3,4,5],nl:5,binset:["0001","0002","0003","0004","0005","0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504"]},
+  {id:'C08',x:1080,y:2158,z:'C',horiz:true,rot:0,bays:[1,2,3,4,5],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504"]},
+  {id:'C09',x:1080,y:2282,z:'C',horiz:true,rot:0,bays:[0,1,2,3,4,5,6,7,8],nl:5,binset:["0001","0002","0003","0004","0005","0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0604","0704","0804"]},
+  {id:'C10',x:1080,y:2784,z:'C',horiz:true,rot:0,bays:[1,2,3,4,5,6],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0604"]},
+  {id:'C11',x:1080,y:2432,z:'C',horiz:true,rot:0,bays:[1,2,3,4,5,6,7,8,9,10,11,12,13],nl:8,binset:["0101","0102","0103","0104","0105","0201","0202","0203","0204","0205","0301","0302","0303","0304","0305","0401","0402","0403","0404","0405","0501","0502","0503","0504","0505","0601","0602","0603","0604","0605","0701","0702","0703","0704","0705","0801","0802","0803","0804","0805","0901","0902","0903","0904","0905","1001","1002","1003","1004","1005","1101","1102","1103","1104","1105","1106","1107","1201","1202","1203","1204","1205","1206","1207","1208","1301","1302","1303","1304"]},
+  {id:'C12',x:900,y:1212,z:'C',rot:0,bays:[1,2,3],nl:6,binset:["0101","0102","0103","0104","0105","0106","0201","0202","0203","0204","0205","0206","0301","0302","0303","0304","0305","0306"]},
+  // Zone D
+  {id:'D07',x:280,y:1140,z:'D',horiz:true,rot:0,bays:[1,2,3,4,5,6,7,8,9],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0701","0702","0703","0704","0801","0802","0803","0804","0901","0902","0903","0904"]},
+  {id:'D08',x:280,y:1264,z:'D',horiz:true,rot:0,bays:[1,2,3,4,5,6],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604"],pallets:["D0807PALLET01","D0807PALLET02","D0809PALLET01","D0809PALLET02","D0809PALLET03","D0809PALLET04"]},
+  {id:'D09',x:280,y:1388,z:'D',horiz:true,rot:0,bays:[0,1,2,3,4,5,6,7,8],nl:5,binset:["0001","0002","0003","0004","0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0704","0705","0801","0802","0803","0804"],pallets:["D0907PALLET01"]},
+  {id:'D10',x:280,y:1538,z:'D',horiz:true,rot:0,bays:[1,2,3,4,5,6,7,8],nl:5,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0704","0705","0801","0802","0803","0804"],pallets:["D1007PALLET01"]},
+  {id:'D11',x:280,y:1688,z:'D',horiz:true,rot:0,bays:[0,1,2,3,4,5,6,7,8],nl:7,binset:["0001","0002","0003","0004","0005","0006","0007","0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0701","0702","0703","0704","0801","0802","0803","0804"],pallets:["D1108PALLET01","D1108PALLET02"]},
+  // Zone E
+  {id:'E00',x:5200,y:984,z:'E',horiz:true,rot:0,bays:[1,2,3],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304"],pallets:["E0003PALLET01","E0003PALLET02","E0003PALLET03","E0003PALLET04"]},
+  {id:'E01',x:5200,y:240,z:'E',horiz:true,rot:0,bays:[1,2,3,4,5,6,7,8,9],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0701","0702","0703","0704","0801","0802","0803","0804","0901","0902","0903","0904"]},
+  {id:'E02',x:5200,y:364,z:'E',horiz:true,rot:0,bays:[1,2,3,4,5,6,7,8],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0701","0702","0703","0704","0801","0802","0803","0804"],pallets:["E0200PALLET01","E0200PALLET02","E0209PALLET01"]},
+  {id:'E03',x:5200,y:488,z:'E',horiz:true,rot:0,bays:[1,2,3,4,5,6,7,8],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0701","0702","0703","0704","0801","0802","0803","0804"],pallets:["E0300PALLET01","E0300PALLET02","E0309PALLET01"]},
+  {id:'E04',x:5200,y:612,z:'E',horiz:true,rot:0,bays:[1,2,3,4,5,6,7,8],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0701","0702","0703","0704","0801","0802","0803","0804"],pallets:["E0400PALLET01","E0400PALLET02","E0409PALLET01"]},
+  {id:'E05',x:5200,y:736,z:'E',horiz:true,rot:0,bays:[1,2,3,4,5,6,7,8],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0701","0702","0703","0704","0801","0802","0803","0804"],pallets:["E0500PALLET01","E0500PALLET02","E0509PALLET01"]},
+  {id:'E06',x:5200,y:860,z:'E',horiz:true,rot:0,bays:[1,2,3,4,5,6,7,8,9],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0701","0702","0703","0704","0801","0802","0803","0804","0901","0902","0903","0904"],pallets:["E0600PALLET01","E0610PALLET01","E0610PALLET02","E0610PALLET03","E0610PALLET04"]},
+  // Zone F
+  {id:'F01',x:5200,y:1108,z:'F',horiz:true,rot:0,bays:[1,2,3,4,5,6,7,8,9],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0701","0702","0703","0704","0801","0802","0803","0804","0901","0902","0903","0904"],pallets:["F0100PALLET01","F0110PALLET01","F0110PALLET02","F0110PALLET03","F0110PALLET04"]},
+  {id:'F02',x:5200,y:1232,z:'F',horiz:true,rot:0,bays:[1,2,3,4,5,6,7,8,9,10],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0701","0702","0703","0704","0801","0802","0803","0804","0901","0902","0903","0904","1001","1002","1003","1004"],pallets:["F0200PALLET01","F0211PALLET01","F0211PALLET02","F0211PALLET03","F0211PALLET04"]},
+  {id:'F03',x:5200,y:1356,z:'F',horiz:true,rot:0,bays:[1,2,3,4,5,6,7,8,9,10],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0701","0702","0703","0704","0801","0802","0803","0804","0901","0902","0903","0904","1001","1002","1003","1004"],pallets:["F0300PALLET01","F0311PALLET01","F0311PALLET02","F0311PALLET03","F0311PALLET04"]},
+  {id:'F04',x:5200,y:1480,z:'F',horiz:true,rot:0,bays:[1,2,3,4,5,6,7,8,9,10],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0701","0702","0703","0704","0801","0802","0803","0804","0901","0902","0903","0904","1001","1002","1003","1004"],pallets:["F0400PALLET01","F0411PALLET01","F0411PALLET02","F0411PALLET03","F0411PALLET04"]},
+  {id:'F05',x:5200,y:1604,z:'F',horiz:true,rot:0,bays:[1,2,3,4,5,6,7,8,9,10],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0701","0702","0703","0704","0801","0802","0803","0804","0901","0902","0903","0904","1001","1002","1003","1004"],pallets:["F0500PALLET01","F0511PALLET01","F0511PALLET02","F0511PALLET03","F0511PALLET04"]},
+  {id:'F06',x:5200,y:1728,z:'F',horiz:true,rot:0,bays:[1,2,3,4,5,6,7,8,9,10],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0701","0702","0703","0704","0801","0802","0803","0804","0901","0902","0903","0904","1001","1002","1003","1004"],pallets:["F0600PALLET01","F0600PALLET02","F0611PALLET01"]},
+  // Zone G
+  {id:'G01',x:4220,y:240,z:'G',horiz:true,rot:0,bays:[1,2,3,4,5],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504"],pallets:["G01PALLET01","G01PALLET02","G01PALLET03","G01PALLET04","G01PALLET05","G01PALLET06","G01PALLET07"]},
+  {id:'G02',x:4220,y:364,z:'G',horiz:true,rot:0,bays:[1,2,3,4,5,6,7,8],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0701","0702","0703","0704","0801","0802","0803","0804"],pallets:["G0200PALLET01","G0200PALLET02","G02PALLET12","G02PALLET13","G02PALLET14","G02PALLET15","G02PALLET16","G02PALLET17","G02PALLET18"]},
+  {id:'G03',x:4220,y:488,z:'G',horiz:true,rot:0,bays:[1,2,3,4,5,6,7,8],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504","0601","0602","0603","0604","0701","0702","0703","0704","0801","0802","0803","0804"],pallets:["G0300PALLET01","G0300PALLET02"]},
+  {id:'G04',x:4760,y:606,z:'G',horiz:true,rot:0,bays:[],nl:0,pallets:["G04PALLET01","G04PALLET02","G04PALLET03","G04PALLET04","G04PALLET05","G04PALLET06","G04PALLET07","G04PALLET08","G04PALLET09","G04PALLET10","G04PALLET11"]},
+  // Zone H
+  {id:'H01',x:4600,y:606,z:'H',horiz:true,rot:0,bays:[],nl:0,pallets:["H01PALLET01","H01PALLET02","H01PALLET03","H01PALLET04","H01PALLET05","H01PALLET06","H01PALLET07","H01PALLET08","H01PALLET09","H01PALLET1","H01PALLET10","H01PALLET11","H01PALLET12","H01PALLET13","H01PALLET14","H01PALLET15","H01PALLET16","H01PALLET17","H01PALLET2","H01PALLET4","H01PALLET5","H01PALLET6","H01PALLET7","H01PALLET8","H01PALLET9"]},
+  // Zone J
+  {id:'J01',x:7000,y:240,z:'J',rot:0,bays:[],nl:0,pallets:["J01PALLET00","J01PALLET01","J01PALLET02","J01PALLET03","J01PALLET04","J01PALLET05","J01PALLET06","J01PALLET07","J01PALLET08"]},
+  {id:'J02',x:7000,y:548,z:'J',rot:0,bays:[],nl:0,pallets:["J02PALLET01","J02PALLET02","J02PALLET03","J02PALLET04","J02PALLET05","J02PALLET06","J02PALLET07","J02PALLET08"]},
+  {id:'J03',x:7000,y:856,z:'J',rot:0,bays:[],nl:0,pallets:["J03PALLET01","J03PALLET02","J03PALLET03","J03PALLET04","J03PALLET05","J03PALLET06","J03PALLET07","J03PALLET08"]},
+  {id:'J04',x:7000,y:1164,z:'J',rot:0,bays:[],nl:0,pallets:["J04PALLET01","J04PALLET02","J04PALLET03","J04PALLET04","J04PALLET05","J04PALLET06","J04PALLET07","J04PALLET08","J04PALLET09"]},
+  {id:'J05',x:7000,y:1472,z:'J',horiz:true,rot:0,bays:[],nl:0,pallets:["J05PALLET01","J05PALLET02","J05PALLET03","J05PALLET04"]},
+  // Zone K
+  {id:'K01',x:3790,y:1360,z:'K',horiz:true,rot:0,bays:[1,2],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204"],pallets:["K0100PALLET01"]},
+  {id:'K02',x:3790,y:1484,z:'K',horiz:true,rot:0,bays:[1,2],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204"]},
+  {id:'K03',x:3790,y:1608,z:'K',horiz:true,rot:0,bays:[1,2],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204"],pallets:["K0300PALLET01"]},
+  {id:'K04',x:3790,y:1732,z:'K',horiz:true,rot:0,bays:[1],nl:4,binset:["0101","0102","0103","0104"]},
+  {id:'K05',x:3790,y:1856,z:'K',horiz:true,rot:0,bays:[1],nl:4,binset:["0101","0102","0103","0104"],pallets:["K0500PALLET01"]},
+  // Zone R
+  {id:'R01',x:4220,y:612,z:'R',horiz:true,rot:0,bays:[1,2,3,4,5],nl:4,binset:["0101","0102","0103","0104","0201","0202","0203","0204","0301","0302","0303","0304","0401","0402","0403","0404","0501","0502","0503","0504"]},
+  // Zone W
+  {id:'W01',x:7560,y:1060,z:'W',rot:0,bays:[],nl:0,pallets:["W01PALLET01","W01PALLET02","W01PALLET03","W01PALLET04","W01PALLET05","W01PALLET06"]},
+  // Zone Z
+  {id:'Z01',x:4360,y:2300,z:'Z',horiz:true,rot:0,bays:[1],nl:1,binset:["0101"]},
+];
+
+const EXTRAS = ["Aoneroom","B0601002","CASHIER0201","CASHIER0202","CASHIER0203","CASHIER0204"];
+const ZONE_COLORS={A:'#b52626',B:'#6b23a0',C:'#c45200',D:'#145a8f',E:'#0e7a66',F:'#5a8c00',G:'#b02060',H:'#106438',J:'#9a7500',K:'#0e5a8a',R:'#b84800',W:'#5a2a80',Z:'#3a4460'};
+// ===== constants / state =====
+const BAY_W=48, LEVEL_H=26, SNAP=12;
+const APP_VER='v28.3';
+const LAYOUT_KEY='asung_whzone_layout_v1', PROD_KEY='asung_whclean_prod_v1';
+// 팀 공유 기본 레이아웃 — localStorage에 저장본이 없을 때 이 값으로 그린다.
+// (도구에서 '🧭 레이아웃 → 복사'한 JSON을 여기에 붙여넣으면 모두가 같은 배치를 본다)
+const DEFAULT_LAYOUT = {
+  toronto:  {"zpos":{"A":{"x":144,"y":780,"w":420,"h":180},"B":{"x":696,"y":60,"w":300,"h":696},"C":{"x":144,"y":300,"w":516,"h":336},"D":{"x":132,"y":12,"w":252,"h":240},"E":{"x":1056,"y":132,"w":336,"h":456},"F":{"x":1416,"y":132,"w":396,"h":456},"G":{"x":1056,"y":720,"w":216,"h":264},"H":{"x":1296,"y":624,"w":444,"h":72},"J":{"x":1056,"y":0,"w":300,"h":96},"K":{"x":1596,"y":732,"w":180,"h":96},"R":{"x":1296,"y":720,"w":108,"h":264},"W":{"x":1500,"y":0,"w":300,"h":96},"Z":{"x":360,"y":672,"w":300,"h":72}},"structs":[{"id":"Smraq2ng1","label":"구역","x":1428,"y":720,"w":384,"h":264},{"id":"Smraq8i9x","label":"구역","x":696,"y":792,"w":300,"h":180},{"id":"Smraq8szg","label":"구역","x":444,"y":84,"w":216,"h":180}]},
+  edmonton: null
+};
+let mode='view';                 // 'view' | 'edit'
+let level='zones';               // 'zones' | 'racks' | 'bays' | 'locs'
+let curZone=null, curRack=null, curBay=null, curLoc=null, curItemIdx=-1;
+let tx=40, ty=40, scale=0.9, svgEl=null;
+let ZPOS={};                     // zone -> {x,y,w,h}
+let STRUCTS=[];                  // {id,label,x,y,w,h}
+let locMap={};                   // 화면용 병합 결과 (AUTO + OVER)
+let AUTO={};                     // bins.json (BQ 소스, 공유) location->[{sku,name,stock,cur,seen,note}]
+let PRODUCTS={};                 // products.json (BQ product_master+images) sku->{name,barcode,brand,supplier,image,is_new}
+// 실제위치 수정(write-back) 웹앱: WarehouseMapSync.gs 배포 후 /exec URL 입력. 비우면 UI 비활성.
+let WHMAP_SYNC_URL='https://script.google.com/macros/s/AKfycbwgnSMMUXumRlEkTcxFiNLRKPOOmTc-nAzY88GxYFdGcJqEVOF9D4IrulmfgmmAwzNzrg/exec';
+const WM_PIN_KEY='asung_whmap_pin', WM_USER_KEY='asung_whmap_user';
+let OVER={};                     // 내 로컬 수정 (localStorage) location->[...]  (빈 배열=자동값 숨김)
+let selEnt=null, dragging=null, isPanning=false, panSX=0,panSY=0,panTX=0,panTY=0,panMoved=false;
+
+// ===== 창고(warehouse) — 에드먼턴은 나중에 EDMONTON_DEFS 만 정의하면 자동 활성화 =====
+const WAREHOUSES=[
+  {id:'toronto', label:'토론토',   prefix:'',  defs:SHELF_DEFS},
+  {id:'edmonton',label:'에드먼턴', prefix:'E', defs:(typeof EDMONTON_DEFS!=='undefined'?EDMONTON_DEFS:[])},
+];
+let curWH=WAREHOUSES[0];
+function whDefs(){return curWH.defs;}
+function layoutKey(){return LAYOUT_KEY+':'+curWH.id;}
+// 코드가 현재 창고 소속인지 (토론토=다른 접두 없는 코드, 그 외=자기 접두로 시작)
+function inWH(code){ const p=curWH.prefix;
+  if(p) return code.indexOf(p)===0;
+  return !WAREHOUSES.some(w=>w.prefix && code.indexOf(w.prefix)===0); }
+
+// ===== helpers =====
+function mkSVG(t){return document.createElementNS('http://www.w3.org/2000/svg',t);}
+function mkEl(t,a){const e=mkSVG(t);for(const k in a)e.setAttribute(k,String(a[k]));return e;}
+function rgba(hex,a){const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return `rgba(${r},${g},${b},${a})`;}
+function snapVal(v){return Math.round(v/SNAP)*SNAP;}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function byId(id){return whDefs().find(s=>s.id===id);}
+function isPallet(r){return !r.bays||!r.bays.length;}
+function getBayList(r){return (r.bays||[]).map(b=>String(b).padStart(2,'0'));}
+function zonesList(){return [...new Set(whDefs().map(s=>s.z))].sort();}
+function racksOf(z){return whDefs().filter(s=>s.z===z).sort((a,b)=>a.id.localeCompare(b.id));}
+function baysWithLocs(r){ // returns [{bay, codes:[...]}]
+  if(isPallet(r)) return [];
+  const out=[];
+  getBayList(r).forEach(bay=>{
+    const codes=[];
+    for(let l=1;l<=r.nl;l++){const suf=bay+String(l).padStart(2,'0'); if(!r.binset||r.binset.includes(suf)) codes.push(curWH.prefix+r.id+suf);}
+    if(codes.length) out.push({bay:r.id+bay, codes});
+  });
+  return out;
+}
+function rackLocs(r){ if(isPallet(r)) return (r.pallets||[]).map(p=>curWH.prefix+p); const a=[]; baysWithLocs(r).forEach(b=>a.push(...b.codes)); return a; }
+function locsInBay(r,bayId){ const b=baysWithLocs(r).find(x=>x.bay===bayId); return b?b.codes:[]; }
+function locItems(code){const v=locMap[code]; if(!v)return []; return Array.isArray(v)?v:[v];}
+function mappedIn(codes){return codes.reduce((n,c)=>n+(locItems(c).length?1:0),0);}
+function rackMapped(r){return mappedIn(rackLocs(r));}
+function rackTotal(r){return rackLocs(r).length;}
+function zoneRacks(z){return racksOf(z);}
+function zoneTotal(z){return zoneRacks(z).reduce((n,r)=>n+rackTotal(r),0);}
+function zoneMapped(z){return zoneRacks(z).reduce((n,r)=>n+rackMapped(r),0);}
+
+// ===== persistence =====
+function defaultZPOS(){
+  const zs=zonesList(); const W=300,H=180,GX=40,GY=40,per=5,X0=40,Y0=40; const pos={};
+  zs.forEach((z,i)=>{ pos[z]={x:X0+(i%per)*(W+GX), y:Y0+Math.floor(i/per)*(H+GY), w:W, h:H}; });
+  return pos;
+}
+function recompute(){ locMap={}; for(const k in AUTO)locMap[k]=AUTO[k]; for(const k in OVER)locMap[k]=OVER[k]; }
+function loadSaved(){
+  STRUCTS=[];
+  let _raw=localStorage.getItem(layoutKey());
+  if(!_raw && curWH.id==='toronto') _raw=localStorage.getItem(LAYOUT_KEY); // 구버전 마이그레이션
+  try{const l=JSON.parse(_raw||'null');
+    if(l&&l.zpos&&Object.keys(l.zpos).length){ZPOS=l.zpos; STRUCTS=l.structs||[];}
+    else { const dl=DEFAULT_LAYOUT[curWH.id]; if(dl&&dl.zpos&&Object.keys(dl.zpos).length){ZPOS=JSON.parse(JSON.stringify(dl.zpos)); STRUCTS=dl.structs?JSON.parse(JSON.stringify(dl.structs)):[];} else ZPOS=defaultZPOS(); }
+  }catch(e){ZPOS=defaultZPOS();}
+  // ensure every zone has a pos
+  const d=defaultZPOS(); zonesList().forEach(z=>{ if(!ZPOS[z])ZPOS[z]=d[z]; });
+  try{const p=JSON.parse(localStorage.getItem(PROD_KEY)||'null'); if(p)OVER=p;}catch(e){}
+  for(const k in OVER){ if(OVER[k]&&!Array.isArray(OVER[k])) OVER[k]=[OVER[k]]; }
+  recompute();
+}
+function saveLayout(){
+  localStorage.setItem(layoutKey(),JSON.stringify({v:2,zpos:ZPOS,structs:STRUCTS}));
+  localStorage.setItem(PROD_KEY,JSON.stringify(OVER));
+  const el=document.getElementById('sbSave'); el.textContent='✓ 저장됨'; el.className='sb-ok'; setTimeout(()=>{el.textContent='';el.className='';},1500);
+}
+function openLayout(){ document.getElementById('layoutText').value=JSON.stringify({zpos:ZPOS,structs:STRUCTS},null,2); document.getElementById('layoutModal').classList.add('show'); }
+function closeLayout(){ document.getElementById('layoutModal').classList.remove('show'); }
+function copyLayout(){ const t=document.getElementById('layoutText'); t.select(); try{document.execCommand('copy'); setInfo('레이아웃 JSON 복사됨');}catch(e){ setInfo('직접 선택해 복사하세요'); } }
+function applyLayout(){ try{ const o=JSON.parse(document.getElementById('layoutText').value); if(!o.zpos||!Object.keys(o.zpos).length){alert('zpos 없음');return;} ZPOS=o.zpos; STRUCTS=o.structs||[]; const _d=defaultZPOS(); zonesList().forEach(z=>{ if(!ZPOS[z])ZPOS[z]=_d[z]; }); saveLayout(); buildZones(); fitZones(); closeLayout(); setInfo('레이아웃 적용됨'); }catch(e){ alert('JSON 오류: '+e.message); } }
+function resetAll(){ if(!confirm('존 위치와 내 수정(제품 매핑)을 초기화할까요?\n(BQ 자동 데이터 bins.json은 그대로 유지됩니다)'))return; localStorage.removeItem(LAYOUT_KEY); WAREHOUSES.forEach(w=>localStorage.removeItem(LAYOUT_KEY+':'+w.id)); localStorage.removeItem(PROD_KEY); location.reload(); }
+
+// ===== transform (zones floor only) =====
+function applyTransform(){const w=document.getElementById('svgWrap');w.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`;const z=document.getElementById('zoomv');if(z)z.textContent=Math.round(scale*100)+'%';}
+function anim(){const w=document.getElementById('svgWrap');w.classList.add('anim');applyTransform();clearTimeout(window._a);window._a=setTimeout(()=>w.classList.remove('anim'),340);}
+function screenToSVG(cx,cy){const r=document.getElementById('wrap').getBoundingClientRect();return{x:(cx-r.left-tx)/scale,y:(cy-r.top-ty)/scale};}
+function zonesBBox(){let x1=1e9,y1=1e9,x2=-1e9,y2=-1e9;Object.values(ZPOS).forEach(p=>{x1=Math.min(x1,p.x);y1=Math.min(y1,p.y);x2=Math.max(x2,p.x+p.w);y2=Math.max(y2,p.y+p.h);});if(x1>x2)return{x:0,y:0,w:800,h:600};return{x:x1,y:y1,w:x2-x1,h:y2-y1};}
+function fitZones(){ const b=zonesBBox(); const wrap=document.getElementById('wrap');const aw=wrap.clientWidth,ah=wrap.clientHeight;const pad=80;scale=Math.max(.1,Math.min((aw-pad*2)/b.w,(ah-pad*2)/b.h,2.5));tx=(aw-b.w*scale)/2-b.x*scale;ty=(ah-b.h*scale)/2-b.y*scale;anim(); }
+function zoomBy(f){scale=Math.max(.1,Math.min(scale*f,2.5));applyTransform();}
+
+// ===== zones floor (SVG) =====
+function buildZones(){
+  const wrap=document.getElementById('svgWrap'); wrap.innerHTML='';
+  if(!zonesList().length){
+    wrap.innerHTML='<div style="padding:70px 30px;text-align:center;color:var(--dim);font-size:15px;line-height:1.7">'+
+      '📦 <b>'+curWH.label+'</b> 창고 구조가 아직 없습니다.<br>'+
+      'Cin7 Locations(bins) CSV를 넣어 존/랙을 만들면 자동으로 활성화됩니다.<br>'+
+      '<span style="font-size:12px">(제품 데이터 bins.json 는 이미 준비되어 있어, 구조만 추가하면 바로 표시됩니다)</span></div>';
+    return;
+  }
+  svgEl=mkSVG('svg'); svgEl.setAttribute('width',6000); svgEl.setAttribute('height',4000); svgEl.style.display='block';
+  STRUCTS.forEach(drawStruct);
+  zonesList().forEach(drawZoneBlock);
+  if(mode==='edit') drawHandles();
+  wrap.appendChild(svgEl);
+}
+function drawStruct(st){
+  const g=mkSVG('g'); g.classList.add('struct'); g.dataset.kind='struct'; g.dataset.id=st.id; g.style.cursor=mode==='edit'?'move':'default';
+  g.setAttribute('transform',`translate(${st.x},${st.y})`);
+  g.appendChild(mkEl('rect',{x:0,y:0,width:st.w,height:st.h,rx:10,fill:'#e9ecf2',stroke:'#aab0c0','stroke-width':2}));
+  const t=mkEl('text',{x:st.w/2,y:st.h/2+8,fill:'#6b7280','font-family':'DM Mono,monospace','font-size':Math.max(16,Math.min(30,st.h*0.3)),'font-weight':800,'text-anchor':'middle','pointer-events':'none'}); t.textContent=st.label||'구역'; g.appendChild(t);
+  g.addEventListener('mousedown',onEntDown);
+  g.addEventListener('dblclick',ev=>{ev.stopPropagation();renameStruct(st.id);});
+  svgEl.appendChild(g);
+}
+function drawHandles(){
+  if(!selEnt)return; const ent=getEnt(selEnt); if(!ent)return; const {x,y,w,h}=ent; const HND=20;
+  const mk=(hx,hy,dir,cls)=>{const r=mkEl('rect',{x:hx-HND/2,y:hy-HND/2,width:HND,height:HND,rx:5});r.classList.add('ehandle');if(cls)r.classList.add(cls);r.dataset.kind=selEnt.kind;r.dataset.id=selEnt.id;r.dataset.resize=dir;r.addEventListener('mousedown',onEntDown);svgEl.appendChild(r);};
+  mk(x+w,y+h/2,'e','e'); mk(x+w/2,y+h,'s','s'); mk(x+w,y+h,'se');
+  if(selEnt.kind==='struct'){
+    const d=mkEl('rect',{x:x+w-HND,y:y-HND/2,width:HND,height:HND,rx:5}); d.classList.add('ehandle','edel'); d.dataset.del=selEnt.id; d.addEventListener('mousedown',ev=>{ev.stopPropagation();deleteStruct(selEnt.id);}); svgEl.appendChild(d);
+    const dt=mkEl('text',{x:x+w-HND/2,y:y+6,fill:'#fff','font-family':'monospace','font-size':16,'font-weight':800,'text-anchor':'middle','pointer-events':'none'}); dt.textContent='×'; svgEl.appendChild(dt);
+  }
+}
+function getEnt(sel){ return sel.kind==='zone'?ZPOS[sel.id]:STRUCTS.find(s=>s.id===sel.id); }
+function addStruct(){
+  const wrap=document.getElementById('wrap'); const c=screenToSVG(wrap.clientWidth/2, wrap.clientHeight/2);
+  const st={id:'S'+Date.now().toString(36),label:'구역',x:snapVal(c.x-150),y:snapVal(c.y-90),w:300,h:180};
+  STRUCTS.push(st); selEnt={kind:'struct',id:st.id}; buildZones(); setInfo('구조물 추가 — 더블클릭으로 이름 변경'); }
+function deleteStruct(id){ STRUCTS=STRUCTS.filter(s=>s.id!==id); if(selEnt&&selEnt.id===id)selEnt=null; buildZones(); setInfo('구조물 삭제 · 저장'); }
+function renameStruct(id){ const st=STRUCTS.find(s=>s.id===id); if(!st)return; const v=prompt('구조물 이름',st.label); if(v!=null){st.label=v; buildZones(); setInfo('이름 변경 · 저장');} }
+function drawZoneBlock(z){
+  let p=ZPOS[z]; if(!p){ p=ZPOS[z]=defaultZPOS()[z]; if(!p)return; } const col=ZONE_COLORS[z]||'#666';
+  const nR=zoneRacks(z).length, tot=zoneTotal(z), mp=zoneMapped(z);
+  const g=mkSVG('g'); g.classList.add('zoneblk'); g.dataset.kind='zone'; g.dataset.id=z; g.dataset.z=z; g.style.cursor=mode==='edit'?'move':'pointer';
+  g.setAttribute('transform',`translate(${p.x},${p.y})`);
+  const sel=(selEnt&&selEnt.kind==='zone'&&selEnt.id===z);
+  g.appendChild(mkEl('rect',{x:0,y:0,width:p.w,height:p.h,rx:16,fill:rgba(col,.14),stroke:sel?'#111':col,'stroke-width':sel?4:3}));
+  g.appendChild(mkEl('rect',{x:0,y:0,width:16,height:p.h,rx:8,fill:col}));
+  const padX=Math.max(20,p.w*0.09);
+  const fsT=Math.max(14,Math.min(p.h*0.24,p.w*0.15));
+  const fsS=Math.max(9,fsT*0.44);
+  const t=mkEl('text',{x:padX,y:p.h*0.40,fill:col,'font-family':'DM Mono,monospace','font-size':fsT,'font-weight':800,'pointer-events':'none'}); t.textContent='Zone '+z; g.appendChild(t);
+  const s1=mkEl('text',{x:padX,y:p.h*0.62,fill:rgba(col,.85),'font-family':'DM Mono,monospace','font-size':fsS,'font-weight':700,'pointer-events':'none'}); s1.textContent=`${nR} 랙 · ${tot} 로케이션`; g.appendChild(s1);
+  const s2=mkEl('text',{x:padX,y:p.h*0.62+fsS*1.5,fill:'#146a52','font-family':'DM Mono,monospace','font-size':fsS,'font-weight':800,'pointer-events':'none'}); s2.textContent=`매핑 ${mp}/${tot}`; g.appendChild(s2);
+  if(tot){ g.appendChild(mkEl('rect',{x:0,y:p.h-8,width:p.w*(mp/tot),height:8,rx:4,fill:'#1a936f'})); }
+  g.addEventListener('mousedown',onEntDown);
+  svgEl.appendChild(g);
+}
+
+// ===== 밀러 컬럼 상태기계 =====
+// state: 'zones' 맵만 / 'racks' 맵mini+랙 / 'bays' +베이 / 'locs' +로케이션
+function colEl(n){return document.getElementById(n);}
+function setColumns(){
+  const map=colEl('colMap'), cr=colEl('colRacks'), cb=colEl('colBays'), cl=colEl('colLocs');
+  const mini=(el,on)=>el.classList.toggle('mini',on);
+  const show=(el,on)=>{ if(on)el.removeAttribute('hidden'); else el.setAttribute('hidden',''); };
+  const hasBay=!!curBay || level==='bays';   // 파렛트 랙은 베이 컬럼 없음
+  if(level==='zones'){ mini(map,false); show(cr,false); show(cb,false); show(cl,false); return; }
+  const zc=ZONE_COLORS[curZone]||'#5b6480';
+  mini(map,true); document.getElementById('vlabMap').innerHTML='<span class="vchip" style="background:'+zc+'"></span>Zone '+esc(curZone||'');
+  document.getElementById('vlabMap').style.color=zc;
+  show(cr,true);
+  if(level==='racks'){ mini(cr,false); show(cb,false); show(cl,false); return; }
+  mini(cr,true); const zc2=ZONE_COLORS[curZone]||'#5b6480';
+  document.getElementById('vlabRacks').innerHTML='<span class="vchip" style="background:'+rgba(zc2,.35)+'"></span>'+esc(curWH.prefix+(curRack||''));
+  document.getElementById('vlabRacks').style.color='#1c2333';
+  if(level==='bays'){ show(cb,true); mini(cb,false); show(cl,false); return; }
+  // level==='locs'
+  if(curBay){ show(cb,true); mini(cb,true); document.getElementById('vlabBays').innerHTML=esc(curWH.prefix+curBay); document.getElementById('vlabBays').style.color='#1c2333'; }
+  else show(cb,false);
+  show(cl,true); mini(cl,false);
+}
+function fillCol(which,title,sub,cardsHtml){
+  document.getElementById('head'+which).innerHTML=`<div class="dtitle">${title}</div><div class="dsub">${sub}</div>`;
+  const b=document.getElementById('body'+which); b.innerHTML=`<div class="dgrid">${cardsHtml}</div>`; b.scrollTop=0;
+}
+// 미니 띠 '자체'를 클릭했을 때만 반응 — 카드 클릭이 전파되어 되돌아가는 버그 방지
+function stripClick_(e,el){ return e.target===el || !!(e.target.closest&&e.target.closest('.vlabel')); }
+function colMapClick(e){ const el=colEl('colMap'); if(!el.classList.contains('mini'))return; if(!stripClick_(e,el))return; backTo('zones'); }
+function colMiniClick(e,lv){
+  const id={racks:'colRacks',bays:'colBays',locs:'colLocs'}[lv]; const el=colEl(id);
+  if(!el.classList.contains('mini'))return;
+  if(!stripClick_(e,el))return;
+  if(lv==='racks')backTo('racks'); else if(lv==='bays')backTo('bays');
+}
+function hideDrill(){ /* 밀러 컬럼에선 setColumns 가 담당 */ setColumns(); }
+function card(id,sub,mapped,tot,prod){
+  const ratio=tot?` <span style="color:#146a52">${mapped}/${tot}</span>`:'';
+  const bar=tot?`<div class="dbar"><i style="width:${Math.round(mapped/tot*100)}%"></i></div>`:'';
+  const pr=prod?`<div class="c-prod">✓ ${esc(prod)}</div>`:'';
+  return {id,sub,ratio,bar,pr,mapped:mapped&&tot&&mapped===tot};
+}
+
+function enterZone(z){
+  curZone=z; curRack=null; curBay=null; level='racks';
+  const col=ZONE_COLORS[z]||'#666';
+  const racks=zoneRacks(z);
+  const cards=racks.map(r=>{
+    const tot=rackTotal(r),mp=rackMapped(r);
+    const sub=isPallet(r)?`파렛트 ${(r.pallets&&r.pallets.length)||0}`:`${(r.bays||[]).length} 베이 · ${tot} 로케이션`;
+    return `<div class="dcard${tot&&mp===tot?' mapped':''}" style="border-left-color:${col}" onclick="enterRack('${r.id}')">
+      <div class="c-id" style="color:${col}">${curWH.prefix}${r.id}</div><div class="c-sub">${sub} · <b style="color:#146a52">${mp}/${tot}</b></div>
+      ${tot?`<div class="dbar"><i style="width:${Math.round(mp/tot*100)}%"></i></div>`:''}</div>`;
+  }).join('');
+  fillCol('Racks',`${curWH.prefix}Zone ${z} — 랙`,'랙 클릭 → 베이',cards); setColumns();
+  updateCrumbs(); setInfo(`Zone ${z}`);
+}
+function enterRack(id){
+  curRack=id; curBay=null; const r=byId(id); const col=ZONE_COLORS[r.z]||'#666';
+  if(isPallet(r)){ // pallets are locations directly
+    level='locs';
+    const cards=(r.pallets||[]).map(code=>locCardHtml(code,col)).join('');
+    fillCol('Locs',`${curWH.prefix}${id} — 파렛트`,'로케이션 클릭 → 제품',cards); setColumns();
+    updateCrumbs(); setInfo(id); return;
+  }
+  level='bays';
+  const bays=baysWithLocs(r);
+  const cards=bays.map(b=>{
+    const mp=mappedIn(b.codes),tot=b.codes.length;
+    return `<div class="dcard${mp===tot?' mapped':''}" style="border-left-color:${col}" onclick="enterBay('${b.bay}')">
+      <div class="c-id" style="color:${col}">${curWH.prefix}${b.bay}</div><div class="c-sub">${tot} 로케이션 · <b style="color:#146a52">${mp}/${tot}</b></div>
+      <div class="dbar"><i style="width:${Math.round(mp/tot*100)}%"></i></div></div>`;
+  }).join('');
+  fillCol('Bays',`${curWH.prefix}${id} — 베이`,'베이 클릭 → 로케이션',cards); setColumns();
+  updateCrumbs(); setInfo(id);
+}
+function enterBay(bayId){
+  curBay=bayId; level='locs'; const r=byId(curRack); const col=ZONE_COLORS[r.z]||'#666';
+  const codes=locsInBay(r,bayId);
+  const cards=codes.map(code=>locCardHtml(code,col)).join('');
+  fillCol('Locs',`${curWH.prefix}${bayId} — 로케이션`,'클릭 → 제품 매핑',cards); setColumns();
+  updateCrumbs(); setInfo(bayId);
+}
+function locCardHtml(code,col){
+  const items=locItems(code); const m=items.length>0;
+  const raw=(curWH.prefix&&code.indexOf(curWH.prefix)===0)?code.slice(curWH.prefix.length):code;
+  const lv=/^[A-Z]\d{6}$/.test(raw)?('L'+(+raw.slice(5,7))):'';
+  const label=items.length===0?'':(items.length===1?(items[0].name||items[0].sku||''):(items.length+'개 제품'));
+  const allPast=m&&items.every(itemIsPast);
+  return `<div class="dcard${m?' mapped':''}${allPast?' past':''}" style="border-left-color:${allPast?'#aab0c0':(m?'#1a936f':col)}" onclick="openLoc('${code}')">
+    <div class="c-id" style="color:${allPast?'#8a90a2':(m?'#146a52':col)}">${code}</div>
+    <div class="c-sub">${lv}${m?' · '+items.length+' SKU':' · 미매핑'}</div>
+    ${m?`<div class="c-prod">${allPast?'⏳ 과거 위치 · ':'✓ '}${esc(label)}</div>`:''}</div>`;
+}
+
+// ===== product panel =====
+function parseCode(code){ let c=code; const pre=curWH.prefix; if(pre&&c.indexOf(pre)===0)c=c.slice(pre.length); const m=/^([A-Z])(\d{2})(\d{2})(\d{2})$/.exec(c); if(m)return{zone:m[1],rack:m[1]+m[2],bay:m[1]+m[2]+m[3],level:+m[4]}; return null; }
+function openLoc(code){
+  curLoc=code; curItemIdx=-1; const p=parseCode(code);
+  document.getElementById('lpCode').textContent=code;
+  document.getElementById('lpMeta').innerHTML=p?`Zone ${p.zone} · Rack ${p.rack} · Bay ${p.bay} · Level ${p.level}`:(code.includes('PALLET')?'파렛트 로케이션':'로케이션');
+  renderLocList();
+  document.getElementById('locPanel').classList.add('show');
+}
+function renderLocList(){
+  curItemIdx=-1; const items=locItems(curLoc);
+  const rows=items.map((it,i)=>{
+    const st=itemStock(it), past=itemIsPast(it), P=prodOf(it.sku)||{};
+    const stk=st===null?'':`<span class="stk${past?' zero':''}">${past?'재고 0':'재고 '+st}</span>`;
+    const seen=past&&it.seen?`<span class="p-name" style="font-size:10px;color:#8a90a2">마지막 확인 ${esc(it.seen)}</span>`:'';
+    const nw=P.is_new?'<span class="badge-new">NEW</span>':'';
+    return `<div class="lp-item${past?' zero':''}" onclick="openItem(${i})">
+      <span class="p-row1"><span class="p-sku">${esc(it.sku||'(SKU 없음)')}</span>${nw}${stk}</span>
+      <span class="p-name">${esc(it.name||P.name||'')}</span>${seen}</div>`;
+  }).join('');
+  const body=items.length?`<div class="lp-count">이 로케이션의 제품 ${items.length}개 — SKU를 누르면 상세</div>${rows}`:`<div class="lp-empty">아직 등록된 제품이 없습니다.</div>`;
+  document.getElementById('lpView').innerHTML=body+`<button class="tbtn green lp-add" onclick="openItem(-1)">＋ 제품 추가</button>`;
+}
+function openItem(idx){
+  curItemIdx=idx; const items=locItems(curLoc); const it=(idx>=0?items[idx]:{sku:'',name:'',note:''});
+  const P=prodOf(it.sku)||{};
+  const st=itemStock(it), past=itemIsPast(it);
+  const imgs=P.image?`<img src="${esc(P.image)}" loading="lazy" onerror="this.style.display='none'" onclick="window.open('${esc(P.image)}','_blank')">`:'';
+  const pcard=(idx>=0)?`
+    <div class="pcard">${imgs}
+      <div style="flex:1;min-width:0">
+        <div class="pc-name">${esc(it.name||P.name||'(이름 없음)')}${P.is_new?'<span class="badge-new">NEW</span>':''}${past?'<span class="badge-past">과거 위치</span>':''}</div>
+        <div class="pc-sku">${esc(it.sku||'')}</div>
+        <table>
+          <tr><td>바코드</td><td class="v">${esc(P.barcode||'—')}</td></tr>
+          <tr><td>브랜드</td><td class="v">${esc(P.brand||'—')}</td></tr>
+          <tr><td>서플라이어</td><td class="v">${esc(P.supplier||'—')}</td></tr>
+          <tr><td>재고 (이 위치)</td><td class="v">${st===null?'—':st}${past&&it.seen?' · 마지막 확인 '+esc(it.seen):''}</td></tr>
+          <tr><td>대체 위치</td><td class="v" style="color:#8a90a2">— (엑셀 연동 예정)</td></tr>
+        </table>
+      </div>
+    </div>`:'';
+  const corr=(idx>=0&&it.sku)?`
+    <div class="lp-sec">
+      <h4>📍 실제 위치가 다른가요? (선택하면 구글시트에 기록 → Cin7 일괄수정)</h4>
+      <div class="al-row">
+        <input id="alSel" placeholder="실제 로케이션 입력 → 아래서 선택" autocomplete="off" oninput="alSuggest(this.value)" onfocus="alSuggest(this.value)">
+        <button class="tbtn" onclick="saveActualLoc()">기록</button>
+        <div class="al-sug" id="alSug"></div>
+      </div>
+      <div id="alMsg" style="font-size:11px;color:var(--mid);margin-top:6px">${WHMAP_SYNC_URL?'':'⚠️ 연동 URL 미설정 — WHMAP_SYNC_URL 입력 후 사용 가능'}</div>
+    </div>`:'';
+  document.getElementById('lpView').innerHTML=`
+    <button class="lp-back" onclick="renderLocList()">‹ 목록으로</button>
+    ${pcard}
+    ${corr}
+    <div class="lp-sec"><h4>✏️ 수동 수정 (선택)</h4></div>
+    <div class="lp-field"><label>SKU / 코드</label><input id="lpSku" value="${esc(it.sku||'')}" placeholder="예: CON64040"></div>
+    <div class="lp-field"><label>제품명</label><input id="lpName" value="${esc(it.name||P.name||'')}" placeholder="예: Gummy Styling Wax 150ml"></div>
+    <div class="lp-field"><label>비고</label><input id="lpNote" value="${esc(it.note||'')}" placeholder="선택"></div>
+    <div class="lp-actions"><button class="tbtn green" onclick="saveItem()">저장</button>${idx>=0?'<button class="tbtn danger" onclick="delItem()">삭제</button>':''}</div>`;
+}
+
+// ── 실제위치 수정 (write-back) ──
+function allLocsOfWH(){ const set=new Set(); whDefs().forEach(d=>rackLocs(d).forEach(c=>set.add(c))); return set; }
+function alSuggest(q){
+  const box=document.getElementById('alSug'); if(!box)return;
+  q=(q||'').trim().toUpperCase();
+  if(q.length<1){box.classList.remove('show');box.innerHTML='';return;}
+  const all=[...allLocsOfWH()];
+  const starts=all.filter(c=>c.indexOf(q)===0);
+  const incl=all.filter(c=>c.indexOf(q)>0);
+  const list=starts.concat(incl).slice(0,40).filter(c=>c!==curLoc);
+  if(!list.length){box.innerHTML='<div style="color:#8a90a2;cursor:default">일치하는 로케이션 없음</div>';box.classList.add('show');return;}
+  box.innerHTML=list.map(c=>`<div onclick="alPick('${c}')">${c}</div>`).join('');
+  box.classList.add('show');
+}
+function alPick(c){
+  const i=document.getElementById('alSel'); if(i)i.value=c;
+  const box=document.getElementById('alSug'); if(box){box.classList.remove('show');box.innerHTML='';}
+}
+function wmCall(body){
+  return new Promise((res,rej)=>{
+    if(!WHMAP_SYNC_URL){rej(new Error('연동 URL 미설정'));return;}
+    const cb='wmcb'+Date.now()+Math.floor(Math.random()*1e4);
+    window[cb]=d=>{delete window[cb];sc.remove();res(d);};
+    const sc=document.createElement('script');
+    sc.onerror=()=>{delete window[cb];sc.remove();rej(new Error('연결 실패'));};
+    sc.src=WHMAP_SYNC_URL+'?callback='+cb+'&payload='+encodeURIComponent(JSON.stringify(body));
+    document.body.appendChild(sc);
+  });
+}
+async function saveActualLoc(){
+  const msg=document.getElementById('alMsg');
+  const items=locItems(curLoc); const it=items[curItemIdx]; if(!it)return;
+  const val=(document.getElementById('alSel').value||'').trim().toUpperCase();
+  if(!val){msg.textContent='실제 로케이션을 선택하세요';return;}
+  if(!allLocsOfWH().has(val)){msg.textContent='⚠️ 목록에 없는 로케이션: '+val+' (드롭다운에서 선택)';return;}
+  if(val===curLoc){msg.textContent='현재 위치와 동일합니다';return;}
+  if(!WHMAP_SYNC_URL){msg.textContent='⚠️ 연동 URL 미설정';return;}
+  let user=localStorage.getItem(WM_USER_KEY); if(!user){user=prompt('이름(기록용)')||''; localStorage.setItem(WM_USER_KEY,user);}
+  const _sug=document.getElementById('alSug'); if(_sug)_sug.classList.remove('show');
+  msg.textContent='저장 중…';
+  const payload=pin=>({action:'save_correction',pin:pin||'',user,warehouse:curWH.label,sku:it.sku,product_name:it.name||'',system_loc:curLoc,actual_loc:val,memo:''});
+  try{
+    // 1차: 저장된 PIN(없으면 빈 값) — 서버가 open 모드면 그대로 통과
+    let r=await wmCall(payload(localStorage.getItem(WM_PIN_KEY)||''));
+    if(r&&!r.ok&&/PIN/.test(r.error||'')){
+      // 서버가 PIN 모드 → 그때만 물어보고 1회 재시도
+      const pin=prompt('수정 PIN 입력'); if(!pin){msg.textContent='취소됨';return;}
+      localStorage.setItem(WM_PIN_KEY,pin);
+      r=await wmCall(payload(pin));
+    }
+    if(r&&r.ok){msg.textContent='✅ 기록됨: '+it.sku+' → '+val;}
+    else{msg.textContent='⚠️ '+((r&&r.error)||'저장 실패'); if(r&&/PIN/.test(r.error||''))localStorage.removeItem(WM_PIN_KEY);}
+  }catch(e){msg.textContent='⚠️ '+e.message;}
+}
+function saveItem(){
+  if(!curLoc)return;
+  const sku=document.getElementById('lpSku').value.trim(),name=document.getElementById('lpName').value.trim(),note=document.getElementById('lpNote').value.trim();
+  if(!sku&&!name){setInfo('SKU 또는 제품명을 입력하세요');return;}
+  let arr=locItems(curLoc).slice();
+  if(curItemIdx>=0)arr[curItemIdx]={sku,name,note}; else arr.push({sku,name,note});
+  OVER[curLoc]=arr; saveLayout(); recompute(); renderLocList(); refreshDrill(); updateCount(); setInfo(curLoc+' 저장됨(내 수정)');
+}
+function delItem(){
+  if(curItemIdx<0||!curLoc)return; let arr=locItems(curLoc).slice(); arr.splice(curItemIdx,1);
+  OVER[curLoc]=arr;  // 빈 배열이면 자동값도 숨김
+  saveLayout(); recompute(); renderLocList(); refreshDrill(); updateCount(); setInfo('삭제됨(내 수정)');
+}
+function closeLoc(){ document.getElementById('locPanel').classList.remove('show'); curLoc=null; }
+function refreshDrill(){ if(level==='locs'){ if(curBay)enterBay(curBay); else if(curRack)enterRack(curRack); } }
+
+// ===== import =====
+function openImport(){document.getElementById('modal').classList.add('show');}
+function closeImport(){document.getElementById('modal').classList.remove('show');}
+function applyImport(){
+  const txt=document.getElementById('importText').value.trim(); if(!txt){closeImport();return;} let n=0;
+  const touched=new Set();
+  try{ if(txt[0]==='{'){ const o=JSON.parse(txt); for(const k in o){ let v=o[k]; let arr=(Array.isArray(v)?v:[v]).map(x=>({sku:x.sku||'',name:x.name||'',note:x.note||''})); OVER[k]=arr; n+=arr.length; } }
+    else { txt.split(/\r?\n/).forEach(line=>{const parts=line.split(',');if(parts.length>=2){const code=parts[0].trim();if(!code)return; if(!touched.has(code)){OVER[code]=[];touched.add(code);} OVER[code].push({sku:(parts[1]||'').trim(),name:(parts[2]||'').trim(),note:(parts[3]||'').trim()}); n++; }}); } }
+  catch(e){ alert('형식 오류: '+e.message); return; }
+  saveLayout(); recompute(); closeImport(); setInfo(n+'건 가져옴(내 수정)'); if(level==='zones')buildZones(); else refreshDrill(); updateCount();
+}
+
+// ===== 검색 (SKU/바코드/브랜드/서플라이어 → 로케이션 이동) =====
+function runSearch(q){
+  q=(q||'').trim().toLowerCase();
+  const box=document.getElementById('srchRes');
+  if(q.length<2){box.classList.remove('show');box.innerHTML='';return;}
+  const bySku={};
+  for(const bin in locMap){
+    locItems(bin).forEach(it=>{
+      const sku=(it.sku||'').trim(); if(!sku)return;
+      const e=(bySku[sku]=bySku[sku]||{sku,name:it.name||'',bins:[]});
+      e.bins.push({bin,past:itemIsPast(it)});
+      if(!e.name&&it.name)e.name=it.name;
+    });
+  }
+  const res=[];
+  for(const sku in bySku){
+    const P=prodOf(sku)||{};
+    const hay=(sku+' '+(bySku[sku].name||P.name||'')+' '+(P.barcode||'')+' '+(P.brand||'')+' '+(P.supplier||'')).toLowerCase();
+    if(hay.indexOf(q)!==-1){ res.push({...bySku[sku],P}); if(res.length>=25)break; }
+  }
+  if(!res.length){box.innerHTML='<div class="sr-empty">검색 결과 없음 — 매핑된 로케이션의 제품에서 찾습니다</div>';box.classList.add('show');return;}
+  box.innerHTML=res.map(r=>{
+    const img=r.P.image?`<img src="${esc(r.P.image)}" loading="lazy" onerror="this.style.visibility='hidden'">`:'<img style="visibility:hidden">';
+    const bins=r.bins.map(b=>`<span class="sr-bin${b.past?' zero':''}" onclick="gotoLoc('${b.bin}')">${b.bin}${b.past?' (0)':''}</span>`).join('');
+    return `<div class="sr-row">${img}<div class="sr-main">
+      <div class="sr-name">${esc(r.name||r.P.name||r.sku)}${r.P.is_new?'<span class="badge-new">NEW</span>':''}</div>
+      <div class="sr-sub">${esc(r.sku)}${r.P.barcode?' · '+esc(r.P.barcode):''}${r.P.brand?' · '+esc(r.P.brand):''}${r.P.supplier?' · '+esc(r.P.supplier):''}</div>
+      <div class="sr-bins">${bins}</div></div></div>`;
+  }).join('');
+  box.classList.add('show');
+}
+function closeSearch(){ const box=document.getElementById('srchRes'); if(box){box.classList.remove('show');} const i=document.getElementById('srch'); if(i)i.blur(); }
+function findLocPath(code){
+  for(const w of WAREHOUSES){
+    if(!w.defs||!w.defs.length)continue;
+    if(w.prefix){ if(code.indexOf(w.prefix)!==0)continue; }
+    else { if(WAREHOUSES.some(x=>x.prefix&&code.indexOf(x.prefix)===0))continue; }
+    const raw=w.prefix?code.slice(w.prefix.length):code;
+    const m=/^([A-Z])(\d{2})(\d{2})(\d{2})$/.exec(raw);
+    if(m){ const d=w.defs.find(x=>x.id===m[1]+m[2]); if(d)return {wh:w,rack:d,bay:d.id+m[3]}; continue; }
+    const d=w.defs.find(x=>(x.pallets||[]).indexOf(raw)!==-1);
+    if(d)return {wh:w,rack:d,bay:null};
+  }
+  return null;
+}
+function gotoLoc(code){
+  const path=findLocPath(code);
+  if(!path){ setInfo('해당 창고 구조가 아직 없습니다: '+code); closeSearch(); return false; }
+  if(path.wh.id!==curWH.id) onWHChange(path.wh.id);
+  enterZone(path.rack.z);
+  enterRack(path.rack.id);
+  if(path.bay) enterBay(path.bay);
+  openLoc(code);
+  closeSearch(); setInfo(code+' 로 이동');
+  return true;
+}
+
+// ===== navigation / edit =====
+function onEntDown(e){
+  if(e.button!==0)return;
+  const g=e.currentTarget, kind=g.dataset.kind, id=g.dataset.id, rz=g.dataset.resize;
+  if(mode!=='edit'){ if(kind==='zone'){ e.stopPropagation(); enterZone(id); } return; }
+  e.preventDefault(); e.stopPropagation();
+  selEnt={kind,id}; const ent=getEnt(selEnt); const s=screenToSVG(e.clientX,e.clientY);
+  if(rz){ dragging={dmode:'resize',dir:rz,ent,ow:ent.w,oh:ent.h,sx:s.x,sy:s.y,moved:false}; }
+  else { dragging={dmode:'move',ent,ox:ent.x,oy:ent.y,sx:s.x,sy:s.y,moved:false}; }
+  buildZones();
+}
+function backTo(lv){
+  if(lv==='zones'){ level='zones'; curZone=curRack=curBay=null; hideDrill(); buildZones(); updateCrumbs(); updateCount(); setInfo(''); return; }
+  if(lv==='racks'){ enterZone(curZone); return; }
+  if(lv==='bays'){ enterRack(curRack); return; }
+}
+function updateCrumbs(){
+  const el=document.getElementById('crumbs'); let h=`<span class="crumb${level==='zones'?' cur':''}" onclick="backTo('zones')">🏠 전체 존</span>`;
+  if(curZone) h+=`<span class="csep">▸</span><span class="crumb${level==='racks'?' cur':''}" onclick="backTo('racks')">Zone ${curZone}</span>`;
+  if(curRack) h+=`<span class="csep">▸</span><span class="crumb${level==='bays'?' cur':''}" onclick="backTo('bays')">${curRack}</span>`;
+  if(curBay && level==='locs') h+=`<span class="csep">▸</span><span class="crumb cur">${curBay}</span>`;
+  if(level==='zones') h+=`<span class="hint" style="margin-left:8px">${mode==='edit'?'존/구조물 드래그=이동 · 모서리=크기 · ➕구조물 · 저장':'존 클릭 = 열기'}</span>`;
+  h+='<span class="hint" style="margin-left:auto">'+APP_VER+'</span>';
+  el.innerHTML=h;
+}
+function setInfo(t){document.getElementById('sbInfo').textContent=t||'';}
+function updateCount(){ const tot=zonesList().reduce((a,z)=>a+zoneTotal(z),0); const keys=Object.keys(locMap).filter(k=>inWH(k)&&locItems(k).length); const skus=keys.reduce((a,k)=>a+locItems(k).length,0); document.getElementById('sbCount').textContent=`[${curWH.label}] 매핑 로케이션 ${keys.length}/${tot} · SKU ${skus}`; }
+function toggleMode(){
+  mode=(mode==='view')?'edit':'view'; selEnt=null;
+  document.getElementById('structTools').style.display=(mode==='edit')?'flex':'none';
+  const b=document.getElementById('modeBtn'); b.classList.toggle('active',mode==='edit'); b.textContent=mode==='edit'?'✏️ 편집 중':'✏️ 존 위치 편집';
+  document.getElementById('sbMode').textContent=mode==='edit'?'✏️ 편집 모드':'🔒 뷰 모드';
+  const w=document.getElementById('wrap'); w.classList.toggle('edit',mode==='edit'); w.classList.toggle('pan',mode!=='edit');
+  if(mode==='edit'){ backTo('zones'); } buildZones(); updateCrumbs();
+}
+function setupEvents(){
+  const wrap=document.getElementById('wrap');
+  wrap.addEventListener('mousedown',e=>{ if(level!=='zones')return; if(e.target.closest('.zoneblk')||e.target.closest('.struct')||e.target.closest('.ehandle'))return; if(mode==='edit'&&selEnt){selEnt=null;buildZones();} if(e.button===0){isPanning=true;panMoved=false;panSX=e.clientX;panSY=e.clientY;panTX=tx;panTY=ty;} });
+  window.addEventListener('mousemove',e=>{
+    if(dragging){ const s=screenToSVG(e.clientX,e.clientY);const dx=s.x-dragging.sx,dy=s.y-dragging.sy; if(Math.abs(dx)>3||Math.abs(dy)>3)dragging.moved=true; const ent=dragging.ent;
+      if(dragging.dmode==='resize'){ if(dragging.dir.includes('e'))ent.w=Math.max(80,snapVal(dragging.ow+dx)); if(dragging.dir.includes('s'))ent.h=Math.max(60,snapVal(dragging.oh+dy)); }
+      else { ent.x=snapVal(dragging.ox+dx); ent.y=snapVal(dragging.oy+dy); }
+      buildZones(); return; }
+    if(isPanning){panMoved=true;tx=panTX+(e.clientX-panSX);ty=panTY+(e.clientY-panSY);applyTransform();}
+  });
+  window.addEventListener('mouseup',()=>{ if(dragging){ if(dragging.moved)saveLayout(); dragging=null; } isPanning=false; });
+  wrap.addEventListener('wheel',e=>{ if(level!=='zones')return; e.preventDefault(); const r=wrap.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;const pv=scale;scale=e.deltaY<0?Math.min(scale*1.1,2.5):Math.max(scale/1.1,.1);tx=mx-(mx-tx)*(scale/pv);ty=my-(my-ty)*(scale/pv);applyTransform(); },{passive:false});
+  document.addEventListener('click',e=>{ if(!e.target.closest('.srch-wrap')) closeSearch(); });
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ if(document.getElementById('locPanel').classList.contains('show'))closeLoc(); else if(level==='locs')backTo(curBay?'bays':'racks'); else if(level==='bays')backTo('racks'); else if(level==='racks')backTo('zones'); } });
+}
+// ===== init =====
+function setAutoStatus(n){ const el=document.getElementById('sbAuto'); if(!el)return;
+  if(n==null){ el.textContent='bins.json 없음 — 가져오기/수동 사용'; el.className=''; }
+  else { el.textContent='BQ 자동 로드 '+n+' 로케이션'; el.className='sb-ok'; } }
+async function loadBinsJson(){
+  try{
+    const r=await fetch('bins.json?t='+Date.now());
+    if(!r.ok) throw new Error('no file');
+    const data=await r.json();
+    AUTO={};
+    for(const k in data){ const v=data[k]; AUTO[k]=(Array.isArray(v)?v:[v]).map(x=>({sku:x.sku||'',name:x.name||'',note:x.note||'',stock:(typeof x.stock==='number'?x.stock:null),cur:(x.cur===undefined?null:!!x.cur),seen:x.seen||''})); }
+    recompute();
+    if(level==='zones')buildZones(); else refreshDrill();
+    updateCount(); setAutoStatus(Object.keys(AUTO).length);
+  }catch(e){ setAutoStatus(null); }
+}
+function renderWHTabs(){
+  const el=document.getElementById('whTabs'); if(!el)return;
+  el.innerHTML=WAREHOUSES.map(w=>{
+    const empty=(w.defs&&w.defs.length)?'':' · 준비중';
+    return `<button class="tbtn${w.id===curWH.id?' active':''}" onclick="onWHChange('${w.id}')">${w.label}${empty}</button>`;
+  }).join('');
+}
+function onWHChange(id){
+  if(id===curWH.id)return;
+  saveLayout();                 // 현재 창고 레이아웃 저장
+  const w=WAREHOUSES.find(x=>x.id===id); if(!w)return;
+  curWH=w; level='zones'; curZone=curRack=curBay=null; selEnt=null; mode='view';
+  document.getElementById('structTools').style.display='none';
+  document.getElementById('modeBtn').classList.remove('active');
+  document.getElementById('modeBtn').textContent='✏️ 존 위치 편집';
+  document.getElementById('sbMode').textContent='🔒 뷰 모드';
+  hideDrill(); loadSaved(); buildZones(); fitZones();
+  renderWHTabs(); updateCrumbs(); updateCount(); setInfo(curWH.label+' 창고');
+}
+async function loadProductsJson(){
+  try{
+    const r=await fetch('products.json?t='+Date.now());
+    if(!r.ok) throw new Error('no file');
+    PRODUCTS=await r.json();
+    const el=document.getElementById('sbAuto');
+    if(el&&el.classList.contains('sb-ok')) el.textContent+=' · 제품정보 '+Object.keys(PRODUCTS).length+' SKU';
+  }catch(e){ /* 없으면 조용히 — 기본 기능은 동작 */ }
+}
+function prodOf(sku){ return PRODUCTS[sku]||PRODUCTS[String(sku||'').trim()]||null; }
+function itemStock(it){ if(typeof it.stock==='number')return it.stock; const m=/재고\s*(-?\d+)/.exec(it.note||''); return m?+m[1]:null; }
+function itemIsPast(it){ if(it.cur===false)return true; const st=itemStock(it); return st!==null&&st<=0; }
+function init(){ renderWHTabs(); loadSaved(); buildZones(); fitZones(); setupEvents(); updateCrumbs(); updateCount(); loadBinsJson(); loadProductsJson(); }
+window.addEventListener('DOMContentLoaded',init);
+
+</script></body></html>
