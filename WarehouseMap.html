@@ -21,20 +21,26 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
 /* drill card grid overlay */
 /* ===== 밀러 컬럼 ===== */
 #cols{position:absolute;inset:0;display:flex;align-items:stretch}
-.col{display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--border);background:var(--bg)}
+.col{display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--border);background:var(--bg);
+  transition:flex-basis .26s cubic-bezier(.4,0,.2,1),background .15s}
 .col[hidden]{display:none}
-#colMap{flex:1;position:relative;overflow:hidden;background:var(--bg)}
-.col-list{flex:1;overflow:hidden}
+#colMap{flex:1 1 0;position:relative;overflow:hidden;background:var(--bg)}
+.col-list{flex:1 1 320px;overflow:hidden}
+.col-list:not([hidden]):not(.mini){animation:colIn .26s cubic-bezier(.4,0,.2,1)}
+@keyframes colIn{from{opacity:.2;transform:translateX(26px)}to{opacity:1;transform:none}}
 .col-head{padding:9px 14px;border-bottom:1px solid var(--border);background:#fff;flex-shrink:0}
 .col-head .dtitle{margin:0}
 .col-head .dsub{margin:2px 0 0}
 .col-body{flex:1;overflow:auto;padding:16px}
-.col.mini{flex:0 0 46px;cursor:pointer;background:#fff;align-items:center;overflow:hidden}
-.col.mini:hover{background:#f0f6ff}
+.col-body .dgrid{animation:gridIn .26s ease}
+@keyframes gridIn{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
+.col.mini{flex:0 0 34px;cursor:pointer;background:#fff;align-items:center;overflow:hidden;padding-top:8px}
+.col.mini:hover{background:#eef4fd}
 .col.mini .col-head,.col.mini .col-body{display:none}
 .col.mini .vlabel{display:flex}
-.vlabel{display:none;writing-mode:vertical-rl;text-orientation:mixed;font-weight:800;font-size:13px;letter-spacing:2px;color:var(--mid);margin-top:16px;gap:8px;align-items:center;white-space:nowrap}
-.vlabel .vico{writing-mode:horizontal-tb;font-size:15px}
+.vlabel{display:none;writing-mode:vertical-rl;text-orientation:mixed;font-weight:800;font-size:13px;letter-spacing:1px;color:#1c2333;gap:7px;align-items:center;white-space:nowrap;font-family:'DM Mono',monospace}
+.vlabel .vico{writing-mode:horizontal-tb;font-size:14px}
+.vlabel .vchip{writing-mode:horizontal-tb;width:16px;height:16px;border-radius:5px;flex-shrink:0}
 #colMap.mini svg,#colMap.mini #svgWrap{display:none}
 .dtitle{font-size:14px;font-weight:800;margin:0 0 4px}
 .dsub{font-size:12px;color:var(--dim);margin:0 0 16px}
@@ -440,13 +446,17 @@ function setColumns(){
   const show=(el,on)=>{ if(on)el.removeAttribute('hidden'); else el.setAttribute('hidden',''); };
   const hasBay=!!curBay || level==='bays';   // 파렛트 랙은 베이 컬럼 없음
   if(level==='zones'){ mini(map,false); show(cr,false); show(cb,false); show(cl,false); return; }
-  mini(map,true); document.getElementById('vlabMap').innerHTML='<span class="vico">🗺️</span>Zone '+esc(curZone||'');
+  const zc=ZONE_COLORS[curZone]||'#5b6480';
+  mini(map,true); document.getElementById('vlabMap').innerHTML='<span class="vchip" style="background:'+zc+'"></span>Zone '+esc(curZone||'');
+  document.getElementById('vlabMap').style.color=zc;
   show(cr,true);
   if(level==='racks'){ mini(cr,false); show(cb,false); show(cl,false); return; }
-  mini(cr,true); document.getElementById('vlabRacks').textContent=curWH.prefix+(curRack||'');
+  mini(cr,true); const zc2=ZONE_COLORS[curZone]||'#5b6480';
+  document.getElementById('vlabRacks').innerHTML='<span class="vchip" style="background:'+rgba(zc2,.35)+'"></span>'+esc(curWH.prefix+(curRack||''));
+  document.getElementById('vlabRacks').style.color='#1c2333';
   if(level==='bays'){ show(cb,true); mini(cb,false); show(cl,false); return; }
   // level==='locs'
-  if(curBay){ show(cb,true); mini(cb,true); document.getElementById('vlabBays').textContent=curWH.prefix+curBay; }
+  if(curBay){ show(cb,true); mini(cb,true); document.getElementById('vlabBays').innerHTML=esc(curWH.prefix+curBay); document.getElementById('vlabBays').style.color='#1c2333'; }
   else show(cb,false);
   show(cl,true); mini(cl,false);
 }
@@ -454,10 +464,13 @@ function fillCol(which,title,sub,cardsHtml){
   document.getElementById('head'+which).innerHTML=`<div class="dtitle">${title}</div><div class="dsub">${sub}</div>`;
   const b=document.getElementById('body'+which); b.innerHTML=`<div class="dgrid">${cardsHtml}</div>`; b.scrollTop=0;
 }
-function colMapClick(e){ if(colEl('colMap').classList.contains('mini')) backTo('zones'); }
+// 미니 띠 '자체'를 클릭했을 때만 반응 — 카드 클릭이 전파되어 되돌아가는 버그 방지
+function stripClick_(e,el){ return e.target===el || !!(e.target.closest&&e.target.closest('.vlabel')); }
+function colMapClick(e){ const el=colEl('colMap'); if(!el.classList.contains('mini'))return; if(!stripClick_(e,el))return; backTo('zones'); }
 function colMiniClick(e,lv){
-  const map={racks:'colRacks',bays:'colBays',locs:'colLocs'}[lv];
-  if(!colEl(map).classList.contains('mini'))return;   // 펼쳐진 컬럼 클릭은 무시(카드가 처리)
+  const id={racks:'colRacks',bays:'colBays',locs:'colLocs'}[lv]; const el=colEl(id);
+  if(!el.classList.contains('mini'))return;
+  if(!stripClick_(e,el))return;
   if(lv==='racks')backTo('racks'); else if(lv==='bays')backTo('bays');
 }
 function hideDrill(){ /* 밀러 컬럼에선 setColumns 가 담당 */ setColumns(); }
