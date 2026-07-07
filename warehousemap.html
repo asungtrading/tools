@@ -45,36 +45,6 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
 #colMap.mini svg,#colMap.mini #svgWrap{display:none}
 
 /* ===== 모바일: 컬럼을 세로로 쌓기 (접힌 단계 = 상단 가로 바) ===== */
-@media (max-width:768px){
-  #cols{flex-direction:column}
-  .col{border-right:none;border-bottom:1px solid var(--border)}
-  .col.mini{flex:0 0 42px;width:100%;flex-direction:row;align-items:center;padding:0 14px;gap:10px}
-  #colMap.mini{flex:0 0 42px}
-  .vlabel{writing-mode:horizontal-tb;margin-top:0;letter-spacing:.5px}
-  .vlabel .vchip{width:14px;height:14px}
-  .col-list{flex:1 1 auto}
-  .col-list:not([hidden]):not(.mini){animation:colInV .26s cubic-bezier(.4,0,.2,1)}
-  .col-body{padding:12px}
-  .dgrid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:9px}
-  /* 제품 패널 = 바텀시트 (아래서 올라옴) */
-  #locPanel{width:100%;left:0;right:0;top:auto;bottom:0;height:84vh;border-left:none;border-top:1px solid var(--border);border-radius:16px 16px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.14);transform:translateY(100%)}
-  #locPanel.show{transform:none}
-  #locPanel .lp-body{padding-bottom:56px}
-  .pcard img{width:104px;height:104px}
-  /* 헤더 압축: 세로 공간 최소화 */
-  header{padding:5px 8px;gap:5px}
-  .logo{font-size:13px}
-  .logo small{display:none}
-  .divider{display:none}
-  .tbtn{padding:5px 9px;font-size:11px;border-radius:7px}
-  .grp{gap:4px}
-  .srch-wrap{order:9;width:100%}
-  .srch-in{width:100%}
-  #srchRes{width:min(430px,94vw)}
-  .zoomv{min-width:32px;font-size:11px}
-  .crumbs{padding:6px 10px;font-size:11px}
-  .statusbar{display:none}
-}
 @keyframes colInV{from{opacity:.2;transform:translateY(22px)}to{opacity:1;transform:none}}
 .dtitle{font-size:14px;font-weight:800;margin:0 0 4px}
 .dsub{font-size:12px;color:var(--dim);margin:0 0 16px}
@@ -88,7 +58,7 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
 .dbar{height:6px;border-radius:3px;background:#eef0f3;margin-top:9px;overflow:hidden}
 .dbar>i{display:block;height:100%;background:var(--green)}
 /* location panel */
-#locPanel{position:absolute;top:0;right:0;bottom:0;width:340px;background:#fff;border-left:1px solid var(--border);box-shadow:-4px 0 20px rgba(0,0,0,.06);transform:translateX(100%);transition:transform .2s,visibility 0s .2s;visibility:hidden;z-index:30;display:flex;flex-direction:column}
+#locPanel{position:absolute;top:0;right:0;bottom:0;width:380px;background:#fff;border-left:1px solid var(--border);box-shadow:-4px 0 20px rgba(0,0,0,.06);transform:translateX(100%);transition:transform .2s,visibility 0s .2s;visibility:hidden;z-index:30;display:flex;flex-direction:column}
 #locPanel.show{visibility:visible;transition:transform .2s}
 #locPanel.show{transform:none}
 .lp-head{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center}
@@ -121,6 +91,7 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
 .pcard .pc-sku{font-family:'DM Mono',monospace;font-size:11px;color:var(--mid);margin-top:2px}
 .pcard table{font-size:11px;margin-top:6px;border-collapse:collapse}
 .pcard td{padding:1px 8px 1px 0;color:var(--mid)}
+.pcard td:first-child{white-space:nowrap;vertical-align:top}
 .pcard td.v{color:var(--text);font-weight:600}
 .badge-new{display:inline-block;background:#e5484d;color:#fff;font-size:9px;font-weight:800;border-radius:4px;padding:1px 5px;margin-left:6px;vertical-align:middle}
 .badge-past{display:inline-block;background:#eef0f3;color:#8a90a2;font-size:10px;font-weight:700;border-radius:4px;padding:1px 6px;margin-left:6px}
@@ -161,6 +132,37 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
 .sb-ok{color:var(--green);font-weight:700}
 .ehandle{fill:#fff;stroke:var(--accent);stroke-width:2.5;cursor:nwse-resize}.ehandle.e{cursor:ew-resize}.ehandle.s{cursor:ns-resize}
 .edel{fill:#e5484d;cursor:pointer}
+@media (max-width:768px){
+  #cols{flex-direction:column}
+  .col{border-right:none;border-bottom:1px solid var(--border)}
+  .col.mini{flex:0 0 42px;width:100%;flex-direction:row;align-items:center;padding:0 14px;gap:10px}
+  #colMap.mini{flex:0 0 42px}
+  .vlabel{writing-mode:horizontal-tb;margin-top:0;letter-spacing:.5px}
+  .vlabel .vchip{width:14px;height:14px}
+  .col-list{flex:1 1 auto}
+  .col-list:not([hidden]):not(.mini){animation:colInV .26s cubic-bezier(.4,0,.2,1)}
+  .col-body{padding:12px}
+  .dgrid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:9px}
+  /* 제품 패널 = 바텀시트 (아래서 올라옴) */
+  #locPanel{width:100%;left:0;right:0;top:auto;bottom:0;height:84vh;border-left:none;border-top:1px solid var(--border);border-radius:16px 16px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.14);transform:translateY(100%)}
+  #locPanel.show{transform:none}
+  #locPanel .lp-body{padding-bottom:56px}
+  .pcard img{width:104px;height:104px}
+  #locPanel{max-width:none}
+  /* 헤더 압축: 세로 공간 최소화 */
+  header{padding:5px 8px;gap:5px}
+  .logo{font-size:13px}
+  .logo small{display:none}
+  .divider{display:none}
+  .tbtn{padding:5px 9px;font-size:11px;border-radius:7px}
+  .grp{gap:4px}
+  .srch-wrap{order:9;width:100%}
+  .srch-in{width:100%}
+  #srchRes{width:min(430px,94vw)}
+  .zoomv{min-width:32px;font-size:11px}
+  .crumbs{padding:6px 10px;font-size:11px}
+  .statusbar{display:none}
+}
 </style></head><body>
 <header>
   <div class="logo">ASUNG WAREHOUSE<small>존 → 랙 → 베이 → 로케이션 → 제품</small></div>
@@ -312,7 +314,7 @@ const EXTRAS = ["Aoneroom","B0601002","CASHIER0201","CASHIER0202","CASHIER0203",
 const ZONE_COLORS={A:'#b52626',B:'#6b23a0',C:'#c45200',D:'#145a8f',E:'#0e7a66',F:'#5a8c00',G:'#b02060',H:'#106438',J:'#9a7500',K:'#0e5a8a',R:'#b84800',W:'#5a2a80',Z:'#3a4460'};
 // ===== constants / state =====
 const BAY_W=48, LEVEL_H=26, SNAP=12;
-const APP_VER='v29.3';
+const APP_VER='v29.4';
 const LAYOUT_KEY='asung_whzone_layout_v1', PROD_KEY='asung_whclean_prod_v1';
 // 팀 공유 기본 레이아웃 — localStorage에 저장본이 없을 때 이 값으로 그린다.
 // (도구에서 '🧭 레이아웃 → 복사'한 JSON을 여기에 붙여넣으면 모두가 같은 배치를 본다)
@@ -613,7 +615,7 @@ function openItem(idx){
           <tr><td>바코드</td><td class="v">${esc(P.barcode||'—')}</td></tr>
           <tr><td>브랜드</td><td class="v">${esc(P.brand||'—')}</td></tr>
           <tr><td>서플라이어</td><td class="v">${esc(P.supplier||'—')}</td></tr>
-          <tr><td>재고 (이 위치)</td><td class="v">${st===null?'—':st}${past&&it.seen?' · 마지막 확인 '+esc(it.seen):''}</td></tr>
+          <tr><td>재고</td><td class="v">${st===null?'—':st}${past&&it.seen?' · 마지막 확인 '+esc(it.seen):''}</td></tr>
           <tr><td>대체 위치</td><td class="v" style="color:#8a90a2">— (엑셀 연동 예정)</td></tr>
         </table>
       </div>
