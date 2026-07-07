@@ -204,6 +204,42 @@ document.addEventListener('visibilitychange', ()=>{ if(document.hidden){ _lastAc
 /* ---------------- cloud sync (BigQuery via proxy) ---------------- */
 const CLOUD_ON = () => COACH_ON() && CONFIG.CLOUD;
 function cloudStateForSave(){ const c=JSON.parse(JSON.stringify(S)); if(c.bg && c.bg.type==='image') c.bg={type:'none',value:''}; return c; }
+
+/* 진도 병합: 두 상태 중 "더 많이 한 쪽"을 살려서 절대 뒷걸음질하지 않게 함.
+   날짜별 학습기록(daily)은 각 날짜의 최댓값으로 합쳐, 여러 기기/창을 써도 기록이 사라지지 않음.
+   단, Reset(_resetTs)이 상대편 데이터보다 최신이면 리셋이 우선한다. */
+function mergeProgress(a, b){
+  a=a||{}; b=b||{};
+  const M=(x,y)=>Math.max(Number(x)||0, Number(y)||0);
+  const ra=Number(a._resetTs)||0, rb=Number(b._resetTs)||0, R=Math.max(ra,rb);
+  if(R>0){
+    const aPost=(Number(a._ts)||0)>=R || ra===R;
+    const bPost=(Number(b._ts)||0)>=R || rb===R;
+    if(aPost && !bPost){ const o=JSON.parse(JSON.stringify(a)); o._resetTs=R; return o; }
+    if(bPost && !aPost){ const o=JSON.parse(JSON.stringify(b)); o._resetTs=R; return o; }
+  }
+  const out=JSON.parse(JSON.stringify(Object.assign({}, JSON.parse(JSON.stringify(DEFAULT)), a)));
+  ['xp','gritBadges','attempts','correctFirstTry','stepsCleared','reasoningRight','calcSlips','beltsEarned','coachUses','beltIndex'].forEach(k=>{ out[k]=M(a[k],b[k]); });
+  out.skills={};
+  new Set([...Object.keys(a.skills||{}), ...Object.keys(b.skills||{})]).forEach(k=>{
+    const sa=(a.skills||{})[k]||{}, sb=(b.skills||{})[k]||{};
+    const primary=(Number(sb.mastery)||0)>(Number(sa.mastery)||0)?sb:sa;
+    out.skills[k]={ level:Number(primary.level)||0, maxLevel:M(sa.maxLevel,sb.maxLevel), mastery:M(sa.mastery,sb.mastery),
+      seen:M(sa.seen,sb.seen), clean:M(sa.clean,sb.clean), struggles:M(sa.struggles,sb.struggles),
+      edge:Number(primary.edge)||0, streak:M(sa.streak,sb.streak), missRun:Number(primary.missRun)||0 };
+  });
+  const wa=a.wordStepMiss||[0,0,0,0,0], wb=b.wordStepMiss||[0,0,0,0,0];
+  out.wordStepMiss=[0,1,2,3,4].map(i=>M(wa[i],wb[i]));
+  out.daily={};
+  new Set([...Object.keys(a.daily||{}), ...Object.keys(b.daily||{})]).forEach(d=>{
+    const da=(a.daily||{})[d]||{}, db=(b.daily||{})[d]||{}; out.daily[d]={sec:M(da.sec,db.sec), done:M(da.done,db.done)};
+  });
+  const pa=a.profile||{}, pb=b.profile||{};
+  out.profile={ name:(pb.name||pa.name||''), bday:(pb.bday||pa.bday||'') };
+  out.bg=(a.bg && a.bg.type && a.bg.type!=='none')?a.bg:(b.bg||{type:'none',value:''});
+  out._resetTs=R; out._ts=M(a._ts,b._ts)||Date.now();
+  return out;
+}
 async function cloudLoad(){
   if(!CLOUD_ON()) return null;
   try{
@@ -226,6 +262,8 @@ async function flushCloud(){
   if(!_cloudPending) return;
   _cloudPending=false;
   try{
+    const cloud=await cloudLoad();                 // 저장 전에 클라우드 최신을 읽어와 병합 → 절대 낮은 값으로 덮어쓰지 않음
+    if(cloud){ const localBg=S.bg; S=mergeProgress(S, cloud); if(localBg && localBg.type==='image') S.bg=localBg; store.set('mathdojo_number', S); }
     await fetch(CONFIG.PROXY_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
       body:JSON.stringify({action:'save', token:CONFIG.APP_TOKEN, userId:CONFIG.USER_ID, state:cloudStateForSave()})});
   }catch(e){}
@@ -1124,17 +1162,19 @@ function renderParent(){
     <button class="cta calm" onclick="resetAll()">Reset progress</button>
   </div>`;
 }
-function resetAll(){ if(confirm('Reset all progress back to white belt?')){ S=JSON.parse(JSON.stringify(DEFAULT)); save(); go({name:'home'}); } }
+function resetAll(){ if(confirm('Reset all progress back to white belt? (This clears this device; other devices that still have the old progress may sync it back.)')){ S=JSON.parse(JSON.stringify(DEFAULT)); S._resetTs=Date.now(); S._ts=Date.now(); save(); go({name:'home'}); } }
 
 /* ---------------- sync ---------------- */
 function exportCode(){ try{ const c=JSON.parse(JSON.stringify(S)); if(c.bg && c.bg.type==='image') c.bg={type:'none',value:''}; return 'DOJO1-'+btoa(unescape(encodeURIComponent(JSON.stringify(c)))); }catch(e){ return 'DOJO1-'; } }
-function applyImport_(obj){ if(!obj || typeof obj.beltIndex!=='number') return false; S=Object.assign({}, JSON.parse(JSON.stringify(DEFAULT)), obj); if(!S.skills)S.skills={}; if(!S.wordStepMiss)S.wordStepMiss=[0,0,0,0,0]; if(!S.profile)S.profile={name:'',bday:''}; if(!S.bg)S.bg={type:'none',value:''}; save(); return true; }
-function parseCode_(raw){ const t=(raw||'').trim(); if(!t.startsWith('DOJO1-')) return {ok:false,msg:"That code doesn't look right — it should start with DOJO1-."};
+function applyImport_(obj){ if(!obj || typeof obj.beltIndex!=='number') return false; const localBg=S.bg; S=mergeProgress(S, obj); if(localBg && localBg.type==='image') S.bg=localBg; if(!S.skills)S.skills={}; if(!S.wordStepMiss)S.wordStepMiss=[0,0,0,0,0]; if(!S.profile)S.profile={name:'',bday:''}; if(!S.bg)S.bg={type:'none',value:''}; if(!S.daily)S.daily={}; save(); return true; }
+function parseCode_(raw){ const t=(raw||'').trim();
+  if(t.startsWith('{')){ try{ const obj=JSON.parse(t); if(!applyImport_(obj)) throw 0; return {ok:true}; }catch(e){ return {ok:false,msg:"That JSON couldn't be read. Paste the whole thing, from { to }."}; } }
+  if(!t.startsWith('DOJO1-')) return {ok:false,msg:"Paste a code starting with DOJO1- , or the full progress JSON (starting with { )."};
   try{ const obj=JSON.parse(decodeURIComponent(escape(atob(t.slice(6))))); if(!applyImport_(obj)) throw 0; return {ok:true}; }catch(e){ return {ok:false,msg:"Couldn't read that code. Copy the whole thing and try again."}; } }
 function copySync(btn){ const ta=document.getElementById('syncCode'); const done=()=>{ btn.textContent='Copied ✓'; setTimeout(()=>btn.textContent='Copy my code',1500); };
   try{ navigator.clipboard.writeText(ta.value).then(done, ()=>{ ta.select(); document.execCommand('copy'); done(); }); }catch(e){ ta.select(); document.execCommand('copy'); done(); } }
 function loadSync(){ const raw=document.getElementById('syncIn').value, fb=document.getElementById('syncFb'); if(!raw.trim()) return;
-  if(!confirm('Load this progress? It will replace what is on this device.')) return;
+  if(!confirm('Load this progress? It merges in and will never lower what is already here.')) return;
   const r=parseCode_(raw); if(r.ok){ fb.className='fb ok show'; fb.innerHTML='<span class="fbtitle">Progress loaded</span>Pick up right where you left off.'; setTimeout(()=>go({name:'home'}),1100); }
   else { fb.className='fb no show'; fb.innerHTML=`<span class="fbtitle">Hmm, not quite</span>${r.msg}`; } }
 function downloadBackup(){ const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'}), url=URL.createObjectURL(blob), a=document.createElement('a');
@@ -1391,19 +1431,15 @@ async function boot(){
   if(!CLOUD_ON()) return;
   const cloud=await cloudLoad();
   if(cloud){
-    const localTs=S._ts||0, cloudTs=cloud._ts||0;
-    if(!localTs || cloudTs>=localTs){          // 클라우드가 더 최신(또는 이 기기 진도 없음) → 이어받기
-      const localBg=S.bg;                      // 배경 사진은 기기별이라 유지
-      S=Object.assign({}, JSON.parse(JSON.stringify(DEFAULT)), cloud);
-      if(!S.skills)S.skills={}; if(!S.wordStepMiss)S.wordStepMiss=[0,0,0,0,0];
-      if(!S.profile)S.profile={name:'',bday:''}; if(!S.bg)S.bg={type:'none',value:''};
-      if(localBg && localBg.type==='image') S.bg=localBg;
-      store.set('mathdojo_number', S);
-      render();
-      return;
-    }
+    const localBg=S.bg;                        // 배경 사진은 기기별이라 유지
+    S=mergeProgress(S, cloud);                  // 병합: 어느 쪽도 진도를 잃지 않음
+    if(!S.skills)S.skills={}; if(!S.wordStepMiss)S.wordStepMiss=[0,0,0,0,0];
+    if(!S.profile)S.profile={name:'',bday:''}; if(!S.bg)S.bg={type:'none',value:''}; if(!S.daily)S.daily={};
+    if(localBg && localBg.type==='image') S.bg=localBg;
+    store.set('mathdojo_number', S);
+    render();
   }
-  cloudSave();                                 // 이 기기 진도가 더 최신 → 클라우드에 밀어 올림
+  cloudSave();                                 // 병합된(또는 로컬) 상태를 클라우드에 밀어 올림
 }
 boot();
 </script>
