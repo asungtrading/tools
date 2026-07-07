@@ -59,6 +59,7 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
   /* 제품 패널 = 바텀시트 (아래서 올라옴) */
   #locPanel{width:100%;left:0;right:0;top:auto;bottom:0;height:76vh;border-left:none;border-top:1px solid var(--border);border-radius:16px 16px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.14);transform:translateY(100%)}
   #locPanel.show{transform:none}
+  #locPanel .lp-body{padding-bottom:56px}
   /* 헤더 압축: 세로 공간 최소화 */
   header{padding:5px 8px;gap:5px}
   .logo{font-size:13px}
@@ -139,8 +140,12 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
 .sr-bin:hover{background:#1a6fd4;color:#fff}
 .sr-bin.zero{color:#8a90a2;background:#eef0f3}
 .sr-empty{padding:14px;font-size:12px;color:var(--dim)}
-.al-row{display:flex;gap:6px}
+.al-row{display:flex;gap:6px;position:relative}
 .al-row input{flex:1}
+.al-sug{position:absolute;top:38px;left:0;right:74px;max-height:190px;overflow:auto;background:#fff;border:1px solid var(--border);border-radius:9px;box-shadow:0 10px 26px rgba(0,0,0,.14);z-index:50;display:none}
+.al-sug.show{display:block}
+.al-sug div{padding:9px 12px;font-family:'DM Mono',monospace;font-size:13px;font-weight:700;cursor:pointer;border-bottom:1px solid #f0f1f4}
+.al-sug div:active,.al-sug div:hover{background:#e8f1fa}
 .lp-sec{border-top:1px dashed var(--border);margin-top:14px;padding-top:12px}
 .lp-sec h4{margin:0 0 8px;font-size:11px;color:var(--mid)}
 #modal{position:absolute;inset:0;background:rgba(20,26,40,.4);z-index:40;display:none;align-items:center;justify-content:center}
@@ -612,10 +617,10 @@ function openItem(idx){
     <div class="lp-sec">
       <h4>📍 실제 위치가 다른가요? (선택하면 구글시트에 기록 → Cin7 일괄수정)</h4>
       <div class="al-row">
-        <input id="alSel" list="locList" placeholder="실제 로케이션 선택/입력" autocomplete="off">
+        <input id="alSel" placeholder="실제 로케이션 입력 → 아래서 선택" autocomplete="off" oninput="alSuggest(this.value)" onfocus="alSuggest(this.value)">
         <button class="tbtn" onclick="saveActualLoc()">기록</button>
+        <div class="al-sug" id="alSug"></div>
       </div>
-      <datalist id="locList"></datalist>
       <div id="alMsg" style="font-size:11px;color:var(--mid);margin-top:6px">${WHMAP_SYNC_URL?'':'⚠️ 연동 URL 미설정 — WHMAP_SYNC_URL 입력 후 사용 가능'}</div>
     </div>`:'';
   document.getElementById('lpView').innerHTML=`
@@ -626,15 +631,25 @@ function openItem(idx){
     <div class="lp-field"><label>비고</label><input id="lpNote" value="${esc(it.note||'')}" placeholder="선택"></div>
     <div class="lp-actions"><button class="tbtn green" onclick="saveItem()">저장</button>${idx>=0?'<button class="tbtn danger" onclick="delItem()">삭제</button>':''}</div>
     ${corr}`;
-  if(idx>=0&&it.sku) ensureLocDatalist();
 }
 
 // ── 실제위치 수정 (write-back) ──
 function allLocsOfWH(){ const set=new Set(); whDefs().forEach(d=>rackLocs(d).forEach(c=>set.add(c))); return set; }
-function ensureLocDatalist(){
-  const dl=document.getElementById('locList'); if(!dl)return;
-  const opts=[]; allLocsOfWH().forEach(c=>opts.push('<option value="'+c+'">'));
-  dl.innerHTML=opts.join('');
+function alSuggest(q){
+  const box=document.getElementById('alSug'); if(!box)return;
+  q=(q||'').trim().toUpperCase();
+  if(q.length<1){box.classList.remove('show');box.innerHTML='';return;}
+  const all=[...allLocsOfWH()];
+  const starts=all.filter(c=>c.indexOf(q)===0);
+  const incl=all.filter(c=>c.indexOf(q)>0);
+  const list=starts.concat(incl).slice(0,40).filter(c=>c!==curLoc);
+  if(!list.length){box.innerHTML='<div style="color:#8a90a2;cursor:default">일치하는 로케이션 없음</div>';box.classList.add('show');return;}
+  box.innerHTML=list.map(c=>`<div onclick="alPick('${c}')">${c}</div>`).join('');
+  box.classList.add('show');
+}
+function alPick(c){
+  const i=document.getElementById('alSel'); if(i)i.value=c;
+  const box=document.getElementById('alSug'); if(box){box.classList.remove('show');box.innerHTML='';}
 }
 function wmCall(body){
   return new Promise((res,rej)=>{
@@ -656,6 +671,7 @@ async function saveActualLoc(){
   if(val===curLoc){msg.textContent='현재 위치와 동일합니다';return;}
   if(!WHMAP_SYNC_URL){msg.textContent='⚠️ 연동 URL 미설정';return;}
   let user=localStorage.getItem(WM_USER_KEY); if(!user){user=prompt('이름(기록용)')||''; localStorage.setItem(WM_USER_KEY,user);}
+  const _sug=document.getElementById('alSug'); if(_sug)_sug.classList.remove('show');
   msg.textContent='저장 중…';
   const payload=pin=>({action:'save_correction',pin:pin||'',user,warehouse:curWH.label,sku:it.sku,product_name:it.name||'',system_loc:curLoc,actual_loc:val,memo:''});
   try{
