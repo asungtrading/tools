@@ -170,13 +170,22 @@ const store = {
 const DEFAULT = { beltIndex:0, xp:0, gritBadges:0, attempts:0, correctFirstTry:0,
   stepsCleared:0, reasoningRight:0, calcSlips:0, beltsEarned:0, coachUses:0,
   skills:{}, wordStepMiss:[0,0,0,0,0], profile:{name:'',bday:''}, bg:{type:'none',value:''},
-  daily:{} };   // daily['YYYY-MM-DD'] = { sec: 공부초, done: 푼문제수 }
+  daily:{},           // daily['YYYY-MM-DD'] = { sec: 공부초, done: 푼문제수 }
+  mixDone:0, sharpenDone:0, questClaimed:{},   // 도전과제: Mixed/Sharpen 누적 + 수령한 퀘스트 id
+  rewards:{},          // rewards[beltKey] = { text, given, ts }  부모가 정한 벨트 보상
+  struggles:[] };      // 최근 어려워한 문제 [{q,a,k,d,t}] 최신순, 최대 25개
 let S = Object.assign({}, JSON.parse(JSON.stringify(DEFAULT)), store.get('mathdojo_number', {}));
 if(!S.skills) S.skills={};
 if(!S.wordStepMiss) S.wordStepMiss=[0,0,0,0,0];
 if(!S.profile) S.profile={name:'',bday:''};
 if(!S.bg) S.bg={type:'none',value:''};
 if(!S.daily) S.daily={};
+if(typeof S.mixDone!=='number') S.mixDone=0;
+if(typeof S.sharpenDone!=='number') S.sharpenDone=0;
+if(!S.questClaimed) S.questClaimed={};
+if(!S.rewards) S.rewards={};
+if(!Array.isArray(S.struggles)) S.struggles=[];
+if(!S.tierBase) S.tierBase={xp:S.xp, mixDone:S.mixDone, sharpenDone:S.sharpenDone, t:S.beltIndex};
 function save(){ S._ts=Date.now(); store.set('mathdojo_number', S); cloudSave(); }
 
 /* ---------------- study-time tracking (activity-based) ---------------- */
@@ -219,7 +228,21 @@ function mergeProgress(a, b){
     if(bPost && !aPost){ const o=JSON.parse(JSON.stringify(b)); o._resetTs=R; return o; }
   }
   const out=JSON.parse(JSON.stringify(Object.assign({}, JSON.parse(JSON.stringify(DEFAULT)), a)));
-  ['xp','gritBadges','attempts','correctFirstTry','stepsCleared','reasoningRight','calcSlips','beltsEarned','coachUses','beltIndex'].forEach(k=>{ out[k]=M(a[k],b[k]); });
+  ['xp','gritBadges','attempts','correctFirstTry','stepsCleared','reasoningRight','calcSlips','beltsEarned','coachUses','beltIndex','mixDone','sharpenDone'].forEach(k=>{ out[k]=M(a[k],b[k]); });
+  out.questClaimed=Object.assign({}, a.questClaimed||{}, b.questClaimed||{});
+  out.tierBase = ((Number(b.beltIndex)||0) > (Number(a.beltIndex)||0) ? b.tierBase : a.tierBase) || a.tierBase || b.tierBase || {xp:0,mixDone:0,sharpenDone:0,t:out.beltIndex};
+  out.rewards={};
+  new Set([...Object.keys(a.rewards||{}), ...Object.keys(b.rewards||{})]).forEach(k=>{
+    const ra=(a.rewards||{})[k], rb=(b.rewards||{})[k];
+    out.rewards[k] = (!ra) ? rb : (!rb) ? ra : ((Number(rb.ts)||0)>(Number(ra.ts)||0)?rb:ra);
+    if(ra && rb && out.rewards[k]) out.rewards[k]=Object.assign({}, out.rewards[k], {given: !!(ra.given||rb.given)});
+  });
+  const clearT=Math.max(Number(a.strugglesClearedTs)||0, Number(b.strugglesClearedTs)||0);
+  out.strugglesClearedTs=clearT;
+  const seenT=new Set(); out.struggles=[];
+  [...(a.struggles||[]), ...(b.struggles||[])].sort((x,y)=>(y.t||0)-(x.t||0)).forEach(s=>{
+    if(!s || seenT.has(s.t) || (s.t||0)<=clearT) return; seenT.add(s.t); if(out.struggles.length<25) out.struggles.push(s);
+  });
   out.skills={};
   new Set([...Object.keys(a.skills||{}), ...Object.keys(b.skills||{})]).forEach(k=>{
     const sa=(a.skills||{})[k]||{}, sb=(b.skills||{})[k]||{};
@@ -313,8 +336,8 @@ function celebrate(kind){
 }
 
 /* ---------------- adaptive engine ---------------- */
-const LMAX = { int:5, frac:5, word:4, wsolve:4 };            // 최고 난이도 레벨
-const GOAL = { int:8, frac:8, word:5 };            // 벨트 획득에 필요한 mastery (문제 수)
+const LMAX = { int:5, frac:5, word:4, wsolve:4, ratio:5 };            // 최고 난이도 레벨
+const GOAL = { int:8, frac:8, word:5, ratio:6 };            // 벨트 획득에 필요한 mastery (문제 수)
 function skill(k){
   if(!S.skills[k]) S.skills[k]={ level:1, maxLevel:1, mastery:0, seen:0, clean:0, struggles:0, edge:0, streak:0, missRun:0 };
   return S.skills[k];
@@ -345,7 +368,7 @@ const BELTS = [
   {key:'white',  name:'White belt',  color:'var(--belt-white)',  title:'Integer warm-up',            kind:'drill', skill:'int'},
   {key:'yellow', name:'Yellow belt', color:'var(--belt-yellow)', title:'Fractions and decimals',     kind:'drill', skill:'frac'},
   {key:'orange', name:'Orange belt', color:'var(--belt-orange)', title:'Word problems, step by step', kind:'word',  skill:'word'},
-  {key:'green',  name:'Green belt',  color:'var(--belt-green)',  title:'Ratios and rates',           kind:'locked'},
+  {key:'green',  name:'Green belt',  color:'var(--belt-green)',  title:'Ratios and rates',           kind:'drill', skill:'ratio'},
   {key:'blue',   name:'Blue belt',   color:'var(--belt-blue)',   title:'Powers and roots',           kind:'locked'},
   {key:'red',    name:'Red belt',    color:'var(--belt-red)',    title:'Mixed challenge',            kind:'locked'},
   {key:'black',  name:'Black belt',  color:'var(--belt-black)',  title:'Number master',              kind:'locked'},
@@ -363,8 +386,38 @@ function genItem(skillKey, level){
   if(skillKey==='int') return genInt(level);
   if(skillKey==='frac') return genFrac(level);
   if(skillKey==='wsolve') return genSolveDrill(level);
+  if(skillKey==='ratio') return genRatio(level);
   return genInt(level);
 }
+/* 초록띠: 비와 비율(ratios & rates). 순수 계산 드릴 + 문장형(word context) 문제를 섞음.
+   모두 정답이 정수/깔끔한 값이 되도록 인수로부터 역산해서 생성. */
+function rName_(){ return pick(NAMES); }
+function gRUnitRate(){ const per=ri(2,12), n=ri(2,6), total=per*n;
+  return {q:`A car travels ${total} km in ${n} hours, at a steady speed. How many km does it go each hour?`, a:per,
+    slips:[{val:total,msg:`That is the whole distance. "Each hour" means divide ${total} by ${n}.`}]}; }
+function gRUnitPrice(){ const each=ri(1,9), qty=ri(2,8), total=each*qty;
+  return {q:`${qty} juice boxes cost $${total} in total. How much is 1 juice box?`, a:each,
+    slips:[{val:total,msg:`That is the total for all of them. Divide $${total} by ${qty} boxes.`}]}; }
+function gREquiv(){ let a=ri(2,6), b=ri(2,7); if(b===a) b=a+1; const k=ri(2,6);
+  return {q:`${a} : ${b} = ${a*k} : ?`, a:b*k,
+    slips:[{val:b+(a*k-a),msg:`These grow by MULTIPLYING, not adding. ${a} became ${a*k} (× ${k}), so multiply ${b} by ${k} too.`}]}; }
+function gRProportion(){ const unit=ri(2,8), q0=ri(2,5), newq=q0+ri(1,4);
+  return {q:`${q0} apples cost $${unit*q0}. At the same price, how much do ${newq} apples cost?`, a:unit*newq,
+    slips:[{val:unit,msg:`That is the price of ONE apple. Now multiply by ${newq} apples.`}]}; }
+function gRScale(){ const per=ri(2,5), grp=ri(2,4), mult=ri(2,5), cookies=grp*mult, cups=per*mult;
+  return {q:`A recipe uses ${per} cups of flour for every ${grp} cookies. How many cups do you need for ${cookies} cookies?`, a:cups,
+    slips:[{val:per*cookies,msg:`First find how many batches: ${cookies} ÷ ${grp} = ${mult}. Then × ${per} cups.`}]}; }
+function gRSpeed(){ const sp=ri(3,12), t=ri(2,9), d=sp*t;
+  return {q:`A runner covers ${d} m in ${t} seconds at a steady pace. How many meters per second is that?`, a:sp,
+    slips:[{val:d,msg:`That is the total distance. "Per second" means divide ${d} by ${t}.`}]}; }
+const RATIO_GENS = {
+  1:[gRUnitRate,gRUnitPrice],
+  2:[gRUnitRate,gRUnitPrice,gREquiv,gRProportion],
+  3:[gREquiv,gRProportion,gRScale,gRSpeed],
+  4:[gREquiv,gRProportion,gRScale,gRSpeed],
+  5:[gREquiv,gRScale,gRSpeed,gRProportion]
+};
+function genRatio(level){ return pick(RATIO_GENS[Math.max(1,Math.min(5,level))])(); }
 /* isolated "solving step" practice — Joel's hardest move (rounding down after dividing) */
 function genSolveDrill(level){
   const priceSet = level<=1?[10,12,15]: level===2?[15,18,20,25]: level===3?[24,28,35,45]:[36,44,52,65];
@@ -662,7 +715,7 @@ let PRACTICE=false;  // Sharpen(집중훈련) 모드: 벨트 획득 없이 무�
 let SHARP=null;      // Sharpen 진행 상태 {skill, item, tries, done}
 /* 가장 약한 스킬 자동 감지 — struggle 많고 레벨 낮은 순 */
 function weakestSkill(){
-  const cands=[['word','Word problems'],['wsolve','Solving step'],['frac','Fractions & decimals'],['int','Integers']];
+  const cands=[['word','Word problems'],['wsolve','Solving step'],['ratio','Ratios & rates'],['frac','Fractions & decimals'],['int','Integers']];
   let best=null, worst=1e9;
   cands.forEach(([k])=>{ const sk=S.skills[k]; if(!sk) return;
     const score = sk.level*10 - (sk.struggles||0)*3;  // 낮을수록 약함
@@ -673,7 +726,7 @@ function weakestSkill(){
   if(maxMiss>=3 && m.indexOf(maxMiss)===3) return 'wsolve';
   return best || 'word';
 }
-const SKILL_LABEL={int:'Integers', frac:'Fractions & decimals', word:'Word problems', wsolve:'Solving step'};
+const SKILL_LABEL={int:'Integers', frac:'Fractions & decimals', word:'Word problems', wsolve:'Solving step', ratio:'Ratios & rates'};
 const app=document.getElementById('app');
 function go(v){ VIEW=v; render(); window.scrollTo(0,0); }
 function topbar(){ return `<div class="topbar"><div class="logo"><span class="mark"></span>PenguJ_8</div><div class="spacer"></div>
@@ -683,6 +736,20 @@ function masteryBar(skillKey, color){
   const sk=skill(skillKey), g=GOAL[skillKey], pct=Math.min(100, Math.round(100*sk.mastery/g));
   return `<div class="mbar"><div class="mfill" style="width:${pct}%; background:${color==='var(--belt-white)'?'var(--brand)':color}"></div></div>
     <div class="mlabel"><span>Belt progress</span><span>${Math.min(sk.mastery,g)} / ${g}</span></div>`;
+}
+function beltReqLine(bi){
+  const belt=BELTS[bi]; if(!belt || belt.kind==='locked') return '';
+  const sk=skill(belt.skill), g=GOAL[belt.skill], left=Math.max(0, g-sk.mastery);
+  const next=BELTS[bi+1];
+  const rw=(S.rewards[belt.key]||{}).text;
+  const rwTxt = rw ? ` 🎁 Reward for this belt: <b style="color:var(--grit)">${rw}</b>.` : '';
+  const nextTxt = next ? (next.kind==='locked'
+      ? ` Then you'll be at the very front — new belts are what we build next.`
+      : ` Next belt after this: <b style="color:var(--ink)">${next.name}</b> (${next.title}).`) : '';
+  if(left<=0){
+    return `<p class="note" style="margin-top:10px">✅ You've done enough to earn <b style="color:var(--ink)">${belt.name}</b> — finish your current problem to claim it!${rwTxt}${nextTxt}</p>`;
+  }
+  return `<p class="note" style="margin-top:10px">🎯 To earn <b style="color:var(--ink)">${belt.name}</b>: solve <b style="color:var(--ink)">${g} problems</b> — you've done ${sk.mastery}, <b style="color:var(--ink)">${left} to go</b>.${rwTxt} The problems get a little harder when you're on a roll, easier when you struggle, so you're always at just the right level.${nextTxt}</p>`;
 }
 
 /* ---------------- HOME (kid) ---------------- */
@@ -706,7 +773,7 @@ function renderHome(){
     <div class="ladder-labels" style="margin-top:16px">${labels}</div>
     <div class="ladder">${ladder}</div>
     <div style="margin-top:16px"><span class="beltbadge"><span class="dot" style="background:${rc}"></span>You are here: ${belt.name}</span></div>
-    ${canStart?`<div style="margin-top:16px">${masteryBar(belt.skill, rc)}</div>`:''}
+    ${canStart?`<div style="margin-top:16px">${masteryBar(belt.skill, rc)}</div>${beltReqLine(bi)}`:`<p class="note" style="margin-top:14px">You've cleared every belt we've built so far — you're at the front of the line. New belts are what we build next. Meanwhile, <b style="color:var(--ink)">Sharpen</b> and <b style="color:var(--ink)">Mixed practice</b> below keep you sharp.</p>`}
     <div style="margin-top:18px">
       ${canStart?`<button class="cta" style="background:${rc==='var(--belt-white)'?'var(--brand)':rc}; ${beltColorText(rc)}" onclick="startBelt(${bi})">${ctaLabel}</button>`
         :`<button class="cta calm" disabled style="cursor:default; opacity:.7">${ctaLabel}</button>`}
@@ -718,6 +785,7 @@ function renderHome(){
     </div>
     <p class="micro">${CLOUD_ON()?'Syncs across your devices.':'Progress saves on this device.'}${COACH_ON()?' · Coach is on.':''}</p>
   </div>
+  ${questsCard()}
   ${streakCard()}
   <div class="card">
     <p class="eyebrow">Sharpen your edge</p>
@@ -787,7 +855,7 @@ function checkDrill(){
     const before=sk.level, struggled=drillTries>=2;
     if(drillTries>0 && !struggled){} // 한 번 실수는 감점 없음
     recordResult(belt.skill, clean, struggled);
-    if(struggled) S.gritBadges++;
+    if(struggled){ S.gritBadges++; logStruggle(CUR.q, CUR.a, belt.skill); }
     save();
     LAST={q:(''+CUR.q).replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim(), a:CUR.a};
     const leveled=sk.level-before;
@@ -952,6 +1020,7 @@ function finishWord(){
   const struggled = RUN.stumbles>=2 || RUN.coach;
   const sk=skill('word'), before=sk.level;
   recordResult('word', clean, struggled);
+  if(struggled){ const w=VIEW._w, sv=(w.steps.find(s=>s.chip==='Solve')||{}).answer; logStruggle(w.scenario, sv, 'word'); }
   if(VIEW.mix){ mixNext(); return; }
   if(!PRACTICE && sk.mastery>=GOAL.word && S.beltIndex===VIEW.belt){ earnBelt(VIEW.belt); return; }
   go({name:'word-next', belt:VIEW.belt, leveled:sk.level-before});
@@ -1012,10 +1081,10 @@ function checkMixDrill(){
   S.attempts++;
   if(Math.abs(val-CUR.a)<1e-6){
     const clean=mixTries===0; if(clean) S.correctFirstTry++;
-    S.xp+=5; S.stepsCleared++;
+    S.xp+=5; S.stepsCleared++; S.mixDone++;
     const struggled=mixTries>=2;
     recordResult(k, clean, struggled);
-    if(struggled) S.gritBadges++;
+    if(struggled){ S.gritBadges++; logStruggle(CUR.q, CUR.a, k); }
     save();
     document.getElementById('mixIn').setAttribute('disabled','');
     celebrate('small'); fb.className='fb ok show';
@@ -1034,7 +1103,9 @@ function checkMixDrill(){
   }
 }
 function earnBelt(i){
-  if(S.beltIndex===i){ S.beltIndex=i+1; S.beltsEarned++; S.xp+=20; save(); }
+  if(S.beltIndex===i){ S.beltIndex=i+1; S.beltsEarned++; S.xp+=20;
+    S.tierBase={xp:S.xp, mixDone:S.mixDone, sharpenDone:S.sharpenDone, t:S.beltIndex};   // 새 tier의 퀘스트 기준점
+    save(); }
   celebrate('big');
   go({name:'levelup', earned:i, next:i+1, belt:i, fromKind:BELTS[i].kind});
 }
@@ -1051,6 +1122,11 @@ function renderLevelUp(){
     <div class="beltbig" style="background:${earned.color}"></div>
     <p class="sub" style="text-align:center; margin-bottom:2px">You cleared <b style="color:var(--ink)">${earned.title}</b>.</p>
     <p class="sub" style="text-align:center">+20 XP · Total XP ${S.xp}</p>
+    ${(S.rewards[earned.key]||{}).text?`<div style="margin:14px auto 0; max-width:420px; text-align:center; background:var(--paper); border:2px dashed var(--grit); border-radius:14px; padding:14px 16px">
+      <div style="font-size:26px">🎁</div>
+      <div style="font-weight:900; font-size:17px; margin-top:2px">You earned: ${(S.rewards[earned.key]||{}).text}</div>
+      <div class="skmeta" style="margin-top:4px">Go show this screen to your dad!</div>
+    </div>`:''}
     ${next && next.kind!=='locked'
       ? `<button class="cta" style="margin-top:20px; background:${next.color}; ${beltColorText(next.color)}" onclick="startBelt(${VIEW.next})">Try ${next.name}: ${next.title} →</button>${replay}
          <button class="cta calm" style="margin-top:10px" onclick="go({name:'home'})">Back to the dojo</button>`
@@ -1137,6 +1213,38 @@ function renderParent(){
     <p class="note">Difficulty rises when he's succeeding and eases when he struggles, so he trains right at his edge without getting stuck or bored. He always keeps earning belts — the depth is tracked here, not blocked.</p>
   </div>
   <div class="card">
+    <h2>Belt rewards 🎁</h2>
+    <p class="sub" style="margin-bottom:14px">Set a real reward for each belt (e.g. "1 hour of gaming", "chicken dinner", "$10"). Joel sees the reward for his <b>current</b> belt on his home screen — and it shows big on the celebration screen when he earns it. Check "given" once you've delivered it.</p>
+    ${BELTS.map((b,i)=>{
+      const r=S.rewards[b.key]||{text:'',given:false};
+      const status = i<S.beltIndex ? (r.text ? (r.given?'<span style="color:#22a06b;font-weight:800;font-size:12px">earned · given ✓</span>':'<span style="color:var(--grit);font-weight:800;font-size:12px">earned — owed!</span>') : '<span class="skmeta">earned</span>')
+        : (i===S.beltIndex?'<span class="skmeta">current</span>':'<span class="skmeta">upcoming</span>');
+      return `<div style="display:flex; align-items:center; gap:10px; margin-bottom:10px">
+        <span class="dot" style="background:${b.color}; width:14px; height:14px; border-radius:50%; border:1px solid var(--line); flex:none"></span>
+        <span style="width:64px; font-weight:800; font-size:13px; flex:none">${cap(b.key)}</span>
+        <input id="rw_${b.key}" value="${(r.text||'').replace(/"/g,'&quot;')}" placeholder="reward…" style="flex:1; min-width:0; font-family:var(--font); font-weight:600; font-size:13px; padding:8px 10px; border:1.5px solid var(--line); border-radius:10px; background:var(--card); color:var(--ink)">
+        <label style="display:flex; align-items:center; gap:4px; font-size:12px; font-weight:700; color:var(--ink-soft); flex:none"><input type="checkbox" id="rg_${b.key}" ${r.given?'checked':''}> given</label>
+        <span style="flex:none">${status}</span>
+      </div>`;
+    }).join('')}
+    <button class="cta secondary" style="margin-top:6px" onclick="saveRewards()">Save rewards</button>
+    <div class="fb" id="rwFb"></div>
+  </div>
+  <div class="card">
+    <h2>Problems he found hard 🔍</h2>
+    <p class="sub" style="margin-bottom:14px">The actual problems where he stumbled twice or asked the coach — newest first. Great for sitting down together on the exact thing that was tricky.</p>
+    ${S.struggles.length===0 ? '<p class="note">Nothing here yet — that means no real struggles recorded so far.</p>' :
+      S.struggles.map(s=>`<div style="border:1px solid var(--line-soft); border-radius:12px; padding:12px 14px; margin-bottom:10px">
+        <div style="display:flex; gap:8px; margin-bottom:6px; align-items:center">
+          <span class="tag edge" style="margin:0">${SKILL_LABEL[s.k]||s.k}</span>
+          <span class="skmeta">${s.d}</span>
+        </div>
+        <div style="font-size:14px; font-weight:600; line-height:1.5">${s.q}</div>
+        <div class="skmeta" style="margin-top:6px">Answer: <b style="color:var(--ink)">${s.a}</b></div>
+      </div>`).join('')}
+    ${S.struggles.length>0?'<button class="cta calm" style="margin-top:4px" onclick="clearStruggles()">Clear this list</button>':''}
+  </div>
+  <div class="card">
     <h2>Move progress to another device</h2>
     <p class="sub" style="margin-bottom:12px">Copy this code, then paste it into PenguJ_8 on the other device.</p>
     <textarea id="syncCode" readonly onclick="this.select()" style="width:100%; height:74px; resize:none; font-family:var(--font); font-weight:700; font-size:13px; color:var(--ink); background:var(--paper); border:1.5px solid var(--line); border-radius:12px; padding:12px; word-break:break-all;">${exportCode()}</textarea>
@@ -1163,6 +1271,18 @@ function renderParent(){
   </div>`;
 }
 function resetAll(){ if(confirm('Reset all progress back to white belt? (This clears this device; other devices that still have the old progress may sync it back.)')){ S=JSON.parse(JSON.stringify(DEFAULT)); S._resetTs=Date.now(); S._ts=Date.now(); save(); go({name:'home'}); } }
+function saveRewards(){
+  BELTS.forEach(b=>{
+    const ti=document.getElementById('rw_'+b.key), gi=document.getElementById('rg_'+b.key);
+    if(!ti) return;
+    const text=(ti.value||'').trim(), given=!!(gi&&gi.checked);
+    const prev=S.rewards[b.key]||{};
+    if(text!==(prev.text||'') || given!==!!prev.given){ S.rewards[b.key]={text, given, ts:Date.now()}; }
+  });
+  save();
+  const fb=document.getElementById('rwFb'); if(fb){ fb.className='fb ok show'; fb.innerHTML='<span class="fbtitle">Rewards saved</span>They sync to all devices.'; }
+}
+function clearStruggles(){ if(confirm('Clear the struggles list?')){ S.struggles=[]; S.strugglesClearedTs=Date.now(); save(); render(); } }
 
 /* ---------------- sync ---------------- */
 function exportCode(){ try{ const c=JSON.parse(JSON.stringify(S)); if(c.bg && c.bg.type==='image') c.bg={type:'none',value:''}; return 'DOJO1-'+btoa(unescape(encodeURIComponent(JSON.stringify(c)))); }catch(e){ return 'DOJO1-'; } }
@@ -1296,10 +1416,10 @@ function checkSharpen(){
   S.attempts++;
   if(Math.abs(val-CUR.a)<1e-6){
     const clean=SHARP.tries===0; if(clean) S.correctFirstTry++;
-    S.xp+=5;
+    S.xp+=5; S.sharpenDone++;
     const before=s.level, struggled=SHARP.tries>=2;
     recordResult(sk, clean, struggled);
-    if(struggled) S.gritBadges++;
+    if(struggled){ S.gritBadges++; logStruggle(CUR.q, CUR.a, sk); }
     save(); celebrate('small');
     document.getElementById('shIn').setAttribute('disabled','');
     const leveled=s.level-before;
@@ -1351,6 +1471,55 @@ function streakCard(){
   </div>`;
 }
 function openCalendar(){ const d=new Date(); go({name:'calendar', calY:d.getFullYear(), calM:d.getMonth()}); }
+
+/* ---------------- Quests (도전 과제) — 벨트 tier가 오를수록 목표가 커짐 ---------------- */
+function quests(){
+  const t=S.beltIndex, b=S.tierBase||{xp:0,mixDone:0,sharpenDone:0};
+  const bonus=30+t*10;
+  return [
+    {id:'xp:'+t,      icon:'⚡', label:'Earn XP this tier',   cur:Math.max(0,S.xp-(b.xp||0)),                    target:120+t*60, unit:'XP',       bonus},
+    {id:'streak:'+t,  icon:'🔥', label:'Daily streak',        cur:studyStreak_(),                                target:3+t,      unit:'days',     bonus},
+    {id:'mixed:'+t,   icon:'🎲', label:'Mixed practice',      cur:Math.max(0,S.mixDone-(b.mixDone||0)),          target:8+t*4,    unit:'problems', bonus},
+    {id:'sharpen:'+t, icon:'🎯', label:'Sharpen sessions',    cur:Math.max(0,S.sharpenDone-(b.sharpenDone||0)),  target:5+t*3,    unit:'problems', bonus},
+  ];
+}
+function questsCard(){
+  const t=S.beltIndex, qs=quests();
+  const rows=qs.map(q=>{
+    const done=q.cur>=q.target, claimed=!!S.questClaimed[q.id], pct=Math.min(100,Math.round(100*q.cur/q.target));
+    const right = claimed ? '<span style="color:#22a06b; font-weight:800; font-size:13px">Done ✓</span>'
+      : done ? `<button class="coachbtn" style="padding:6px 12px" onclick="claimQuest('${q.id}')">Claim +${q.bonus} XP</button>`
+      : `<span class="skmeta">${q.cur} / ${q.target} ${q.unit}</span>`;
+    const col = (claimed||done) ? '#22a06b' : 'var(--brand)';
+    return `<div style="margin-bottom:14px">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px">
+        <span style="font-size:18px">${q.icon}</span><span class="skname" style="flex:1">${q.label}</span>${right}
+      </div>
+      <div class="mbar"><div class="mfill" style="width:${pct}%; background:${col}"></div></div>
+    </div>`;
+  }).join('');
+  const allDone=qs.every(q=>S.questClaimed[q.id]);
+  return `<div class="card">
+    <p class="eyebrow">Quests · ${BELTS[Math.min(t,BELTS.length-1)].name} tier</p>
+    <h2>Your goals right now 🗺️</h2>
+    <p class="sub" style="margin-bottom:16px">${allDone?'All done for this tier — earn your next belt to unlock harder quests!':'Finish these for bonus XP. They get bigger with every belt — a real challenge as you climb.'}</p>
+    ${rows}
+    <p class="note">Belts come from solving belt problems. These quests are extra goals on top — one missed goal never blocks a belt.</p>
+  </div>`;
+}
+function claimQuest(id){
+  const q=quests().find(x=>x.id===id); if(!q) return;
+  if(S.questClaimed[id] || q.cur<q.target) return;
+  S.questClaimed[id]=true; S.xp+=q.bonus; save(); celebrate('big'); render();
+}
+
+/* 어려워한 문제 기록 (부모 리포트용): 2회 이상 막혔거나 코치를 쓴 문제. 최신 25개 유지. */
+function logStruggle(q, a, k){
+  const plain=(''+q).replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+  if(!plain) return;
+  S.struggles.unshift({q:plain, a:a, k:k, d:todayKey(), t:Date.now()});
+  if(S.struggles.length>25) S.struggles.length=25;
+}
 function calShift(delta){
   let y=VIEW.calY, m=VIEW.calM+delta;
   if(m<0){ m=11; y--; } if(m>11){ m=0; y++; }
