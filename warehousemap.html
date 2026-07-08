@@ -21,9 +21,10 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
 /* 모바일: 전체 존을 위/아래 두 화면으로 분할 표시 (세로 스크롤로 전환) */
 .mapSplit{display:none;position:absolute;inset:0;flex-direction:column;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;scroll-snap-type:y proximity;background:var(--bg)}
 .mapSplit.show{display:flex}
-.mapHalf{flex:0 0 100%;height:100%;position:relative;scroll-snap-align:start;border-bottom:3px solid var(--border);box-sizing:border-box}
+.mapHalf{flex:0 0 100%;height:100%;position:relative;scroll-snap-align:start;border-bottom:3px solid var(--border);box-sizing:border-box;overflow:hidden;touch-action:pan-y}
 .mapHalf:last-child{border-bottom:none}
-.mapHalf svg{width:100%;height:100%;display:block}
+.halfCanvas{position:absolute;inset:0;transform-origin:0 0}
+.halfCanvas svg{width:100%;height:100%;display:block}
 .mapHalf .halfLabel{position:absolute;top:8px;left:10px;z-index:2;font-family:'DM Mono',monospace;font-size:11px;font-weight:800;color:var(--mid);background:rgba(255,255,255,.9);border:1px solid var(--border);padding:3px 10px;border-radius:20px}
 .mapHalf .halfScroll{position:absolute;bottom:8px;right:10px;z-index:2;font-family:'DM Mono',monospace;font-size:10px;font-weight:700;color:var(--dim);background:rgba(255,255,255,.9);border:1px solid var(--border);padding:3px 8px;border-radius:20px}
 body.map-split-active #zoomGrp{display:none}
@@ -343,7 +344,7 @@ const EXTRAS = ["Aoneroom","B0601002","CASHIER0201","CASHIER0202","CASHIER0203",
 const ZONE_COLORS={A:'#b52626',B:'#6b23a0',C:'#c45200',D:'#145a8f',E:'#0e7a66',F:'#5a8c00',G:'#b02060',H:'#106438',J:'#9a7500',I:'#7a5230',K:'#0e5a8a',R:'#b84800',W:'#5a2a80',Z:'#3a4460'};
 // ===== constants / state =====
 const BAY_W=48, LEVEL_H=26, SNAP=12;
-const APP_VER='v29.11';
+const APP_VER='v29.12';
 const LAYOUT_KEY='asung_whzone_layout_v1', PROD_KEY='asung_whclean_prod_v1';
 // 팀 공유 기본 레이아웃 — localStorage에 저장본이 없을 때 이 값으로 그린다.
 // (도구에서 '🧭 레이아웃 → 복사'한 JSON을 여기에 붙여넣으면 모두가 같은 배치를 본다)
@@ -500,8 +501,32 @@ function renderMapHalf_(container,zoneIds,structs,label){
   structs.forEach(drawStruct);
   zoneIds.forEach(drawZoneBlock);
   svgEl=prevSvgEl;
+  const canvas=document.createElement('div'); canvas.className='halfCanvas'; canvas.appendChild(svg);
   const lab=document.createElement('div'); lab.className='halfLabel'; lab.textContent=label+' · 존 '+zoneIds.length+'개';
-  container.appendChild(lab); container.appendChild(svg);
+  container.appendChild(canvas); container.appendChild(lab);
+  setupHalfPinch_(canvas);
+}
+// 분할 화면 각각에 독립적인 2손가락 핀치줌+팬 부여
+// (1손가락 스와이프는 그대로 둬 상위 mapSplit 세로 스크롤로 위/아래 화면 전환에 씀)
+function setupHalfPinch_(canvas){
+  let st={tx:0,ty:0,scale:1}, gest=null;
+  const apply=()=>{ canvas.style.transform=`translate(${st.tx}px,${st.ty}px) scale(${st.scale})`; };
+  canvas.addEventListener('touchstart',e=>{
+    if(e.touches.length>=2){ const a=e.touches[0],b=e.touches[1];
+      gest={d0:Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY)||1,s0:st.scale,
+        cx:(a.clientX+b.clientX)/2,cy:(a.clientY+b.clientY)/2,tx0:st.tx,ty0:st.ty};
+    } else gest=null;
+  },{passive:true});
+  canvas.addEventListener('touchmove',e=>{
+    if(!gest||e.touches.length<2)return; e.preventDefault();
+    const a=e.touches[0],b=e.touches[1];
+    const d=Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY)||1;
+    const ns=Math.max(1,Math.min(gest.s0*d/gest.d0,4));
+    const r=canvas.getBoundingClientRect(); const mx=gest.cx-r.left, my=gest.cy-r.top;
+    st.tx=mx-(mx-gest.tx0)*(ns/gest.s0); st.ty=my-(my-gest.ty0)*(ns/gest.s0); st.scale=ns; apply();
+  },{passive:false});
+  canvas.addEventListener('touchend',e=>{ if(e.touches.length<2)gest=null; });
+  canvas.addEventListener('dblclick',()=>{ st={tx:0,ty:0,scale:1}; apply(); });
 }
 function buildZonesMobileSplit(){
   const top=document.getElementById('mapHalfTop'), bot=document.getElementById('mapHalfBottom');
@@ -514,8 +539,8 @@ function buildZonesMobileSplit(){
   STRUCTS.forEach(st=>{ const cx=st.x+st.w/2; (cx<midX?leftS:rightS).push(st); });
   // 한쪽이 비면 전부 위쪽으로 몰아서 빈 화면 방지
   if(!leftZ.length){ leftZ.push(...rightZ); rightZ.length=0; leftS.push(...rightS); rightS.length=0; }
-  renderMapHalf_(top,leftZ,leftS,'⬆ 위쪽 구역');
-  if(rightZ.length) renderMapHalf_(bot,rightZ,rightS,'⬇ 아래쪽 구역');
+  renderMapHalf_(top,leftZ,leftS,'⬆ 위쪽 구역 · 아래로 스와이프하면 다음 구역');
+  if(rightZ.length) renderMapHalf_(bot,rightZ,rightS,'⬇ 아래쪽 구역 · 2손가락으로 확대');
   else bot.innerHTML='';
 }
 function drawStruct(st){
@@ -1018,17 +1043,18 @@ function setupEvents(){
     if(isPanning){panMoved=true;tx=panTX+(e.clientX-panSX);ty=panTY+(e.clientY-panSY);applyTransform();}
   });
   window.addEventListener('mouseup',()=>{ if(dragging){ if(dragging.moved)saveLayout(); dragging=null; } isPanning=false; });
-  // ── 터치: 1손가락 팬 / 2손가락 핀치줌 (존 맵) ──
+  // ── 터치: 1손가락 팬 / 2손가락 핀치줌 (존 맵 — 분할뷰가 아닐 때만) ──
   let tch=null;
+  const splitActive_=()=>document.body.classList.contains('map-split-active');
   wrap.addEventListener('touchstart',e=>{
-    if(level!=='zones')return;
+    if(level!=='zones'||splitActive_())return;
     if(e.touches.length===1){const t=e.touches[0];tch={m:'pan',sx:t.clientX,sy:t.clientY,tx0:tx,ty0:ty};}
     else if(e.touches.length>=2){const a=e.touches[0],b=e.touches[1];
       tch={m:'pinch',d0:Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY)||1,s0:scale,
         cx:(a.clientX+b.clientX)/2,cy:(a.clientY+b.clientY)/2,tx0:tx,ty0:ty};}
   },{passive:true});
   wrap.addEventListener('touchmove',e=>{
-    if(!tch||level!=='zones')return; e.preventDefault();
+    if(!tch||level!=='zones'||splitActive_())return; e.preventDefault();
     if(tch.m==='pan'&&e.touches.length===1){
       const t=e.touches[0]; tx=tch.tx0+(t.clientX-tch.sx); ty=tch.ty0+(t.clientY-tch.sy); applyTransform();
     } else if(tch.m==='pinch'&&e.touches.length>=2){
@@ -1041,10 +1067,11 @@ function setupEvents(){
     }
   },{passive:false});
   wrap.addEventListener('touchend',e=>{
+    if(splitActive_())return;
     if(e.touches.length===0){tch=null;return;}
     if(e.touches.length===1){const t=e.touches[0];tch={m:'pan',sx:t.clientX,sy:t.clientY,tx0:tx,ty0:ty};}
   });
-  wrap.addEventListener('wheel',e=>{ if(level!=='zones')return; e.preventDefault(); const r=wrap.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;const pv=scale;scale=e.deltaY<0?Math.min(scale*1.1,2.5):Math.max(scale/1.1,.1);tx=mx-(mx-tx)*(scale/pv);ty=my-(my-ty)*(scale/pv);applyTransform(); },{passive:false});
+  wrap.addEventListener('wheel',e=>{ if(level!=='zones'||splitActive_())return; e.preventDefault(); const r=wrap.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;const pv=scale;scale=e.deltaY<0?Math.min(scale*1.1,2.5):Math.max(scale/1.1,.1);tx=mx-(mx-tx)*(scale/pv);ty=my-(my-ty)*(scale/pv);applyTransform(); },{passive:false});
   window.addEventListener('resize',()=>{ if(level==='zones'){ buildZones(); if(!isMobileV())fitZones(); } });
   document.addEventListener('click',e=>{ if(!e.target.closest('.srch-wrap')) closeSearch(); if(!e.target.closest('.al-row')){ const b=document.getElementById('alSug'); if(b){b.classList.remove('show');b.innerHTML='';} } });
   document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ if(document.getElementById('locPanel').classList.contains('show'))closeLoc(); else if(level==='locs')backTo(curBay?'bays':'racks'); else if(level==='bays')backTo('racks'); else if(level==='racks')backTo('zones'); } });
