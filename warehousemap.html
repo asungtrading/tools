@@ -163,6 +163,20 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
   .zoomv{min-width:32px;font-size:11px}
   .crumbs{padding:6px 10px;font-size:11px}
   .statusbar{display:none}
+  /* 폰에서 불필요한 것 숨김: 존 편집·저장·레이아웃·초기화 (데스크톱 작업) */
+  #modeBtn,#structTools,.desk-only{display:none !important}
+  /* 가독성: 핵심 텍스트 확대 */
+  .dcard .c-sub{font-size:12px}
+  .dcard .c-prod{font-size:12px}
+  .lp-item .p-sku{font-size:14px}
+  .lp-item .p-name{font-size:13px}
+  .sr-name{font-size:13px}
+  .sr-sub{font-size:11px}
+  .sr-bin{font-size:11px;padding:3px 8px}
+  .pcard table{font-size:12px}
+  .lp-sec h4{font-size:12px}
+  .al-row input,.lp-field input{font-size:16px}  /* iOS 자동확대 방지(16px 미만이면 줌됨) */
+  .al-sug div{padding:11px 12px}
 }
 </style></head><body>
 <header>
@@ -180,7 +194,7 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
   <div class="divider"></div>
   <div class="grp"></div>
   <div class="divider"></div>
-  <div class="grp"><button class="tbtn green" onclick="saveLayout()">💾 저장</button><button class="tbtn" onclick="openLayout()">🧭 레이아웃</button><button class="tbtn danger" onclick="resetAll()">↩ 내 화면 초기화</button><button class="tbtn" id="btnCount" onclick="toggleCountMode()">📋 실사</button></div>
+  <div class="grp"><button class="tbtn green desk-only" onclick="saveLayout()">💾 저장</button><button class="tbtn desk-only" onclick="openLayout()">🧭 레이아웃</button><button class="tbtn danger desk-only" onclick="resetAll()">↩ 내 화면 초기화</button><button class="tbtn" id="btnCount" onclick="toggleCountMode()">📋 실사</button></div>
   <div class="spacer"></div>
   <div class="grp"><button class="tbtn" onclick="zoomBy(1/1.2)">−</button><span class="zoomv" id="zoomv">100%</span><button class="tbtn" onclick="zoomBy(1.2)">+</button><button class="tbtn" onclick="fitZones()">리셋 뷰</button></div>
 </header>
@@ -312,16 +326,16 @@ SHELF_DEFS.push(
 );
 
 const EXTRAS = ["Aoneroom","B0601002","CASHIER0201","CASHIER0202","CASHIER0203","CASHIER0204"];
-const ZONE_COLORS={A:'#b52626',B:'#6b23a0',C:'#c45200',D:'#145a8f',E:'#0e7a66',F:'#5a8c00',G:'#b02060',H:'#106438',J:'#9a7500',K:'#0e5a8a',R:'#b84800',W:'#5a2a80',Z:'#3a4460'};
+const ZONE_COLORS={A:'#b52626',B:'#6b23a0',C:'#c45200',D:'#145a8f',E:'#0e7a66',F:'#5a8c00',G:'#b02060',H:'#106438',J:'#9a7500',I:'#7a5230',K:'#0e5a8a',R:'#b84800',W:'#5a2a80',Z:'#3a4460'};
 // ===== constants / state =====
 const BAY_W=48, LEVEL_H=26, SNAP=12;
-const APP_VER='v29.7';
+const APP_VER='v29.8';
 const LAYOUT_KEY='asung_whzone_layout_v1', PROD_KEY='asung_whclean_prod_v1';
 // 팀 공유 기본 레이아웃 — localStorage에 저장본이 없을 때 이 값으로 그린다.
 // (도구에서 '🧭 레이아웃 → 복사'한 JSON을 여기에 붙여넣으면 모두가 같은 배치를 본다)
 const DEFAULT_LAYOUT = {
   toronto:  {"zpos":{"A":{"x":144,"y":780,"w":420,"h":180},"B":{"x":696,"y":60,"w":300,"h":696},"C":{"x":144,"y":300,"w":516,"h":336},"D":{"x":132,"y":12,"w":252,"h":240},"E":{"x":1056,"y":132,"w":336,"h":456},"F":{"x":1416,"y":132,"w":396,"h":456},"G":{"x":1056,"y":720,"w":216,"h":264},"H":{"x":1296,"y":624,"w":444,"h":72},"J":{"x":1056,"y":0,"w":300,"h":96},"K":{"x":1596,"y":732,"w":180,"h":96},"R":{"x":1296,"y":720,"w":108,"h":264},"W":{"x":1500,"y":0,"w":300,"h":96},"Z":{"x":360,"y":672,"w":300,"h":72}},"structs":[{"id":"Smraq2ng1","label":"구역","x":1428,"y":720,"w":384,"h":264},{"id":"Smraq8i9x","label":"구역","x":696,"y":792,"w":300,"h":180},{"id":"Smraq8szg","label":"구역","x":444,"y":84,"w":216,"h":180}]},
-  edmonton: null
+  edmonton: {"zpos":{"A":{"x":4416,"y":2016,"w":276,"h":1272},"B":{"x":3936,"y":2004,"w":300,"h":1512},"C":{"x":3480,"y":2028,"w":300,"h":1476},"D":{"x":3000,"y":2028,"w":300,"h":1476},"E":{"x":2484,"y":2052,"w":300,"h":1452},"F":{"x":2004,"y":2064,"w":300,"h":1440},"G":{"x":2220,"y":1104,"w":300,"h":876},"I":{"x":4272,"y":1092,"w":408,"h":408},"U":{"x":2016,"y":-12,"w":2676,"h":588},"Z":{"x":2532,"y":672,"w":1524,"h":324}},"structs":[{"id":"Smrb1q89b","label":"PIKC PACK DESK 02","x":2700,"y":1128,"w":516,"h":768},{"id":"Smrb1qoe8","label":"LIFT","x":4296,"y":1584,"w":372,"h":300},{"id":"Smrb1s2nt","label":"RESTROOM","x":4248,"y":684,"w":444,"h":300},{"id":"Smrb1tfhs","label":"STAIRS","x":1752,"y":720,"w":348,"h":888},{"id":"Smrb1tzlc","label":"PICK PACK DESK 2","x":3504,"y":1140,"w":504,"h":780},{"id":"Smrb1uakw","label":"PICKUP ZONE","x":2016,"y":3612,"w":1224,"h":348},{"id":"Smrb1upx1","label":"LOADING ZONE","x":4368,"y":3420,"w":336,"h":252},{"id":"Smrb1uyna","label":"CASHIER DESK","x":3780,"y":3576,"w":444,"h":384}]}
 };
 let mode='view';                 // 'view' | 'edit'
 let level='zones';               // 'zones' | 'racks' | 'bays' | 'locs'
@@ -935,7 +949,8 @@ function updateCrumbs(){
 function setInfo(t){document.getElementById('sbInfo').textContent=t||'';}
 function updateCount(){ const tot=zonesList().reduce((a,z)=>a+zoneTotal(z),0); const keys=Object.keys(locMap).filter(k=>inWH(k)&&locItems(k).length); const skus=keys.reduce((a,k)=>a+locItems(k).length,0);
   let cnt='';
-  if(COUNTED){ const all=allLocsOfWH(); let d=0; COUNTED.forEach(c=>{if(all.has(c))d++;}); cnt=` · 📋 실사 ${d}/${all.size}`; }
+  if(COUNTED){ const all=allLocsOfWH(); let d=0; COUNTED.forEach(c=>{if(all.has(c))d++;}); cnt=` · 📋 실사 ${d}/${all.size}`;
+    const bc=document.getElementById('btnCount'); if(bc)bc.textContent=`📋 ${d}/${all.size}`; }
   document.getElementById('sbCount').textContent=`[${curWH.label}] 매핑 로케이션 ${keys.length}/${tot} · SKU ${skus}${cnt}`; }
 function toggleMode(){
   mode=(mode==='view')?'edit':'view'; selEnt=null;
