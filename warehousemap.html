@@ -113,6 +113,7 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
 .sr-bin.zero{color:#8a90a2;background:#eef0f3}
 .sr-bin.other{background:#fff;border:1px dashed #b9c2d4;color:#4a5570}
 .sr-bin.other:hover{background:#1a6fd4;color:#fff;border-color:#1a6fd4}
+.cnt-ok{color:#1a936f;font-weight:900}
 .sr-empty{padding:14px;font-size:12px;color:var(--dim)}
 .al-row{display:flex;gap:6px;position:relative}
 .al-row input{flex:1}
@@ -179,7 +180,7 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
   <div class="divider"></div>
   <div class="grp"></div>
   <div class="divider"></div>
-  <div class="grp"><button class="tbtn green" onclick="saveLayout()">💾 저장</button><button class="tbtn" onclick="openLayout()">🧭 레이아웃</button><button class="tbtn danger" onclick="resetAll()">↩ 내 화면 초기화</button></div>
+  <div class="grp"><button class="tbtn green" onclick="saveLayout()">💾 저장</button><button class="tbtn" onclick="openLayout()">🧭 레이아웃</button><button class="tbtn danger" onclick="resetAll()">↩ 내 화면 초기화</button><button class="tbtn" id="btnCount" onclick="toggleCountMode()">📋 실사</button></div>
   <div class="spacer"></div>
   <div class="grp"><button class="tbtn" onclick="zoomBy(1/1.2)">−</button><span class="zoomv" id="zoomv">100%</span><button class="tbtn" onclick="zoomBy(1.2)">+</button><button class="tbtn" onclick="fitZones()">리셋 뷰</button></div>
 </header>
@@ -314,7 +315,7 @@ const EXTRAS = ["Aoneroom","B0601002","CASHIER0201","CASHIER0202","CASHIER0203",
 const ZONE_COLORS={A:'#b52626',B:'#6b23a0',C:'#c45200',D:'#145a8f',E:'#0e7a66',F:'#5a8c00',G:'#b02060',H:'#106438',J:'#9a7500',K:'#0e5a8a',R:'#b84800',W:'#5a2a80',Z:'#3a4460'};
 // ===== constants / state =====
 const BAY_W=48, LEVEL_H=26, SNAP=12;
-const APP_VER='v29.5';
+const APP_VER='v29.7';
 const LAYOUT_KEY='asung_whzone_layout_v1', PROD_KEY='asung_whclean_prod_v1';
 // 팀 공유 기본 레이아웃 — localStorage에 저장본이 없을 때 이 값으로 그린다.
 // (도구에서 '🧭 레이아웃 → 복사'한 JSON을 여기에 붙여넣으면 모두가 같은 배치를 본다)
@@ -573,10 +574,57 @@ function locCardHtml(code,col){
   const label=items.length===0?'':(items.length===1?(items[0].name||items[0].sku||''):(items.length+'개 제품'));
   const allPast=m&&items.every(itemIsPast);
   return `<div class="dcard${m?' mapped':''}${allPast?' past':''}" style="border-left-color:${allPast?'#aab0c0':(m?'#1a936f':col)}" onclick="openLoc('${code}')">
-    <div class="c-id" style="color:${allPast?'#8a90a2':(m?'#146a52':col)}">${code}</div>
+    <div class="c-id" style="color:${allPast?'#8a90a2':(m?'#146a52':col)}">${code}${COUNTED&&COUNTED.has(code)?' <span class="cnt-ok">✓</span>':''}</div>
     <div class="c-sub">${lv}${m?' · '+items.length+' SKU':' · 미매핑'}</div>
     ${m?`<div class="c-prod">${allPast?'⏳ 과거 위치 · ':'✓ '}${esc(label)}</div>`:''}</div>`;
 }
+
+// 기록자 이름 — 없으면 기록 불가 (2자 이상 요구, 취소 시 null)
+function wmUser_(){
+  let u=(localStorage.getItem(WM_USER_KEY)||'').trim();
+  if(u.length>=2) return u;
+  const inp=prompt('기록자 이름 (필수, 2자 이상)');
+  if(inp===null) return null;
+  u=inp.trim();
+  if(u.length<2) return null;
+  localStorage.setItem(WM_USER_KEY,u);
+  wmWhoRefresh_();
+  return u;
+}
+function changeUser(){
+  const cur=(localStorage.getItem(WM_USER_KEY)||'').trim();
+  const inp=prompt('기록자 이름 변경 (2자 이상)', cur);
+  if(inp===null)return;
+  const u=inp.trim();
+  if(u.length>=2){ localStorage.setItem(WM_USER_KEY,u); wmWhoRefresh_(); }
+}
+function wmWhoRefresh_(){
+  const el=document.getElementById('wmWho'); if(!el)return;
+  const u=(localStorage.getItem(WM_USER_KEY)||'').trim();
+  el.innerHTML='기록자: <b>'+esc(u||'미설정 (첫 기록 때 1회 입력)')+'</b> · <a style="color:var(--accent);cursor:pointer;font-weight:700" onclick="changeUser()">변경</a>';
+}
+
+// ===== 실사(피지컬 카운트) 모드 =====
+let COUNTED=null; // Set(loc) — 시트에서 불러온 '기록된 로케이션'
+async function toggleCountMode(){
+  const btn=document.getElementById('btnCount');
+  if(COUNTED){ COUNTED=null; btn.classList.remove('active'); btn.textContent='📋 실사'; refreshDrill(); updateCount(); return; }
+  if(!WHMAP_SYNC_URL){alert('연동 URL 미설정');return;}
+  const today=new Date().toISOString().slice(0,10);
+  const since=prompt('실사 시작일 (이후 기록만 완료로 표시)',today); if(since===null)return;
+  btn.textContent='📋 로딩…';
+  const payload=pin=>({action:'counted_locs',pin:pin||'',since:(since||'').trim()});
+  try{
+    let r=await wmCall(payload(localStorage.getItem(WM_PIN_KEY)||''));
+    if(r&&!r.ok&&/PIN/.test(r.error||'')){
+      const pin=prompt('수정 PIN 입력'); if(!pin){btn.textContent='📋 실사';return;}
+      localStorage.setItem(WM_PIN_KEY,pin); r=await wmCall(payload(pin));
+    }
+    if(r&&r.ok){ COUNTED=new Set(r.locs||[]); btn.classList.add('active'); btn.textContent='📋 실사 중'; refreshDrill(); updateCount(); }
+    else{ alert('⚠️ '+((r&&r.error)||'불러오기 실패')); btn.textContent='📋 실사'; }
+  }catch(e){ alert('⚠️ '+e.message); btn.textContent='📋 실사'; }
+}
+function countMarkDone(loc){ if(COUNTED){ COUNTED.add(loc); refreshDrill(); updateCount(); } }
 
 // ===== product panel =====
 function parseCode(code){ let c=code; const pre=curWH.prefix; if(pre&&c.indexOf(pre)===0)c=c.slice(pre.length); const m=/^([A-Z])(\d{2})(\d{2})(\d{2})$/.exec(c); if(m)return{zone:m[1],rack:m[1]+m[2],bay:m[1]+m[2]+m[3],level:+m[4]}; return null; }
@@ -615,7 +663,7 @@ function openItem(idx){
           <tr><td>바코드</td><td class="v">${esc(P.barcode||'—')}</td></tr>
           <tr><td>브랜드</td><td class="v">${esc(P.brand||'—')}</td></tr>
           <tr><td>서플라이어</td><td class="v">${esc(P.supplier||'—')}</td></tr>
-          <tr><td>재고</td><td class="v">${st===null?'—':st}${past&&it.seen?' · 마지막 확인 '+esc(it.seen):''}</td></tr>
+          <tr><td>재고</td><td class="v">${st===null?'—':st}${(it.avail!==undefined&&it.avail!==null)?` <span style="color:var(--mid);font-weight:600">· 가용 ${it.avail}</span>`:''}${past&&it.seen?' · 마지막 확인 '+esc(it.seen):''}</td></tr>
           <tr><td>대체 위치</td><td class="v" style="color:#8a90a2">— (엑셀 연동 예정)</td></tr>
         </table>
       </div>
@@ -636,7 +684,9 @@ function openItem(idx){
         <input id="aqVal" type="number" inputmode="numeric" min="0" placeholder="실제 수량 입력 (시스템: ${st===null?'—':st})">
         <button class="tbtn" onclick="saveActualQty()">기록</button>
       </div>
+      <div style="margin-top:7px"><button class="tbtn green" onclick="saveCountOk()">✓ 재고 일치${st===null?'':' ('+st+')'}</button> <span style="font-size:10px;color:var(--mid)">실사 시: 세어본 수량이 시스템과 같으면 클릭</span></div>
       <div id="aqMsg" style="font-size:11px;color:var(--mid);margin-top:6px"></div>
+      <div id="wmWho" style="font-size:10px;color:var(--mid);margin-top:8px"></div>
     </div>`:'';
   document.getElementById('lpView').innerHTML=`
     <button class="lp-back" onclick="renderLocList()">‹ 목록으로</button>
@@ -647,6 +697,7 @@ function openItem(idx){
     <div class="lp-field"><label>제품명</label><input id="lpName" value="${esc(it.name||P.name||'')}" placeholder="예: Gummy Styling Wax 150ml"></div>
     <div class="lp-field"><label>재고</label><input id="lpNote" type="number" inputmode="numeric" value="${st===null?'':st}" placeholder="숫자만"></div>
     <div class="lp-actions"><button class="tbtn green" onclick="saveItem()">저장</button>${idx>=0?'<button class="tbtn danger" onclick="delItem()">내 화면에서 숨김</button>':''}</div>`;
+  wmWhoRefresh_();
 }
 
 // ── 실제위치 수정 (write-back) ──
@@ -695,7 +746,7 @@ async function saveActualLoc(){
   if(!allLocsOfWH().has(val)){msg.textContent='⚠️ 목록에 없는 로케이션: '+val+' (드롭다운에서 선택)';return;}
   if(val===curLoc){msg.textContent='현재 위치와 동일합니다';return;}
   if(!WHMAP_SYNC_URL){msg.textContent='⚠️ 연동 URL 미설정';return;}
-  let user=localStorage.getItem(WM_USER_KEY); if(!user){user=prompt('이름(기록용)')||''; localStorage.setItem(WM_USER_KEY,user);}
+  const user=wmUser_(); if(!user){msg.textContent='⚠️ 기록자 이름(2자 이상)을 입력해야 기록됩니다';return;}
   const _sug=document.getElementById('alSug'); if(_sug)_sug.classList.remove('show');
   msg.textContent='저장 중…';
   const payload=pin=>({action:'save_correction',type:'LOC',pin:pin||'',user,warehouse:curWH.label,sku:it.sku,product_name:it.name||'',system_loc:curLoc,actual_loc:val,memo:''});
@@ -708,7 +759,7 @@ async function saveActualLoc(){
       localStorage.setItem(WM_PIN_KEY,pin);
       r=await wmCall(payload(pin));
     }
-    if(r&&r.ok){msg.textContent='✅ 기록됨: '+it.sku+' → '+val;}
+    if(r&&r.ok){msg.textContent='✅ 기록됨: '+it.sku+' → '+val; countMarkDone(curLoc);}
     else{msg.textContent='⚠️ '+((r&&r.error)||'저장 실패'); if(r&&/PIN/.test(r.error||''))localStorage.removeItem(WM_PIN_KEY);}
   }catch(e){msg.textContent='⚠️ '+e.message;}
 }
@@ -722,7 +773,7 @@ async function saveActualQty(){
   const sysQty=itemStock(it);
   if(sysQty!==null&&qty===sysQty){msg.textContent='시스템 재고와 동일합니다 ('+sysQty+')';return;}
   if(!WHMAP_SYNC_URL){msg.textContent='⚠️ 연동 URL 미설정';return;}
-  let user=localStorage.getItem(WM_USER_KEY); if(!user){user=prompt('이름(기록용)')||''; localStorage.setItem(WM_USER_KEY,user);}
+  const user=wmUser_(); if(!user){msg.textContent='⚠️ 기록자 이름(2자 이상)을 입력해야 기록됩니다';return;}
   msg.textContent='저장 중…';
   const payload=pin=>({action:'save_correction',type:'QTY',pin:pin||'',user,warehouse:curWH.label,sku:it.sku,product_name:it.name||'',system_loc:curLoc,system_qty:(sysQty===null?'':sysQty),actual_qty:qty,memo:''});
   try{
@@ -732,7 +783,27 @@ async function saveActualQty(){
       localStorage.setItem(WM_PIN_KEY,pin);
       r=await wmCall(payload(pin));
     }
-    if(r&&r.ok){msg.textContent='✅ 기록됨: '+it.sku+' 재고 '+(sysQty===null?'—':sysQty)+' → '+qty;}
+    if(r&&r.ok){msg.textContent='✅ 기록됨: '+it.sku+' 재고 '+(sysQty===null?'—':sysQty)+' → '+qty; countMarkDone(curLoc);}
+    else{msg.textContent='⚠️ '+((r&&r.error)||'저장 실패'); if(r&&/PIN/.test(r.error||''))localStorage.removeItem(WM_PIN_KEY);}
+  }catch(e){msg.textContent='⚠️ '+e.message;}
+}
+async function saveCountOk(){
+  const msg=document.getElementById('aqMsg');
+  const items=locItems(curLoc); const it=items[curItemIdx]; if(!it)return;
+  const sysQty=itemStock(it);
+  if(sysQty===null){msg.textContent='시스템 재고 정보가 없어 일치 확인 불가 — 실제 수량을 입력해 기록하세요';return;}
+  if(!WHMAP_SYNC_URL){msg.textContent='⚠️ 연동 URL 미설정';return;}
+  const user=wmUser_(); if(!user){msg.textContent='⚠️ 기록자 이름(2자 이상)을 입력해야 기록됩니다';return;}
+  msg.textContent='저장 중…';
+  const payload=pin=>({action:'save_correction',type:'OK',pin:pin||'',user,warehouse:curWH.label,sku:it.sku,product_name:it.name||'',system_loc:curLoc,system_qty:sysQty,actual_qty:sysQty,memo:''});
+  try{
+    let r=await wmCall(payload(localStorage.getItem(WM_PIN_KEY)||''));
+    if(r&&!r.ok&&/PIN/.test(r.error||'')){
+      const pin=prompt('수정 PIN 입력'); if(!pin){msg.textContent='취소됨';return;}
+      localStorage.setItem(WM_PIN_KEY,pin);
+      r=await wmCall(payload(pin));
+    }
+    if(r&&r.ok){msg.textContent='✅ 일치 확인 기록됨: '+it.sku+' = '+sysQty; countMarkDone(curLoc);}
     else{msg.textContent='⚠️ '+((r&&r.error)||'저장 실패'); if(r&&/PIN/.test(r.error||''))localStorage.removeItem(WM_PIN_KEY);}
   }catch(e){msg.textContent='⚠️ '+e.message;}
 }
@@ -862,7 +933,10 @@ function updateCrumbs(){
   el.innerHTML=h;
 }
 function setInfo(t){document.getElementById('sbInfo').textContent=t||'';}
-function updateCount(){ const tot=zonesList().reduce((a,z)=>a+zoneTotal(z),0); const keys=Object.keys(locMap).filter(k=>inWH(k)&&locItems(k).length); const skus=keys.reduce((a,k)=>a+locItems(k).length,0); document.getElementById('sbCount').textContent=`[${curWH.label}] 매핑 로케이션 ${keys.length}/${tot} · SKU ${skus}`; }
+function updateCount(){ const tot=zonesList().reduce((a,z)=>a+zoneTotal(z),0); const keys=Object.keys(locMap).filter(k=>inWH(k)&&locItems(k).length); const skus=keys.reduce((a,k)=>a+locItems(k).length,0);
+  let cnt='';
+  if(COUNTED){ const all=allLocsOfWH(); let d=0; COUNTED.forEach(c=>{if(all.has(c))d++;}); cnt=` · 📋 실사 ${d}/${all.size}`; }
+  document.getElementById('sbCount').textContent=`[${curWH.label}] 매핑 로케이션 ${keys.length}/${tot} · SKU ${skus}${cnt}`; }
 function toggleMode(){
   mode=(mode==='view')?'edit':'view'; selEnt=null;
   document.getElementById('structTools').style.display=(mode==='edit')?'flex':'none';
@@ -896,7 +970,7 @@ async function loadBinsJson(){
     if(!r.ok) throw new Error('no file');
     const data=await r.json();
     AUTO={};
-    for(const k in data){ const v=data[k]; AUTO[k]=(Array.isArray(v)?v:[v]).map(x=>({sku:x.sku||'',name:x.name||'',note:x.note||'',stock:(typeof x.stock==='number'?x.stock:null),cur:(x.cur===undefined?null:!!x.cur),seen:x.seen||''})); }
+    for(const k in data){ const v=data[k]; AUTO[k]=(Array.isArray(v)?v:[v]).map(x=>({sku:x.sku||'',name:x.name||'',note:x.note||'',stock:(typeof x.stock==='number'?x.stock:null),avail:(typeof x.avail==='number'?x.avail:null),cur:(x.cur===undefined?null:!!x.cur),seen:x.seen||''})); }
     recompute();
     if(level==='zones')buildZones(); else refreshDrill();
     updateCount(); setAutoStatus(Object.keys(AUTO).length);
