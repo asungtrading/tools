@@ -15,7 +15,7 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
 .crumb{color:var(--accent);cursor:pointer;font-weight:700}.crumb.cur{color:var(--text);cursor:default}.csep{color:var(--dim)}
 .hint{color:var(--dim);font-weight:600}
 .wrap{flex:1;position:relative;overflow:hidden}
-#svgWrap{position:absolute;inset:0;transform-origin:0 0}
+#svgWrap{position:absolute;inset:0;transform-origin:0 0;touch-action:none}
 #svgWrap.anim{transition:transform .32s cubic-bezier(.4,0,.2,1)}
 .wrap.pan{cursor:grab}.wrap.pan.panning{cursor:grabbing}.wrap.edit{cursor:default}
 /* drill card grid overlay */
@@ -145,7 +145,7 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
   .col-body{padding:12px}
   .dgrid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:9px}
   /* 제품 패널 = 바텀시트 (아래서 올라옴) */
-  #locPanel{width:100%;left:0;right:0;top:auto;bottom:0;height:84vh;border-left:none;border-top:1px solid var(--border);border-radius:16px 16px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.14);transform:translateY(100%)}
+  #locPanel{width:100%;left:0;right:0;top:auto;bottom:0;height:56vh;border-left:none;border-top:1px solid var(--border);border-radius:16px 16px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.14);transform:translateY(100%)}
   #locPanel.show{transform:none}
   #locPanel .lp-body{padding-bottom:56px}
   .pcard img{width:104px;height:104px}
@@ -161,7 +161,8 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
   .srch-in{width:100%}
   #srchRes{width:min(430px,94vw)}
   .zoomv{min-width:32px;font-size:11px}
-  .crumbs{padding:6px 10px;font-size:11px}
+  .crumbs{padding:6px 10px;font-size:12px}
+  .crumb{padding:6px 4px;display:inline-block}
   .statusbar{display:none}
   /* 폰에서 불필요한 것 숨김: 존 편집·저장·레이아웃·초기화 (데스크톱 작업) */
   #modeBtn,#structTools,.desk-only{display:none !important}
@@ -329,7 +330,7 @@ const EXTRAS = ["Aoneroom","B0601002","CASHIER0201","CASHIER0202","CASHIER0203",
 const ZONE_COLORS={A:'#b52626',B:'#6b23a0',C:'#c45200',D:'#145a8f',E:'#0e7a66',F:'#5a8c00',G:'#b02060',H:'#106438',J:'#9a7500',I:'#7a5230',K:'#0e5a8a',R:'#b84800',W:'#5a2a80',Z:'#3a4460'};
 // ===== constants / state =====
 const BAY_W=48, LEVEL_H=26, SNAP=12;
-const APP_VER='v29.8';
+const APP_VER='v29.10';
 const LAYOUT_KEY='asung_whzone_layout_v1', PROD_KEY='asung_whclean_prod_v1';
 // 팀 공유 기본 레이아웃 — localStorage에 저장본이 없을 때 이 값으로 그린다.
 // (도구에서 '🧭 레이아웃 → 복사'한 JSON을 여기에 붙여넣으면 모두가 같은 배치를 본다)
@@ -661,7 +662,7 @@ function renderLocList(){
       <span class="p-name">${esc(it.name||P.name||'')}</span>${seen}</div>`;
   }).join('');
   const body=items.length?`<div class="lp-count">이 로케이션의 제품 ${items.length}개 — SKU를 누르면 상세</div>${rows}`:`<div class="lp-empty">아직 등록된 제품이 없습니다.</div>`;
-  document.getElementById('lpView').innerHTML=body+`<button class="tbtn green lp-add" onclick="openItem(-1)">＋ 제품 추가</button>`;
+  document.getElementById('lpView').innerHTML=body;
 }
 function openItem(idx){
   curItemIdx=idx; const items=locItems(curLoc); const it=(idx>=0?items[idx]:{sku:'',name:'',note:''});
@@ -705,12 +706,7 @@ function openItem(idx){
   document.getElementById('lpView').innerHTML=`
     <button class="lp-back" onclick="renderLocList()">‹ 목록으로</button>
     ${pcard}
-    ${corr}
-    <div class="lp-sec"><h4>✏️ 수동 수정 (선택)</h4></div>
-    <div class="lp-field"><label>SKU / 코드</label><input id="lpSku" value="${esc(it.sku||'')}" placeholder="예: CON64040"></div>
-    <div class="lp-field"><label>제품명</label><input id="lpName" value="${esc(it.name||P.name||'')}" placeholder="예: Gummy Styling Wax 150ml"></div>
-    <div class="lp-field"><label>재고</label><input id="lpNote" type="number" inputmode="numeric" value="${st===null?'':st}" placeholder="숫자만"></div>
-    <div class="lp-actions"><button class="tbtn green" onclick="saveItem()">저장</button>${idx>=0?'<button class="tbtn danger" onclick="delItem()">내 화면에서 숨김</button>':''}</div>`;
+    ${corr}`;
   wmWhoRefresh_();
 }
 
@@ -821,25 +817,6 @@ async function saveCountOk(){
     else{msg.textContent='⚠️ '+((r&&r.error)||'저장 실패'); if(r&&/PIN/.test(r.error||''))localStorage.removeItem(WM_PIN_KEY);}
   }catch(e){msg.textContent='⚠️ '+e.message;}
 }
-function saveItem(){
-  if(!curLoc)return;
-  const sku=document.getElementById('lpSku').value.trim(),name=document.getElementById('lpName').value.trim();
-  const stockRaw=document.getElementById('lpNote').value.trim();
-  const stockNum=stockRaw===''?null:(parseInt(stockRaw,10)||0);
-  const note=stockNum===null?'':('재고 '+stockNum);
-  if(!sku&&!name){setInfo('SKU 또는 제품명을 입력하세요');return;}
-  let arr=locItems(curLoc).slice();
-  const item={sku,name,note}; if(stockNum!==null){item.stock=stockNum; item.cur=stockNum>0;}
-  if(curItemIdx>=0)arr[curItemIdx]=item; else arr.push(item);
-  OVER[curLoc]=arr; saveLayout(); recompute(); renderLocList(); refreshDrill(); updateCount(); setInfo(curLoc+' 저장됨(내 수정)');
-}
-function delItem(){
-  if(curItemIdx<0||!curLoc)return;
-  if(!confirm('이 항목을 내 브라우저 화면에서만 숨깁니다.\nBQ·Cin7·동료 화면의 데이터는 변경되지 않습니다.\n(되돌리려면 ↩ 초기화)\n\n계속할까요?'))return;
-  let arr=locItems(curLoc).slice(); arr.splice(curItemIdx,1);
-  OVER[curLoc]=arr;  // 빈 배열이면 자동값도 숨김
-  saveLayout(); recompute(); renderLocList(); refreshDrill(); updateCount(); setInfo('삭제됨(내 수정)');
-}
 function closeLoc(){ document.getElementById('locPanel').classList.remove('show'); curLoc=null; }
 function refreshDrill(){ if(level==='locs'){ if(curBay)enterBay(curBay); else if(curRack)enterRack(curRack); } }
 
@@ -868,6 +845,11 @@ function runSearch(q){
     const hay=(sku+' '+(bySku[sku].name||P.name||'')+' '+(P.barcode||'')+' '+(P.brand||'')+' '+(P.supplier||'')).toLowerCase();
     if(hay.indexOf(q)!==-1){ res.push({...bySku[sku],P}); if(res.length>=25)break; }
   }
+  // ALT 바코드/ALT SKU 스캔 → base SKU 로 매핑 (실사·피킹 중 스캔 대응)
+  const altBase=ALT_MAP[(q||'').trim()]||ALT_MAP[(q||'').trim().toUpperCase()]||ALT_MAP[q.toUpperCase()];
+  if(altBase&&bySku[altBase]&&bySku[altBase].binsAll.length&&!res.some(r=>r.sku===altBase)){
+    res.unshift({...bySku[altBase],P:prodOf(altBase)||{},alt:true});
+  }
   if(!res.length){box.innerHTML='<div class="sr-empty">검색 결과 없음 — 매핑된 로케이션의 제품에서 찾습니다</div>';box.classList.add('show');return;}
   // 로케이션 요약: 이 검색에 걸린 SKU들이 깔린 로케이션 전체 (중복 제거)
   const binSet=new Map();
@@ -889,7 +871,7 @@ function runSearch(q){
     }).join('');
     return `<div class="sr-row">${img}<div class="sr-main">
       <div class="sr-name">${esc(r.name||r.P.name||r.sku)}${r.P.is_new?'<span class="badge-new">NEW</span>':''}</div>
-      <div class="sr-sub">${esc(r.sku)}${r.P.barcode?' · '+esc(r.P.barcode):''}${r.P.brand?' · '+esc(r.P.brand):''}${r.P.supplier?' · '+esc(r.P.supplier):''}</div>
+      <div class="sr-sub">${esc(r.sku)}${r.alt?' · <b style="color:#b02060">🔁 ALT 바코드</b>':''}${r.P.barcode?' · '+esc(r.P.barcode):''}${r.P.brand?' · '+esc(r.P.brand):''}${r.P.supplier?' · '+esc(r.P.supplier):''}</div>
       <div class="sr-bins">${bins}</div></div></div>`;
   }).join('');
   box.classList.add('show');
@@ -933,6 +915,7 @@ function onEntDown(e){
   buildZones();
 }
 function backTo(lv){
+  if(document.getElementById('locPanel').classList.contains('show')) closeLoc();
   if(lv==='zones'){ level='zones'; curZone=curRack=curBay=null; hideDrill(); buildZones(); updateCrumbs(); updateCount(); setInfo(''); return; }
   if(lv==='racks'){ enterZone(curZone); return; }
   if(lv==='bays'){ enterRack(curRack); return; }
@@ -971,6 +954,32 @@ function setupEvents(){
     if(isPanning){panMoved=true;tx=panTX+(e.clientX-panSX);ty=panTY+(e.clientY-panSY);applyTransform();}
   });
   window.addEventListener('mouseup',()=>{ if(dragging){ if(dragging.moved)saveLayout(); dragging=null; } isPanning=false; });
+  // ── 터치: 1손가락 팬 / 2손가락 핀치줌 (존 맵) ──
+  let tch=null;
+  wrap.addEventListener('touchstart',e=>{
+    if(level!=='zones')return;
+    if(e.touches.length===1){const t=e.touches[0];tch={m:'pan',sx:t.clientX,sy:t.clientY,tx0:tx,ty0:ty};}
+    else if(e.touches.length>=2){const a=e.touches[0],b=e.touches[1];
+      tch={m:'pinch',d0:Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY)||1,s0:scale,
+        cx:(a.clientX+b.clientX)/2,cy:(a.clientY+b.clientY)/2,tx0:tx,ty0:ty};}
+  },{passive:true});
+  wrap.addEventListener('touchmove',e=>{
+    if(!tch||level!=='zones')return; e.preventDefault();
+    if(tch.m==='pan'&&e.touches.length===1){
+      const t=e.touches[0]; tx=tch.tx0+(t.clientX-tch.sx); ty=tch.ty0+(t.clientY-tch.sy); applyTransform();
+    } else if(tch.m==='pinch'&&e.touches.length>=2){
+      const a=e.touches[0],b=e.touches[1];
+      const d=Math.hypot(b.clientX-a.clientX,b.clientY-a.clientY)||1;
+      const ns=Math.max(.1,Math.min(tch.s0*d/tch.d0,2.5));
+      const r=wrap.getBoundingClientRect(); const mx=tch.cx-r.left,my=tch.cy-r.top;
+      tx=mx-(mx-tch.tx0)*(ns/tch.s0); ty=my-(my-tch.ty0)*(ns/tch.s0);
+      scale=ns; applyTransform();
+    }
+  },{passive:false});
+  wrap.addEventListener('touchend',e=>{
+    if(e.touches.length===0){tch=null;return;}
+    if(e.touches.length===1){const t=e.touches[0];tch={m:'pan',sx:t.clientX,sy:t.clientY,tx0:tx,ty0:ty};}
+  });
   wrap.addEventListener('wheel',e=>{ if(level!=='zones')return; e.preventDefault(); const r=wrap.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;const pv=scale;scale=e.deltaY<0?Math.min(scale*1.1,2.5):Math.max(scale/1.1,.1);tx=mx-(mx-tx)*(scale/pv);ty=my-(my-ty)*(scale/pv);applyTransform(); },{passive:false});
   document.addEventListener('click',e=>{ if(!e.target.closest('.srch-wrap')) closeSearch(); if(!e.target.closest('.al-row')){ const b=document.getElementById('alSug'); if(b){b.classList.remove('show');b.innerHTML='';} } });
   document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ if(document.getElementById('locPanel').classList.contains('show'))closeLoc(); else if(level==='locs')backTo(curBay?'bays':'racks'); else if(level==='bays')backTo('racks'); else if(level==='racks')backTo('zones'); } });
@@ -1015,9 +1024,22 @@ async function loadProductsJson(){
     const r=await fetch('products.json?t='+Date.now());
     if(!r.ok) throw new Error('no file');
     PRODUCTS=await r.json();
+    buildAltMap_();
     const el=document.getElementById('sbAuto');
     if(el&&el.classList.contains('sb-ok')) el.textContent+=' · 제품정보 '+Object.keys(PRODUCTS).length+' SKU';
   }catch(e){ /* 없으면 조용히 — 기본 기능은 동작 */ }
+}
+let ALT_MAP={};   // alt 바코드/altSKU → base SKU  (Cin7: BASE-EA-ALT-UPC 패턴)
+function buildAltMap_(){
+  ALT_MAP={};
+  for(const sku in PRODUCTS){
+    if(!/-ALT-UPC$/i.test(sku)) continue;
+    const base=sku.slice(0, sku.indexOf('-'));
+    if(!base) continue;
+    const bc=String(PRODUCTS[sku].barcode||'').trim();
+    if(bc) ALT_MAP[bc]=base;
+    ALT_MAP[sku.toUpperCase()]=base;
+  }
 }
 function prodOf(sku){ return PRODUCTS[sku]||PRODUCTS[String(sku||'').trim()]||null; }
 function itemStock(it){ if(typeof it.stock==='number')return it.stock; const m=/재고\s*(-?\d+)/.exec(it.note||''); return m?+m[1]:null; }
