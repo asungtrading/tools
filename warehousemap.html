@@ -18,6 +18,15 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
 #svgWrap{position:absolute;inset:0;transform-origin:0 0;touch-action:none}
 #svgWrap.anim{transition:transform .32s cubic-bezier(.4,0,.2,1)}
 .wrap.pan{cursor:grab}.wrap.pan.panning{cursor:grabbing}.wrap.edit{cursor:default}
+/* 모바일: 전체 존을 위/아래 두 화면으로 분할 표시 (세로 스크롤로 전환) */
+.mapSplit{display:none;position:absolute;inset:0;flex-direction:column;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;scroll-snap-type:y proximity;background:var(--bg)}
+.mapSplit.show{display:flex}
+.mapHalf{flex:0 0 100%;height:100%;position:relative;scroll-snap-align:start;border-bottom:3px solid var(--border);box-sizing:border-box}
+.mapHalf:last-child{border-bottom:none}
+.mapHalf svg{width:100%;height:100%;display:block}
+.mapHalf .halfLabel{position:absolute;top:8px;left:10px;z-index:2;font-family:'DM Mono',monospace;font-size:11px;font-weight:800;color:var(--mid);background:rgba(255,255,255,.9);border:1px solid var(--border);padding:3px 10px;border-radius:20px}
+.mapHalf .halfScroll{position:absolute;bottom:8px;right:10px;z-index:2;font-family:'DM Mono',monospace;font-size:10px;font-weight:700;color:var(--dim);background:rgba(255,255,255,.9);border:1px solid var(--border);padding:3px 8px;border-radius:20px}
+body.map-split-active #zoomGrp{display:none}
 /* drill card grid overlay */
 /* ===== 밀러 컬럼 ===== */
 #cols{position:absolute;inset:0;display:flex;align-items:stretch}
@@ -197,7 +206,7 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
   <div class="divider"></div>
   <div class="grp"><button class="tbtn green desk-only" onclick="saveLayout()">💾 저장</button><button class="tbtn desk-only" onclick="openLayout()">🧭 레이아웃</button><button class="tbtn danger desk-only" onclick="resetAll()">↩ 내 화면 초기화</button><button class="tbtn" id="btnCount" onclick="toggleCountMode()">📋 실사</button></div>
   <div class="spacer"></div>
-  <div class="grp"><button class="tbtn" onclick="zoomBy(1/1.2)">−</button><span class="zoomv" id="zoomv">100%</span><button class="tbtn" onclick="zoomBy(1.2)">+</button><button class="tbtn" onclick="fitZones()">리셋 뷰</button></div>
+  <div class="grp" id="zoomGrp"><button class="tbtn" onclick="zoomBy(1/1.2)">−</button><span class="zoomv" id="zoomv">100%</span><button class="tbtn" onclick="zoomBy(1.2)">+</button><button class="tbtn" onclick="fitZones()">리셋 뷰</button></div>
 </header>
 <div class="crumbs" id="crumbs"></div>
 <div class="wrap pan" id="wrap">
@@ -205,6 +214,10 @@ header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(
     <div class="col" id="colMap" onclick="colMapClick(event)">
       <div class="vlabel" id="vlabMap"><span class="vico">🗺️</span>전체 존</div>
       <div id="svgWrap"></div>
+      <div id="mapSplit" class="mapSplit">
+        <div class="mapHalf" id="mapHalfTop"></div>
+        <div class="mapHalf" id="mapHalfBottom"></div>
+      </div>
     </div>
     <div class="col col-list" id="colRacks" hidden onclick="colMiniClick(event,'racks')">
       <div class="vlabel" id="vlabRacks"></div>
@@ -330,7 +343,7 @@ const EXTRAS = ["Aoneroom","B0601002","CASHIER0201","CASHIER0202","CASHIER0203",
 const ZONE_COLORS={A:'#b52626',B:'#6b23a0',C:'#c45200',D:'#145a8f',E:'#0e7a66',F:'#5a8c00',G:'#b02060',H:'#106438',J:'#9a7500',I:'#7a5230',K:'#0e5a8a',R:'#b84800',W:'#5a2a80',Z:'#3a4460'};
 // ===== constants / state =====
 const BAY_W=48, LEVEL_H=26, SNAP=12;
-const APP_VER='v29.10';
+const APP_VER='v29.11';
 const LAYOUT_KEY='asung_whzone_layout_v1', PROD_KEY='asung_whclean_prod_v1';
 // 팀 공유 기본 레이아웃 — localStorage에 저장본이 없을 때 이 값으로 그린다.
 // (도구에서 '🧭 레이아웃 → 복사'한 JSON을 여기에 붙여넣으면 모두가 같은 배치를 본다)
@@ -439,8 +452,20 @@ function fitZones(){ const b=zonesBBox(); const wrap=document.getElementById('wr
 function zoomBy(f){scale=Math.max(.1,Math.min(scale*f,2.5));applyTransform();}
 
 // ===== zones floor (SVG) =====
+function isMobileV(){ return window.matchMedia('(max-width:768px)').matches; }
 function buildZones(){
-  const wrap=document.getElementById('svgWrap'); wrap.innerHTML='';
+  const wrap=document.getElementById('svgWrap');
+  const split=document.getElementById('mapSplit');
+  const useSplit = isMobileV() && level==='zones' && zonesList().length>0 && mode!=='edit';
+  document.body.classList.toggle('map-split-active', useSplit);
+  if(useSplit){
+    wrap.style.display='none'; wrap.innerHTML='';
+    split.classList.add('show');
+    buildZonesMobileSplit();
+    return;
+  }
+  split.classList.remove('show');
+  wrap.style.display='';
   if(!zonesList().length){
     wrap.innerHTML='<div style="padding:70px 30px;text-align:center;color:var(--dim);font-size:15px;line-height:1.7">'+
       '📦 <b>'+curWH.label+'</b> 창고 구조가 아직 없습니다.<br>'+
@@ -448,11 +473,50 @@ function buildZones(){
       '<span style="font-size:12px">(제품 데이터 bins.json 는 이미 준비되어 있어, 구조만 추가하면 바로 표시됩니다)</span></div>';
     return;
   }
+  wrap.innerHTML='';
   svgEl=mkSVG('svg'); svgEl.setAttribute('width',6000); svgEl.setAttribute('height',4000); svgEl.style.display='block';
   STRUCTS.forEach(drawStruct);
   zonesList().forEach(drawZoneBlock);
   if(mode==='edit') drawHandles();
   wrap.appendChild(svgEl);
+}
+// 모바일 분할뷰: 존들을 X좌표 중앙값 기준 좌(위 화면)/우(아래 화면) 그룹으로 나눠
+// 각각 독립된 SVG(viewBox 자동맞춤)로 렌더 — 화면당 존 개수가 줄어 글씨가 커짐.
+function splitBBox_(zoneIds,structs){
+  let x1=1e9,y1=1e9,x2=-1e9,y2=-1e9;
+  zoneIds.forEach(z=>{const p=ZPOS[z]; if(!p)return; x1=Math.min(x1,p.x);y1=Math.min(y1,p.y);x2=Math.max(x2,p.x+p.w);y2=Math.max(y2,p.y+p.h);});
+  structs.forEach(st=>{ x1=Math.min(x1,st.x);y1=Math.min(y1,st.y);x2=Math.max(x2,st.x+st.w);y2=Math.max(y2,st.y+st.h); });
+  if(x1>x2) return {x:0,y:0,w:800,h:600};
+  const pad=40; return {x:x1-pad,y:y1-pad,w:(x2-x1)+pad*2,h:(y2-y1)+pad*2};
+}
+function renderMapHalf_(container,zoneIds,structs,label){
+  container.innerHTML='';
+  const b=splitBBox_(zoneIds,structs);
+  const svg=mkSVG('svg');
+  svg.setAttribute('viewBox',b.x+' '+b.y+' '+b.w+' '+b.h);
+  svg.setAttribute('preserveAspectRatio','xMidYMid meet');
+  const prevSvgEl=svgEl;
+  svgEl=svg;                       // drawStruct/drawZoneBlock 는 전역 svgEl 에 append 함
+  structs.forEach(drawStruct);
+  zoneIds.forEach(drawZoneBlock);
+  svgEl=prevSvgEl;
+  const lab=document.createElement('div'); lab.className='halfLabel'; lab.textContent=label+' · 존 '+zoneIds.length+'개';
+  container.appendChild(lab); container.appendChild(svg);
+}
+function buildZonesMobileSplit(){
+  const top=document.getElementById('mapHalfTop'), bot=document.getElementById('mapHalfBottom');
+  const zs=zonesList();
+  const overall=zonesBBox();
+  const midX=overall.x+overall.w/2;
+  const leftZ=[], rightZ=[];
+  zs.forEach(z=>{ const p=ZPOS[z]||defaultZPOS()[z]; if(!p)return; const cx=p.x+p.w/2; (cx<midX?leftZ:rightZ).push(z); });
+  const leftS=[], rightS=[];
+  STRUCTS.forEach(st=>{ const cx=st.x+st.w/2; (cx<midX?leftS:rightS).push(st); });
+  // 한쪽이 비면 전부 위쪽으로 몰아서 빈 화면 방지
+  if(!leftZ.length){ leftZ.push(...rightZ); rightZ.length=0; leftS.push(...rightS); rightS.length=0; }
+  renderMapHalf_(top,leftZ,leftS,'⬆ 위쪽 구역');
+  if(rightZ.length) renderMapHalf_(bot,rightZ,rightS,'⬇ 아래쪽 구역');
+  else bot.innerHTML='';
 }
 function drawStruct(st){
   const g=mkSVG('g'); g.classList.add('struct'); g.dataset.kind='struct'; g.dataset.id=st.id; g.style.cursor=mode==='edit'?'move':'default';
@@ -981,6 +1045,7 @@ function setupEvents(){
     if(e.touches.length===1){const t=e.touches[0];tch={m:'pan',sx:t.clientX,sy:t.clientY,tx0:tx,ty0:ty};}
   });
   wrap.addEventListener('wheel',e=>{ if(level!=='zones')return; e.preventDefault(); const r=wrap.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;const pv=scale;scale=e.deltaY<0?Math.min(scale*1.1,2.5):Math.max(scale/1.1,.1);tx=mx-(mx-tx)*(scale/pv);ty=my-(my-ty)*(scale/pv);applyTransform(); },{passive:false});
+  window.addEventListener('resize',()=>{ if(level==='zones'){ buildZones(); if(!isMobileV())fitZones(); } });
   document.addEventListener('click',e=>{ if(!e.target.closest('.srch-wrap')) closeSearch(); if(!e.target.closest('.al-row')){ const b=document.getElementById('alSug'); if(b){b.classList.remove('show');b.innerHTML='';} } });
   document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ if(document.getElementById('locPanel').classList.contains('show'))closeLoc(); else if(level==='locs')backTo(curBay?'bays':'racks'); else if(level==='bays')backTo('racks'); else if(level==='racks')backTo('zones'); } });
 }
