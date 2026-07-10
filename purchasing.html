@@ -275,6 +275,7 @@ body.hide-bo6090 [data-col-id="bo6090"]{display:none!important}
       <span id="bq-lbl">판매 BQ 미연결 — 클릭하여 연결</span>
     </div>
     <div class="hsep"></div>
+    <button class="btn primary" id="send-po-btn" onclick="sendDraftPO()">→ Cin7 발주 초안</button>
     <div class="csv-dropdown" id="csv-dropdown">
       <button class="btn primary" onclick="toggleCsvMenu(event)">↓ CSV <span style="font-size:9px;opacity:.7">▾</span></button>
       <div class="csv-menu" id="csv-menu">
@@ -727,7 +728,56 @@ const BQ_SALES   = 'asung_sales_unified';
 const BQ_ORDERS  = 'asung_order_details_historical';
 const BQ_STOCK   = 'asung_stock_daily';
 const CLIENT_ID  = '105948904172-t1fvd0e8t2tl3ki6u17a4ok9vp0catp2';
-const SCOPES     = 'https://www.googleapis.com/auth/bigquery.readonly';
+const SCOPES     = 'https://www.googleapis.com/auth/bigquery.readonly openid email';
+
+// ═══════════════════════════════════════════════════════
+//  CIN7 DRAFT PO 전송 (GAS 웹앱 브리지)
+// ═══════════════════════════════════════════════════════
+// ★ System_Automation 웹앱 배포 후 /exec URL로 교체할 것
+const PO_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbw1wpnhNFuCf5ZFhjvdgkvHMYBaU78ipioKZaGV6lquSSZph0PPcuf-k7uN9fT6SdR1Hg/exec';
+
+async function sendDraftPO(){
+  if(!S.supplier){ alert('먼저 Supplier를 선택하세요.'); return; }
+  if(!S.accessToken){ alert('BQ 연결(로그인)이 필요합니다.'); return; }
+  if(PO_WEBAPP_URL.indexOf('REPLACE_WITH') === 0){ alert('PO_WEBAPP_URL이 아직 설정되지 않았습니다.'); return; }
+
+  // 현재 supplier의 발주 라인 (실발주량 = _ov ?? rec, >0인 것만) — dlCSV('order_current')와 동일 기준
+  const lines = getRows()
+    .map(r => ({ sku: r.sku, quantity: (r._ov ?? r.rec) }))
+    .filter(l => l.quantity > 0);
+  if(!lines.length){ alert('발주할 항목이 없습니다.'); return; }
+
+  if(!confirm(S.supplier + '\n' + lines.length + '개 SKU를 Cin7 DRAFT PO로 만들까요?\n(승인 전 초안 상태로만 생성됩니다)')) return;
+
+  const btn = document.getElementById('send-po-btn');
+  if(btn){ btn.disabled = true; btn.textContent = '전송 중...'; }
+  try{
+    const res = await fetch(PO_WEBAPP_URL, {
+      method:'POST',
+      // text/plain = simple request → CORS preflight 회피 (GAS 웹앱 표준 우회)
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({
+        action:'createDraftPO',
+        token: S.accessToken,
+        supplier: S.supplier,
+        lines: lines
+      })
+    });
+    const data = await res.json();
+    if(!data.ok){ alert('실패: ' + data.error); return; }
+
+    let msg = '✅ DRAFT PO 생성됨\nPO 번호: ' + data.orderNumber + '\n라인: ' + data.lineCount + '개';
+    if(data.zeroPriceSkus && data.zeroPriceSkus.length){
+      msg += '\n\n⚠ 가격 0 (Cin7에서 확인/입력 필요):\n' + data.zeroPriceSkus.join(', ');
+    }
+    msg += '\n\nCin7에서 확인 후 Authorize 하세요.';
+    alert(msg);
+  }catch(err){
+    alert('전송 오류: ' + err.message);
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = '→ Cin7 발주 초안'; }
+  }
+}
 
 // ═══════════════════════════════════════════════════════
 //  STATE
