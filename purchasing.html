@@ -275,7 +275,16 @@ body.hide-bo6090 [data-col-id="bo6090"]{display:none!important}
       <span id="bq-lbl">판매 BQ 미연결 — 클릭하여 연결</span>
     </div>
     <div class="hsep"></div>
-    <button class="btn primary" id="send-po-btn" onclick="sendDraftPO()">→ Cin7 발주 초안</button>
+    <button class="btn primary" id="send-po-btn" onclick="sendDraftPO()" title="현재 선택된 Supplier의 발주 목록을 Cin7 DRAFT PO로 생성
+
+포함 조건:
+  · 실발주량 > 0 인 SKU만 (직접 입력값 또는 추천발주량)
+  · 실발주량을 0으로 지우면 제외
+  · 현재 화면 필터/검색이 적용된 상태 기준
+
+가격: Cin7 Fixed Price → 없으면 Latest → 없으면 0 (경고 표시)
+입고 Location: Asung Trading Inc. (Toronto)
+초안(DRAFT)으로만 생성 — 재고/회계 영향 없음, Authorize는 Cin7에서">→ Cin7 발주 초안</button>
     <div class="csv-dropdown" id="csv-dropdown">
       <button class="btn primary" onclick="toggleCsvMenu(event)">↓ CSV <span style="font-size:9px;opacity:.7">▾</span></button>
       <div class="csv-menu" id="csv-menu">
