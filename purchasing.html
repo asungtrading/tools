@@ -779,52 +779,73 @@ async function sendDraftPO(){
   }
 }
 
-// ═══ Cin7 Fixed Price 조회/수정 (SKU 옆 💲 아이콘) ═══
-async function editFixedPrice(sku){
+// ═══ Cin7 Fixed Price 인라인 조회/수정 (상품명 오른쪽 💲) ═══
+const FP_CACHE = {};   // { sku: {fixedCost, currency} | {loading:true} } — 재렌더링에도 유지
+
+function fpCell(sku){
+  const c = FP_CACHE[sku];
+  if(c && c.loading) return `<span style="opacity:0.5;font-size:10px">…</span>`;
+  if(c){
+    return `<input type="number" step="0.0001" class="qov" id="fp_${xe(sku)}" value="${c.fixedCost}"
+      title="FIXED PRICE (${xe(c.currency||'')}) — 수정 후 Enter"
+      style="width:64px;font-size:10px;padding:1px 3px"
+      onclick="event.stopPropagation();this.select()"
+      onkeydown="if(event.key==='Enter'){this.blur()}"
+      onchange="fpSave('${jse(sku)}',this)">`;
+  }
+  return `<span onclick="event.stopPropagation();fpLoad('${jse(sku)}')" title="Cin7 Fixed Price 불러오기" style="cursor:pointer;opacity:0.4;font-size:11px">&#128178;</span>`;
+}
+
+async function fpCall(body){
+  const res = await fetch(PO_WEBAPP_URL, {
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify(Object.assign({ token:S.accessToken, supplier:S.supplier }, body))
+  });
+  return res.json();
+}
+
+async function fpLoad(sku){
   if(!S.supplier){ alert('먼저 Supplier를 선택하세요.'); return; }
   if(!S.accessToken){ alert('BQ 연결(로그인)이 필요합니다.'); return; }
-
-  const call = async (body) => {
-    const res = await fetch(PO_WEBAPP_URL, {
-      method:'POST',
-      headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify(Object.assign({ token:S.accessToken, supplier:S.supplier, sku:sku }, body))
-    });
-    return res.json();
-  };
-
+  FP_CACHE[sku] = { loading:true };
+  renderTable();
   try{
-    // 1) 현재 가격 조회
-    const cur = await call({ action:'getFixedPrice' });
-    if(!cur.ok){ alert('조회 실패: ' + cur.error); return; }
-
-    // 2) 새 가격 입력
-    const input = prompt(
-      sku + ' — ' + S.supplier +
-      '\n현재 FIXED PRICE: ' + cur.fixedCost + ' ' + (cur.currency||'') +
-      '\n(LATEST: ' + cur.cost + ', Last Supplied: ' + (cur.lastSupplied||'—').substring(0,10) + ')' +
-      '\n\n새 FIXED PRICE 입력 (취소하려면 Cancel):',
-      cur.fixedCost
-    );
-    if(input === null) return;
-    const newFixed = Number(input);
-    if(!(newFixed > 0)){ alert('0보다 큰 숫자를 입력하세요.'); return; }
-    if(newFixed === Number(cur.fixedCost)){ alert('가격이 동일합니다. 변경 없음.'); return; }
-
-    // 3) 범위 가드: 기존 대비 ±50% 초과 시 한 번 더 확인
-    const ratio = Number(cur.fixedCost) > 0 ? newFixed / Number(cur.fixedCost) : 1;
-    if(ratio > 1.5 || ratio < 0.5){
-      if(!confirm('⚠ 기존 가격 대비 변동이 큽니다 (' + cur.fixedCost + ' → ' + newFixed + ').\n정말 진행할까요?')) return;
-    }
-
-    if(!confirm(sku + '\nFIXED PRICE: ' + cur.fixedCost + ' → ' + newFixed + '\n\nCin7에 저장할까요?')) return;
-
-    // 4) 갱신
-    const upd = await call({ action:'updateFixedPrice', newFixed:newFixed });
-    if(!upd.ok){ alert('수정 실패: ' + upd.error); return; }
-    alert('✅ 저장됨\n' + sku + ': ' + upd.oldFixed + ' → ' + upd.newFixed + '\n(변경 로그에 기록됨)');
+    const cur = await fpCall({ action:'getFixedPrice', sku:sku });
+    if(!cur.ok){ delete FP_CACHE[sku]; renderTable(); alert('조회 실패: ' + cur.error); return; }
+    FP_CACHE[sku] = { fixedCost: Number(cur.fixedCost), currency: cur.currency };
   }catch(err){
-    alert('오류: ' + err.message);
+    delete FP_CACHE[sku]; alert('오류: ' + err.message);
+  }
+  renderTable();
+}
+
+async function fpSave(sku, input){
+  const cur = FP_CACHE[sku];
+  if(!cur) return;
+  const newFixed = Number(input.value);
+  if(!(newFixed > 0)){ alert('0보다 큰 숫자를 입력하세요.'); input.value = cur.fixedCost; return; }
+  if(newFixed === Number(cur.fixedCost)) return; // 변경 없음 — 조용히 무시
+
+  // 단일 확인창 (±50% 초과 시 경고 문구 포함)
+  const ratio = Number(cur.fixedCost) > 0 ? newFixed / Number(cur.fixedCost) : 1;
+  const warn = (ratio > 1.5 || ratio < 0.5) ? '\n\n⚠ 기존 대비 변동이 큽니다!' : '';
+  if(!confirm(sku + '\nFIXED PRICE: ' + cur.fixedCost + ' → ' + newFixed + warn + '\n\nCin7에 저장할까요?')){
+    input.value = cur.fixedCost; return;
+  }
+
+  input.disabled = true;
+  try{
+    const upd = await fpCall({ action:'updateFixedPrice', sku:sku, newFixed:newFixed });
+    if(!upd.ok){ alert('수정 실패: ' + upd.error); input.value = cur.fixedCost; return; }
+    FP_CACHE[sku] = { fixedCost: newFixed, currency: cur.currency };
+    // alert 대신 시각 피드백: 테두리 초록 점멸
+    input.style.outline = '2px solid #22c55e';
+    setTimeout(()=>{ const el=document.getElementById('fp_'+sku); if(el) el.style.outline=''; }, 1500);
+  }catch(err){
+    alert('오류: ' + err.message); input.value = cur.fixedCost;
+  }finally{
+    input.disabled = false;
   }
 }
 
@@ -2216,8 +2237,8 @@ function renderTable(){
       const recTxt=r.rec===null?'—':r.sufficient?'✓ 충분':r.rec===0?'0':`<span class="vp" ${canClick?`onclick="applyRec('${jse(r.sku)}',${r.rec})" style="cursor:pointer;text-decoration:underline dotted"`:''}>+${r.rec.toLocaleString()}</span>`;
       h+=`<tr${trStyle}>
         <td style="text-align:center">${r.abc?`<span class="abc-${r.abc.toLowerCase()}" title="A=상위20% B=상위50% C=나머지">${r.abc}</span>`:'-'}</td>
-        <td style="color:var(--accent);font-size:12px">${xe(r.sku)} <span onclick="editFixedPrice('${jse(r.sku)}')" title="Cin7 Fixed Price 조회/수정" style="cursor:pointer;opacity:0.45;font-size:11px">&#128178;</span></td>
-        <td style="text-align:left;max-width:var(--name-col-width,180px);overflow:hidden;text-overflow:ellipsis" title="${xe(r.name)}">${xe(r.name)}</td>
+        <td style="color:var(--accent);font-size:12px">${xe(r.sku)}</td>
+        <td style="text-align:left;max-width:var(--name-col-width,180px);overflow:hidden;text-overflow:ellipsis" title="${xe(r.name)}"><span style="float:right;margin-left:4px">${fpCell(r.sku)}</span>${xe(r.name)}</td>
         <td style="text-align:left;color:#94a3b8;font-size:11px">${xe(r.brand)}</td>
         <td class="sep">${r.adu>0?r.adu.toFixed(2):'—'}</td>
         <td class="${cc}">${ct}</td>
@@ -2295,8 +2316,8 @@ function renderTable(){
             ? `<span class="vz">0</span>`
             : `<span class="vp" style="${recStyle}" ${recTitle} ${recClick}>+${r.rec.toLocaleString()}</span>`;
       h+=`<tr${trStyle}>
-        <td onmouseenter="showSparkline('${jse(r.sku)}','${jse(r.name)}',event)" onmouseleave="hideSparkline()" style="cursor:default">${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}" title="ABC 등급: A=상위20%(핵심제품) B=상위21~50%(중간) C=하위50%(저판매) | ADU 기준 자동분류">${r.abc}</span>`:''} ${(S.salesData[r.sku]?.linkedFrom||[]).length?`<span style="color:var(--yellow);font-size:9px" title="구 SKU 데이터 합산: ${(S.salesData[r.sku]?.linkedFrom||[]).join(', ')}">🔗</span>`:''} <span onclick="event.stopPropagation();editFixedPrice('${jse(r.sku)}')" title="Cin7 Fixed Price 조회/수정" style="cursor:pointer;opacity:0.45;font-size:11px">&#128178;</span></td>
-        <td style="max-width:var(--name-col-width,180px);overflow:hidden;text-overflow:ellipsis;cursor:default" title="${xe(r.name)}">${xe(r.name)}</td>
+        <td onmouseenter="showSparkline('${jse(r.sku)}','${jse(r.name)}',event)" onmouseleave="hideSparkline()" style="cursor:default">${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}" title="ABC 등급: A=상위20%(핵심제품) B=상위21~50%(중간) C=하위50%(저판매) | ADU 기준 자동분류">${r.abc}</span>`:''} ${(S.salesData[r.sku]?.linkedFrom||[]).length?`<span style="color:var(--yellow);font-size:9px" title="구 SKU 데이터 합산: ${(S.salesData[r.sku]?.linkedFrom||[]).join(', ')}">🔗</span>`:''}</td>
+        <td style="max-width:var(--name-col-width,180px);overflow:hidden;text-overflow:ellipsis;cursor:default" title="${xe(r.name)}"><span style="float:right;margin-left:4px">${fpCell(r.sku)}</span>${xe(r.name)}</td>
         <td class="${r.adu>0?'':'vz'}" title="${r.adu>0?`가중이동평균 ADU (WMA ${r.wmaWeights?.w1||3}/${r.wmaWeights?.w2||2}/${r.wmaWeights?.w3||1} · ABC-${r.abc||'?'} 자동조정)`:'판매 데이터 없음'}">${r.adu>0?r.adu.toFixed(2):'—'}</td>
         <td data-col-id="orderAdu" class="${r.orderAdu!==null&&r.orderAdu>0?'':'vz'}" title="${r.orderAduData?'주문ADU 기간별:\n전달말-3M: '+(r.orderAduData.adu_p1!==null?r.orderAduData.adu_p1.toFixed(2):'—')+'\n전달말-6M: '+(r.orderAduData.adu_p2!==null?r.orderAduData.adu_p2.toFixed(2):'—')+'\n전달말-1Y: '+(r.orderAduData.adu_p3!==null?r.orderAduData.adu_p3.toFixed(2):'—')+'\n오늘-3M: '+(r.orderAduData.adu_p4!==null?r.orderAduData.adu_p4.toFixed(2):'—'):'주문 데이터 없음'}">${r.orderAdu!==null?r.orderAdu.toFixed(2):'—'}</td>
         <td data-col-id="sea" class="${r.sea>1.1?'vp':r.sea<0.9?'vw':''}" onclick="editSkuOverride('${jse(r.sku)}','sea',${r.sea},event)" onmouseenter="showOvHistory('${jse(r.supplier)}','sea',event)" onmouseleave="hideOvHistory()" title="클릭해서 수동 수정 (BQ자동: ×${r.seaAuto})">${r.adu>0?`×${r.sea.toFixed(2)}${r.seaOv!==null?'<span style=\'color:var(--yellow);font-size:8px\'>✎</span>':''}`:'—'}</td>
@@ -2607,8 +2628,8 @@ function renderForecast(){
     const seaClass=r.sea>1.1?'vp':r.sea<0.9?'vw':'';
     const trdClass=r.trd>1.05?'vp':r.trd<0.95?'vw':'';
     return `<tr>
-      <td onmouseenter="showSparkline('${jse(r.sku)}','${jse(r.name)}',event)" onmouseleave="hideSparkline()" style="cursor:default">${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}" title="A=상위20% B=상위50% C=나머지">${r.abc}</span>`:''} ${(S.salesData[r.sku]?.linkedFrom||[]).length?`<span style="color:var(--yellow);font-size:9px" title="구 SKU 데이터 합산: ${(S.salesData[r.sku]?.linkedFrom||[]).join(', ')}">🔗</span>`:''} <span onclick="event.stopPropagation();editFixedPrice('${jse(r.sku)}')" title="Cin7 Fixed Price 조회/수정" style="cursor:pointer;opacity:0.45;font-size:11px">&#128178;</span></td>
-      <td style="text-align:left;max-width:var(--name-col-width,180px);overflow:hidden;text-overflow:ellipsis" title="${xe(r.name)}">${xe(r.name)}
+      <td onmouseenter="showSparkline('${jse(r.sku)}','${jse(r.name)}',event)" onmouseleave="hideSparkline()" style="cursor:default">${xe(r.sku)} ${r.abc?`<span class="abc-${r.abc.toLowerCase()}" title="A=상위20% B=상위50% C=나머지">${r.abc}</span>`:''} ${(S.salesData[r.sku]?.linkedFrom||[]).length?`<span style="color:var(--yellow);font-size:9px" title="구 SKU 데이터 합산: ${(S.salesData[r.sku]?.linkedFrom||[]).join(', ')}">🔗</span>`:''}</td>
+      <td style="text-align:left;max-width:var(--name-col-width,180px);overflow:hidden;text-overflow:ellipsis" title="${xe(r.name)}"><span style="float:right;margin-left:4px">${fpCell(r.sku)}</span>${xe(r.name)}
 </td>
       <td>${r.adu.toFixed(2)}</td>
       <td class="${seaClass}" onclick="editSkuOverride('${jse(r.sku)}','sea',${r.sea},event)" onmouseenter="showOvHistory('${jse(r.supplier??'')}','sea',event)" onmouseleave="hideOvHistory()" style="cursor:pointer" title="클릭해서 수동수정 | 1.0=작년동일 1.5=50%증가 0.7=30%감소">×${r.sea.toFixed(2)}${r.seaOv!==null?'<span style="color:var(--yellow);font-size:8px">✎</span>':''}</td>
