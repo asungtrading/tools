@@ -3303,7 +3303,7 @@ async function loadSupplierIntelligence(supplier){
         SELECT * EXCEPT(rn) FROM (
           SELECT
             po_number, sku, order_date, received_date, currency,
-            quantity, line_total, po_complete,
+            quantity, line_total, po_complete, status,
             ROW_NUMBER() OVER (PARTITION BY po_number, sku ORDER BY loaded_at DESC) AS rn
           FROM \`${BQ_PROJECT}.${BQ_PUR_DATASET}.${BQ_PURCHASE}\`
           WHERE supplier_name = '${supEsc}'
@@ -3332,7 +3332,7 @@ async function loadSupplierIntelligence(supplier){
       WITH latest AS (
         SELECT * EXCEPT(rn) FROM (
           SELECT
-            po_number, sku, order_date, quantity, line_total,
+            po_number, sku, order_date, quantity, line_total, status,
             ROW_NUMBER() OVER (PARTITION BY po_number, sku ORDER BY loaded_at DESC) AS rn
           FROM \`${BQ_PROJECT}.${BQ_PUR_DATASET}.${BQ_PURCHASE}\`
           WHERE supplier_name = '${supEsc}'
@@ -3358,7 +3358,7 @@ async function loadSupplierIntelligence(supplier){
       WITH latest AS (
         SELECT * EXCEPT(rn) FROM (
           SELECT
-            po_number, sku, order_date, quantity, line_total,
+            po_number, sku, order_date, quantity, line_total, status,
             ROW_NUMBER() OVER (PARTITION BY po_number, sku ORDER BY loaded_at DESC) AS rn
           FROM \`${BQ_PROJECT}.${BQ_PUR_DATASET}.${BQ_PURCHASE}\`
           WHERE supplier_name = '${supEsc}'
