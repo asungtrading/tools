@@ -1692,6 +1692,13 @@ function selectSupplier(sup){
   recompute();
   updateBrandDropdown();
   renderTable();
+  // ── Supplier 분석 탭 연동: SI 탭이 열려 있으면 사이드바 선택을 즉시 반영
+  const siView=document.getElementById('si-view');
+  if(siView && siView.style.display!=='none' && sup!==S.siSupplier){
+    const siSel=document.getElementById('si-sup-sel');
+    if(siSel) siSel.value=sup;
+    loadSupplierIntelligence(sup);
+  }
 }
 function setBrandFilter(brand){
   S.brandFilter=brand;
@@ -3211,8 +3218,8 @@ function initSupplierIntelligence(){
       sel.appendChild(o);
     });
   }
-  // 이미 선택된 Supplier가 있으면 자동 설정
-  if(S.supplier && !S.siSupplier){
+  // 사이드바에서 선택된 Supplier를 따라감 (탭 전환 시 연동)
+  if(S.supplier && S.supplier !== S.siSupplier){
     sel.value = S.supplier;
     loadSupplierIntelligence(S.supplier);
   }
@@ -3268,7 +3275,10 @@ async function loadSupplierIntelligence(supplier){
   // skuMonthlySQL(호버 차트)용 날짜 필터 — 항상 3년 캡 유지 (스캔량 제한)
   const saleDateFilter = `AND sale_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 YEAR)`;
   // 매출/판매 확정 판별 표준 (data-contract R3): 뷰의 Status가 권위 신호
-  const SOLD_STATUS = `AND UPPER(Status) IN ('CLOSED','COMPLETED')`;
+  // ⚠ 단, Omni 시절 파티션(~2025-10-31, asung_sales_historical_data)은 Core의
+  //   Status 체계(CLOSED/COMPLETED)가 없는 이미 확정된 판매 데이터이므로 필터에서 면제.
+  //   면제 없이 걸면 2022-02~2025-10 판매가 전부 사라짐 (2026-07-12 실측 버그).
+  const SOLD_STATUS = `AND (UPPER(Status) IN ('CLOSED','COMPLETED') OR sale_date < DATE '2025-11-01')`;
 
   // ── SKU 연결 매핑 → SQL CASE 식 (구 SKU 판매/발주/백오더/미충족수요를 신 SKU로 합산)
   //    발주추천 탭의 dailyMap 합산과 동일 취지 — Supplier 분석은 SQL 집계라 쿼리에 주입
