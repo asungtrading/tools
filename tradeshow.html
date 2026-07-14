@@ -545,7 +545,7 @@ async function onFilePicked(ev){
   }catch(e){ toast('업로드 실패: '+e.message); }
 }
 
-/* 명함 OCR → 비어있는 필드만 자동 입력 */
+/* 명함 OCR → 비어있는 필드만 자동 입력 → 자동 저장 */
 async function ocrAndFill(base64){
   toast('명함에서 연락처 읽는 중…');
   try{
@@ -564,8 +564,12 @@ async function ocrAndFill(base64){
         notes.value=(notes.value?notes.value+'\n':'')+info.website; filled++;
       }
     }
-    toast(filled?('명함 인식 완료 — '+filled+'개 필드 입력됨. 확인 후 "변경 저장"을 누르세요')
-                :'명함 인식 완료 — 새로 채울 필드가 없습니다');
+    if(filled){
+      await saveMeeting();               // 인식 결과 자동 저장
+      toast('명함 인식 → '+filled+'개 필드 자동 저장 완료 ✓');
+    }else{
+      toast('명함 인식 완료 — 새로 채울 필드가 없습니다');
+    }
   }catch(e){ toast('명함 인식 실패 (사진은 저장됨): '+e.message); }
 }
 
