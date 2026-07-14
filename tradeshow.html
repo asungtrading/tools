@@ -116,7 +116,7 @@
 
 <header>
   <div>
-    <div class="brand">ASUNG <span>SHOW LOG</span></div>
+    <div class="brand">ASUNG <span>SHOW LOG</span> <small style="font-size:10px; opacity:.5; font-weight:400">v3</small></div>
     <div class="who" id="whoami"></div>
   </div>
   <button class="btn small sub" style="background:rgba(255,255,255,.12); color:#fff; border:none;" onclick="logout()">변경</button>
@@ -175,6 +175,8 @@
         <div><label>전화</label><input id="fPhone" type="tel"></div>
         <div><label>이메일</label><input id="fEmail" type="email"></div>
       </div>
+      <label>주소</label>
+      <input id="fAddress" placeholder="회사 주소">
       <label>미팅 메모</label>
       <textarea id="fNotes" rows="4" placeholder="논의 내용, 후속 조치, 관심 품목, MOQ, 가격대…"></textarea>
       <label>태그 (쉼표 구분)</label>
@@ -377,7 +379,7 @@ function showView(v){
 function openNew(){
   editingId=null;
   document.getElementById('formTitle').textContent='새 미팅 기록';
-  ['fBooth','fCompany','fName','fTitle','fPhone','fEmail','fNotes','fTags']
+  ['fBooth','fCompany','fName','fTitle','fPhone','fEmail','fAddress','fNotes','fTags']
     .forEach(id=>document.getElementById(id).value='');
   document.getElementById('fDt').value=nowLocal();
   document.getElementById('attachZone').classList.add('hidden');
@@ -398,6 +400,7 @@ function openEdit(id){
   document.getElementById('fTitle').value=m.contact_title||'';
   document.getElementById('fPhone').value=m.phone||'';
   document.getElementById('fEmail').value=m.email||'';
+  document.getElementById('fAddress').value=m.address||'';
   document.getElementById('fNotes').value=m.notes||'';
   document.getElementById('fTags').value=m.tags||'';
   document.getElementById('attachZone').classList.remove('hidden');
@@ -423,6 +426,7 @@ function collectForm(){
     contact_title:document.getElementById('fTitle').value.trim(),
     phone:document.getElementById('fPhone').value.trim(),
     email:document.getElementById('fEmail').value.trim(),
+    address:document.getElementById('fAddress').value.trim(),
     notes:document.getElementById('fNotes').value.trim(),
     tags:document.getElementById('fTags').value.trim()
   };
@@ -491,7 +495,7 @@ async function onFilePicked(ev){
         const o=await post({action:'ocrCard',mime_type:'image/jpeg',base64});
         const info=o.info||{};
         const map={fCompany:info.company,fName:info.name,fTitle:info.title,
-                   fPhone:info.phone,fEmail:info.email};
+                   fPhone:info.phone,fEmail:info.email,fAddress:info.address};
         for(const [id,val] of Object.entries(map)){
           const el=document.getElementById(id);
           if(val&&!el.value.trim()) el.value=val;
@@ -552,7 +556,7 @@ async function ocrAndFill(base64){
     const d=await post({action:'ocrCard',mime_type:'image/jpeg',base64});
     const info=d.info||{};
     const map={fCompany:info.company,fName:info.name,fTitle:info.title,
-               fPhone:info.phone,fEmail:info.email};
+               fPhone:info.phone,fEmail:info.email,fAddress:info.address};
     let filled=0;
     for(const [id,val] of Object.entries(map)){
       const el=document.getElementById(id);
