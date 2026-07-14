@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Asung Trade Show Log</title>
+<style>
+  :root{
+    --ink:#1c1a17; --paper:#faf8f5; --card:#ffffff;
+    --line:#e7e2da; --muted:#8a8377;
+    --accent:#b3541e;        /* 전시장 카펫의 번트 오렌지 */
+    --accent-soft:#f7e8dd;
+    --ok:#2e7d4f; --danger:#b03a2e;
+    --radius:14px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{margin:0; background:var(--paper); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans KR',sans-serif;
+    font-size:15px; padding-bottom:90px;}
+  h1,h2{margin:0;}
+  input,select,textarea,button{font:inherit;}
+  input,select,textarea{width:100%; padding:11px 12px; border:1px solid var(--line);
+    border-radius:10px; background:#fff; color:var(--ink);}
+  input:focus,textarea:focus,select:focus{outline:2px solid var(--accent); border-color:transparent;}
+  label{display:block; font-size:12px; color:var(--muted); margin:12px 0 4px; font-weight:600; letter-spacing:.02em;}
+  button{cursor:pointer; border:none; border-radius:10px;}
+
+  /* 헤더 */
+  header{position:sticky; top:0; z-index:20; background:var(--ink); color:#fff;
+    padding:14px 16px; display:flex; align-items:center; justify-content:space-between;}
+  header .brand{font-size:16px; font-weight:800; letter-spacing:.03em;}
+  header .brand span{color:#e8a87c;}
+  header .who{font-size:12px; opacity:.75;}
+
+  .wrap{max-width:640px; margin:0 auto; padding:14px;}
+
+  /* 쇼 선택 바 */
+  .showbar{display:flex; gap:8px; align-items:center; margin-bottom:12px;}
+  .showbar select{flex:1;}
+  .showbar button{background:var(--card); border:1px solid var(--line); padding:10px 12px; font-size:18px; line-height:1;}
+
+  /* 탭(하단) */
+  nav.tabs{position:fixed; bottom:0; left:0; right:0; z-index:30;
+    background:var(--card); border-top:1px solid var(--line);
+    display:flex; padding-bottom:env(safe-area-inset-bottom);}
+  nav.tabs button{flex:1; background:none; padding:12px 0 10px; font-size:12px; color:var(--muted);
+    display:flex; flex-direction:column; align-items:center; gap:2px; border-radius:0;}
+  nav.tabs button .ico{font-size:20px;}
+  nav.tabs button.on{color:var(--accent); font-weight:700;}
+
+  /* 카드 */
+  .card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+    padding:14px; margin-bottom:10px;}
+  .mtg-head{display:flex; justify-content:space-between; gap:8px;}
+  .mtg-company{font-weight:800; font-size:16px;}
+  .mtg-meta{font-size:12px; color:var(--muted); margin-top:2px;}
+  .mtg-notes{margin-top:8px; font-size:14px; white-space:pre-wrap;}
+  .badge{display:inline-block; background:var(--accent-soft); color:var(--accent);
+    font-size:11px; font-weight:700; padding:2px 8px; border-radius:99px; margin-right:4px;}
+  .byline{font-size:11px; color:var(--muted); margin-top:8px;}
+
+  /* 첨부 썸네일 */
+  .thumbs{display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;}
+  .thumb{position:relative; width:76px; height:76px; border-radius:10px; overflow:hidden;
+    border:1px solid var(--line); background:#f1ede6; flex:none;}
+  .thumb img{width:100%; height:100%; object-fit:cover; display:block;}
+  .thumb .tag{position:absolute; left:0; bottom:0; right:0; background:rgba(28,26,23,.72);
+    color:#fff; font-size:10px; text-align:center; padding:2px 0;}
+  .thumb.linkchip{width:auto; height:auto; padding:8px 12px; background:var(--accent-soft);
+    border-color:transparent; display:flex; align-items:center; gap:6px;}
+  .thumb.linkchip a{color:var(--accent); font-size:12px; font-weight:700; text-decoration:none;
+    max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .thumb .del{position:absolute; top:2px; right:2px; background:rgba(28,26,23,.72); color:#fff;
+    width:20px; height:20px; border-radius:50%; font-size:11px; line-height:20px; text-align:center; padding:0;}
+  .thumb.linkchip .del{position:static; flex:none;}
+
+  /* 버튼 */
+  .btn{background:var(--accent); color:#fff; font-weight:700; padding:13px; width:100%; font-size:15px;}
+  .btn.sub{background:var(--card); color:var(--ink); border:1px solid var(--line);}
+  .btn.small{width:auto; padding:9px 14px; font-size:13px;}
+  .btn.danger{background:none; color:var(--danger); border:1px solid var(--line);}
+  .btnrow{display:flex; gap:8px; margin-top:14px;}
+  .attach-btns{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:8px;}
+  .attach-btns button{background:var(--card); border:1px dashed var(--accent); color:var(--accent);
+    padding:12px 4px; font-size:12px; font-weight:700; border-radius:10px;
+    display:flex; flex-direction:column; align-items:center; gap:3px;}
+  .attach-btns button .ico{font-size:20px;}
+
+  .searchrow{display:flex; gap:8px; margin-bottom:10px;}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:0 10px;}
+
+  .empty{text-align:center; color:var(--muted); padding:48px 20px; font-size:14px;}
+  .empty .ico{font-size:40px; display:block; margin-bottom:8px;}
+
+  /* 토스트/스피너 */
+  #toast{position:fixed; left:50%; bottom:100px; transform:translateX(-50%);
+    background:var(--ink); color:#fff; padding:10px 18px; border-radius:99px; font-size:13px;
+    opacity:0; transition:opacity .25s; z-index:99; pointer-events:none; max-width:88%;}
+  #toast.show{opacity:1;}
+  .spin{display:inline-block; width:14px; height:14px; border:2px solid rgba(255,255,255,.4);
+    border-top-color:#fff; border-radius:50%; animation:sp .7s linear infinite; vertical-align:-2px;}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  #loading{text-align:center; color:var(--muted); padding:30px;}
+
+  /* 로그인 게이트 */
+  #gate{position:fixed; inset:0; background:var(--paper); z-index:50;
+    display:flex; align-items:center; justify-content:center; padding:20px;}
+  #gate .card{width:100%; max-width:380px; padding:24px;}
+  #gate h2{font-size:20px; margin-bottom:4px;}
+  #gate p{color:var(--muted); font-size:13px; margin:0 0 8px;}
+
+  .hidden{display:none !important;}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="brand">ASUNG <span>SHOW LOG</span></div>
+    <div class="who" id="whoami"></div>
+  </div>
+  <button class="btn small sub" style="background:rgba(255,255,255,.12); color:#fff; border:none;" onclick="logout()">변경</button>
+</header>
+
+<!-- 액세스 게이트 -->
+<div id="gate" class="hidden">
+  <div class="card">
+    <h2>Show Log 접속</h2>
+    <p>팀 공유 액세스 키와 이름을 입력하세요. 이 기기에 저장됩니다.</p>
+    <label>액세스 키</label>
+    <input id="gKey" type="password" placeholder="액세스 키">
+    <label>내 이름</label>
+    <input id="gUser" placeholder="예: Caleb, Nathan, Jackie">
+    <div class="btnrow"><button class="btn" onclick="saveGate()">시작하기</button></div>
+  </div>
+</div>
+
+<div class="wrap">
+  <!-- 쇼 선택 -->
+  <div class="showbar">
+    <select id="showSel" onchange="onShowChange()"></select>
+    <button title="새 쇼 추가" onclick="addShow()">＋</button>
+  </div>
+
+  <!-- 목록 뷰 -->
+  <div id="viewList">
+    <div class="searchrow">
+      <input id="q" placeholder="회사·이름·부스·메모 검색" oninput="renderList()">
+      <select id="byUser" style="max-width:130px" onchange="renderList()"><option value="">전원</option></select>
+    </div>
+    <div id="loading" class="hidden"><span class="spin" style="border-color:#ccc; border-top-color:var(--accent)"></span> 불러오는 중…</div>
+    <div id="list"></div>
+  </div>
+
+  <!-- 작성/수정 뷰 -->
+  <div id="viewForm" class="hidden">
+    <div class="card">
+      <h2 style="font-size:17px" id="formTitle">새 미팅 기록</h2>
+      <label>미팅 일시</label>
+      <input id="fDt" type="datetime-local">
+      <label>위치 / 부스 번호</label>
+      <input id="fBooth" placeholder="예: Hall C #38021">
+      <label>회사명 *</label>
+      <input id="fCompany" placeholder="상대 회사명">
+      <div class="grid2">
+        <div><label>담당자 이름</label><input id="fName"></div>
+        <div><label>직함</label><input id="fTitle"></div>
+      </div>
+      <div class="grid2">
+        <div><label>전화</label><input id="fPhone" type="tel"></div>
+        <div><label>이메일</label><input id="fEmail" type="email"></div>
+      </div>
+      <label>미팅 메모</label>
+      <textarea id="fNotes" rows="4" placeholder="논의 내용, 후속 조치, 관심 품목, MOQ, 가격대…"></textarea>
+      <label>태그 (쉼표 구분)</label>
+      <input id="fTags" placeholder="예: 신규공급사, K-beauty, 후속연락필요">
+
+      <!-- 첨부 (저장 후 활성화) -->
+      <div id="attachZone" class="hidden">
+        <label>첨부 — 촬영하면 자동 업로드됩니다</label>
+        <div class="attach-btns">
+          <button onclick="pickFile('card')"><span class="ico">💳</span>명함</button>
+          <button onclick="pickFile('brochure')"><span class="ico">📄</span>브로셔</button>
+          <button onclick="pickFile('product')"><span class="ico">📷</span>상품</button>
+          <button onclick="attachLink()"><span class="ico">🔗</span>링크</button>
+        </div>
+        <div class="thumbs" id="formThumbs"></div>
+      </div>
+
+      <div class="btnrow">
+        <button class="btn sub" onclick="closeForm()">닫기</button>
+        <button class="btn" id="saveBtn" onclick="saveMeeting()">저장</button>
+      </div>
+      <div class="btnrow hidden" id="delRow">
+        <button class="btn danger" onclick="deleteMeeting()">이 미팅 삭제</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<nav class="tabs">
+  <button id="tabList" class="on" onclick="showView('list')"><span class="ico">📋</span>미팅 목록</button>
+  <button id="tabNew" onclick="openNew()"><span class="ico">➕</span>새 미팅</button>
+</nav>
+
+<input type="file" id="fileInput" accept="image/*" capture="environment" class="hidden" onchange="onFilePicked(event)">
+<div id="toast"></div>
+
+<script>
+/* ═══════════ 설정 ═══════════ */
+const TS_API_URL = 'PASTE_YOUR_APPS_SCRIPT_EXEC_URL_HERE'; // TradeShow.gs 웹앱 /exec URL
+const DEFAULT_SHOW = 'Cosmoprof Las Vegas 2026';
+
+/* ═══════════ 상태 ═══════════ */
+let KEY = localStorage.getItem('ts_key') || '';
+let USER = localStorage.getItem('ts_user') || '';
+let SHOW = localStorage.getItem('ts_show') || DEFAULT_SHOW;
+let MEETINGS = [];
+let editingId = null;      // 현재 폼의 meeting_id
+let pendingType = 'product'; // 파일 picker 유형
+
+/* ═══════════ 공통 유틸 ═══════════ */
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg;
+  t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2600); }
+
+function jsonp(params){
+  return new Promise((resolve,reject)=>{
+    const cb='ts_cb_'+Math.random().toString(36).slice(2);
+    window[cb]=d=>{ delete window[cb]; s.remove(); d.ok?resolve(d):reject(new Error(d.error||'error')); };
+    const qs=Object.entries(Object.assign({key:KEY,callback:cb},params))
+      .map(([k,v])=>k+'='+encodeURIComponent(v)).join('&');
+    const s=document.createElement('script');
+    s.src=TS_API_URL+'?'+qs;
+    s.onerror=()=>{ delete window[cb]; s.remove(); reject(new Error('네트워크 오류')); };
+    document.body.appendChild(s);
+    setTimeout(()=>{ if(window[cb]){ delete window[cb]; s.remove(); reject(new Error('시간 초과')); } }, 45000);
+  });
+}
+async function post(body){
+  const res=await fetch(TS_API_URL,{method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify(Object.assign({key:KEY,user:USER},body))});
+  const d=await res.json();
+  if(!d.ok) throw new Error(d.error||'error');
+  return d;
+}
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,
+  c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtDt(iso){
+  if(!iso) return '';
+  const d=new Date(iso); if(isNaN(d)) return iso;
+  return (d.getMonth()+1)+'/'+d.getDate()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+}
+function nowLocal(){
+  const d=new Date(); d.setSeconds(0,0);
+  return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+}
+
+/* ═══════════ 게이트 ═══════════ */
+function checkGate(){
+  if(!KEY||!USER){ document.getElementById('gate').classList.remove('hidden'); return false; }
+  document.getElementById('gate').classList.add('hidden');
+  document.getElementById('whoami').textContent=USER+' · '+SHOW;
+  return true;
+}
+function saveGate(){
+  const k=document.getElementById('gKey').value.trim();
+  const u=document.getElementById('gUser').value.trim();
+  if(!k||!u){ toast('키와 이름을 모두 입력하세요'); return; }
+  KEY=k; USER=u;
+  localStorage.setItem('ts_key',k); localStorage.setItem('ts_user',u);
+  checkGate(); boot();
+}
+function logout(){
+  if(!confirm('액세스 키/이름을 다시 설정할까요?')) return;
+  localStorage.removeItem('ts_key'); localStorage.removeItem('ts_user');
+  KEY=''; USER=''; checkGate();
+}
+
+/* ═══════════ 쇼 선택 ═══════════ */
+function renderShowSel(shows){
+  const sel=document.getElementById('showSel');
+  const names=new Set(shows.map(s=>s.show).filter(Boolean));
+  names.add(SHOW); names.add(DEFAULT_SHOW);
+  sel.innerHTML=[...names].sort().map(n=>
+    `<option value="${esc(n)}" ${n===SHOW?'selected':''}>${esc(n)}</option>`).join('');
+}
+function onShowChange(){
+  SHOW=document.getElementById('showSel').value;
+  localStorage.setItem('ts_show',SHOW);
+  document.getElementById('whoami').textContent=USER+' · '+SHOW;
+  loadMeetings();
+}
+function addShow(){
+  const n=prompt('새 쇼 이름 (예: Cosmoprof Bologna 2027)');
+  if(!n) return;
+  SHOW=n.trim(); localStorage.setItem('ts_show',SHOW);
+  const sel=document.getElementById('showSel');
+  sel.insertAdjacentHTML('beforeend',`<option value="${esc(SHOW)}" selected>${esc(SHOW)}</option>`);
+  sel.value=SHOW; onShowChange();
+}
+
+/* ═══════════ 목록 ═══════════ */
+async function loadMeetings(){
+  document.getElementById('loading').classList.remove('hidden');
+  document.getElementById('list').innerHTML='';
+  try{
+    const d=await jsonp({action:'listMeetings',show:SHOW});
+    MEETINGS=d.meetings||[];
+    const users=[...new Set(MEETINGS.map(m=>m.created_by).filter(Boolean))].sort();
+    document.getElementById('byUser').innerHTML='<option value="">전원</option>'+
+      users.map(u=>`<option>${esc(u)}</option>`).join('');
+    renderList();
+  }catch(e){ toast('불러오기 실패: '+e.message); }
+  document.getElementById('loading').classList.add('hidden');
+}
+
+function thumbHtml(f,editable){
+  const del=editable?`<button class="del" onclick="event.stopPropagation();removeFile('${esc(f.file_id)}')">✕</button>`:'';
+  if(f.file_type==='link'){
+    return `<div class="thumb linkchip">🔗<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.file_name)}</a>${del}</div>`;
+  }
+  const img=f.drive_file_id?`https://drive.google.com/thumbnail?id=${esc(f.drive_file_id)}&sz=w200`:'';
+  const label={card:'명함',brochure:'브로셔',product:'상품',photo:'상품'}[f.file_type]||f.file_type;
+  return `<div class="thumb" onclick="window.open('${esc(f.url)}','_blank')">
+    <img src="${img}" loading="lazy" onerror="this.style.display='none'">
+    <span class="tag">${esc(label)}</span>${del}</div>`;
+}
+
+function renderList(){
+  const q=(document.getElementById('q').value||'').toLowerCase();
+  const bu=document.getElementById('byUser').value;
+  let rows=MEETINGS;
+  if(bu) rows=rows.filter(m=>m.created_by===bu);
+  if(q) rows=rows.filter(m=>
+    [m.company,m.contact_name,m.location_booth,m.notes,m.tags,m.email]
+      .join(' ').toLowerCase().includes(q));
+  const el=document.getElementById('list');
+  if(!rows.length){
+    el.innerHTML=`<div class="empty"><span class="ico">🗂️</span>기록이 없습니다.<br>부스에서 미팅 후 바로 기록해 보세요.</div>`;
+    return;
+  }
+  el.innerHTML=rows.map(m=>{
+    const tags=(m.tags||'').split(',').map(t=>t.trim()).filter(Boolean)
+      .map(t=>`<span class="badge">${esc(t)}</span>`).join('');
+    return `<div class="card" onclick="openEdit('${esc(m.meeting_id)}')">
+      <div class="mtg-head">
+        <div>
+          <div class="mtg-company">${esc(m.company||'(회사명 없음)')}</div>
+          <div class="mtg-meta">${esc(m.contact_name||'')}${m.contact_title?' · '+esc(m.contact_title):''}</div>
+        </div>
+        <div class="mtg-meta" style="text-align:right; flex:none">
+          ${fmtDt(m.meeting_datetime)}<br>${esc(m.location_booth||'')}
+        </div>
+      </div>
+      ${m.notes?`<div class="mtg-notes">${esc(m.notes)}</div>`:''}
+      ${tags?`<div style="margin-top:8px">${tags}</div>`:''}
+      ${m.files&&m.files.length?`<div class="thumbs">${m.files.map(f=>thumbHtml(f,false)).join('')}</div>`:''}
+      <div class="byline">기록: ${esc(m.created_by)} · ${fmtDt(m.created_at)}</div>
+    </div>`;
+  }).join('');
+}
+
+/* ═══════════ 폼 ═══════════ */
+function showView(v){
+  document.getElementById('viewList').classList.toggle('hidden',v!=='list');
+  document.getElementById('viewForm').classList.toggle('hidden',v!=='form');
+  document.getElementById('tabList').classList.toggle('on',v==='list');
+  document.getElementById('tabNew').classList.toggle('on',v==='form');
+  if(v==='list') window.scrollTo(0,0);
+}
+function openNew(){
+  editingId=null;
+  document.getElementById('formTitle').textContent='새 미팅 기록';
+  ['fBooth','fCompany','fName','fTitle','fPhone','fEmail','fNotes','fTags']
+    .forEach(id=>document.getElementById(id).value='');
+  document.getElementById('fDt').value=nowLocal();
+  document.getElementById('attachZone').classList.add('hidden');
+  document.getElementById('delRow').classList.add('hidden');
+  document.getElementById('formThumbs').innerHTML='';
+  document.getElementById('saveBtn').textContent='저장';
+  showView('form'); window.scrollTo(0,0);
+}
+function openEdit(id){
+  const m=MEETINGS.find(x=>x.meeting_id===id); if(!m) return;
+  editingId=id;
+  document.getElementById('formTitle').textContent='미팅 수정';
+  document.getElementById('fDt').value=(m.meeting_datetime||'').slice(0,16);
+  document.getElementById('fBooth').value=m.location_booth||'';
+  document.getElementById('fCompany').value=m.company||'';
+  document.getElementById('fName').value=m.contact_name||'';
+  document.getElementById('fTitle').value=m.contact_title||'';
+  document.getElementById('fPhone').value=m.phone||'';
+  document.getElementById('fEmail').value=m.email||'';
+  document.getElementById('fNotes').value=m.notes||'';
+  document.getElementById('fTags').value=m.tags||'';
+  document.getElementById('attachZone').classList.remove('hidden');
+  document.getElementById('delRow').classList.remove('hidden');
+  document.getElementById('saveBtn').textContent='변경 저장';
+  renderFormThumbs(m.files||[]);
+  showView('form'); window.scrollTo(0,0);
+}
+function closeForm(){ showView('list'); loadMeetings(); }
+
+function renderFormThumbs(files){
+  document.getElementById('formThumbs').innerHTML=files.map(f=>thumbHtml(f,true)).join('');
+}
+
+async function saveMeeting(){
+  const company=document.getElementById('fCompany').value.trim();
+  if(!company){ toast('회사명은 필수입니다'); return; }
+  const btn=document.getElementById('saveBtn');
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span> 저장 중';
+  try{
+    const meeting={
+      show:SHOW,
+      meeting_datetime:document.getElementById('fDt').value,
+      location_booth:document.getElementById('fBooth').value.trim(),
+      company,
+      contact_name:document.getElementById('fName').value.trim(),
+      contact_title:document.getElementById('fTitle').value.trim(),
+      phone:document.getElementById('fPhone').value.trim(),
+      email:document.getElementById('fEmail').value.trim(),
+      notes:document.getElementById('fNotes').value.trim(),
+      tags:document.getElementById('fTags').value.trim()
+    };
+    if(editingId) meeting.meeting_id=editingId;
+    const d=await post({action:'saveMeeting',meeting});
+    editingId=d.meeting_id;
+    document.getElementById('attachZone').classList.remove('hidden');
+    document.getElementById('delRow').classList.remove('hidden');
+    document.getElementById('formTitle').textContent='미팅 수정';
+    btn.textContent='변경 저장';
+    toast(d.mode==='created'?'저장 완료 — 이제 명함/자료를 첨부하세요':'변경 저장 완료');
+  }catch(e){ toast('저장 실패: '+e.message); btn.textContent='저장'; }
+  btn.disabled=false;
+  if(btn.innerHTML.includes('spin')) btn.textContent=editingId?'변경 저장':'저장';
+}
+
+async function deleteMeeting(){
+  if(!editingId||!confirm('이 미팅 기록을 삭제할까요? (첨부 기록도 함께 삭제)')) return;
+  try{ await post({action:'deleteMeeting',meeting_id:editingId});
+    toast('삭제되었습니다'); closeForm();
+  }catch(e){ toast('삭제 실패: '+e.message); }
+}
+
+/* ═══════════ 첨부 ═══════════ */
+function pickFile(type){ pendingType=type; document.getElementById('fileInput').click(); }
+
+function compressImage(file,maxW){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    img.onload=()=>{
+      const scale=Math.min(1,maxW/Math.max(img.width,img.height));
+      const c=document.createElement('canvas');
+      c.width=Math.round(img.width*scale); c.height=Math.round(img.height*scale);
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+      resolve(c.toDataURL('image/jpeg',0.82).split(',')[1]); // base64
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror=reject;
+    img.src=URL.createObjectURL(file);
+  });
+}
+
+async function onFilePicked(ev){
+  const file=ev.target.files[0]; ev.target.value='';
+  if(!file||!editingId) return;
+  toast('업로드 중…');
+  try{
+    const base64=await compressImage(file,1600);
+    const d=await post({action:'uploadFile',meeting_id:editingId,show:SHOW,
+      file_type:pendingType,mime_type:'image/jpeg',
+      file_name:pendingType+'_'+Date.now()+'.jpg',base64});
+    const m=MEETINGS.find(x=>x.meeting_id===editingId);
+    if(m){ m.files=m.files||[]; m.files.push(d.file); renderFormThumbs(m.files); }
+    else{ // 신규 미팅 (아직 목록 미갱신)
+      const zone=document.getElementById('formThumbs');
+      zone.insertAdjacentHTML('beforeend',thumbHtml(d.file,true));
+    }
+    toast('업로드 완료 ✓');
+  }catch(e){ toast('업로드 실패: '+e.message); }
+}
+
+async function attachLink(){
+  if(!editingId) return;
+  const url=prompt('링크 URL (전시사 사이트, 카탈로그 PDF 등)');
+  if(!url) return;
+  const name=prompt('표시할 이름 (비우면 URL 그대로)')||url;
+  try{
+    const d=await post({action:'addLink',meeting_id:editingId,show:SHOW,url,file_name:name});
+    const m=MEETINGS.find(x=>x.meeting_id===editingId);
+    if(m){ m.files=m.files||[]; m.files.push(d.file); renderFormThumbs(m.files); }
+    else document.getElementById('formThumbs').insertAdjacentHTML('beforeend',thumbHtml(d.file,true));
+    toast('링크 추가 완료 ✓');
+  }catch(e){ toast('링크 추가 실패: '+e.message); }
+}
+
+async function removeFile(fileId){
+  if(!confirm('이 첨부를 삭제할까요?')) return;
+  try{
+    await post({action:'deleteFile',file_id:fileId});
+    const m=MEETINGS.find(x=>x.meeting_id===editingId);
+    if(m){ m.files=(m.files||[]).filter(f=>f.file_id!==fileId); renderFormThumbs(m.files); }
+    toast('삭제되었습니다');
+  }catch(e){ toast('삭제 실패: '+e.message); }
+}
+
+/* ═══════════ 부트 ═══════════ */
+async function boot(){
+  if(!checkGate()) return;
+  try{ const d=await jsonp({action:'listShows'}); renderShowSel(d.shows||[]); }
+  catch(e){ renderShowSel([]); if(String(e).includes('Invalid access key')){ toast('액세스 키가 올바르지 않습니다'); logout(); return; } }
+  loadMeetings();
+}
+boot();
+</script>
+</body>
+</html>
