@@ -57,7 +57,7 @@
   .mtg-notes{margin-top:8px; font-size:14px; white-space:pre-wrap;}
   .badge{display:inline-block; background:var(--accent-soft); color:var(--accent);
     font-size:11px; font-weight:700; padding:2px 8px; border-radius:99px; margin-right:4px;}
-  .byline{font-size:11px; color:var(--muted); margin-top:8px;}
+  .byline{font-size:11px; color:var(--muted);}
 
   /* 첨부 썸네일 */
   .thumbs{display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;}
@@ -92,6 +92,18 @@
   .empty{text-align:center; color:var(--muted); padding:48px 20px; font-size:14px;}
   .empty .ico{font-size:40px; display:block; margin-bottom:8px;}
 
+  /* 회사 그룹 + 연락처 액션 */
+  .cogroup{border:1px solid var(--accent); border-radius:var(--radius);
+    padding:8px 8px 0; margin-bottom:10px; background:var(--accent-soft);}
+  .cogroup-head{font-weight:800; font-size:14px; color:var(--accent); padding:4px 6px 8px;}
+  .cogroup-head .cnt{font-size:11px; background:var(--accent); color:#fff;
+    border-radius:99px; padding:1px 8px; margin-left:6px; vertical-align:1px;}
+  .cogroup .card{margin-bottom:8px;}
+  .cardfoot{display:flex; justify-content:space-between; align-items:center; margin-top:8px; gap:8px;}
+  .cactions{display:flex; gap:6px; flex:none;}
+  .cactions button{background:var(--card); border:1px solid var(--line); color:var(--ink);
+    font-size:11px; font-weight:700; padding:5px 9px; border-radius:8px;}
+
   /* 토스트/스피너 */
   #toast{position:fixed; left:50%; bottom:100px; transform:translateX(-50%);
     background:var(--ink); color:#fff; padding:10px 18px; border-radius:99px; font-size:13px;
@@ -116,7 +128,7 @@
 
 <header>
   <div>
-    <div class="brand">ASUNG <span>SHOW LOG</span> <small style="font-size:10px; opacity:.5; font-weight:400">v3</small></div>
+    <div class="brand">ASUNG <span>SHOW LOG</span> <small style="font-size:10px; opacity:.5; font-weight:400">v5</small></div>
     <div class="who" id="whoami"></div>
   </div>
   <button class="btn small sub" style="background:rgba(255,255,255,.12); color:#fff; border:none;" onclick="logout()">변경</button>
@@ -198,6 +210,13 @@
         <button class="btn sub" onclick="closeForm()">닫기</button>
         <button class="btn" id="saveBtn" onclick="saveMeeting()">저장</button>
       </div>
+      <div class="btnrow hidden" id="extraRow">
+        <button class="btn sub" onclick="addColleague()">👥 같은 회사 담당자 추가</button>
+      </div>
+      <div class="btnrow hidden" id="contactRow">
+        <button class="btn sub" onclick="copyContactForm()">📋 연락처 복사</button>
+        <button class="btn sub" onclick="saveVcfForm()">📱 전화기에 저장</button>
+      </div>
       <div class="btnrow hidden" id="delRow">
         <button class="btn danger" onclick="deleteMeeting()">이 미팅 삭제</button>
       </div>
@@ -210,7 +229,7 @@
   <button id="tabNew" onclick="openNew()"><span class="ico">➕</span>새 미팅</button>
 </nav>
 
-<input type="file" id="fileInput" accept="image/*" capture="environment" class="hidden" onchange="onFilePicked(event)">
+<input type="file" id="fileInput" accept="image/*,application/pdf" class="hidden" onchange="onFilePicked(event)">
 <div id="toast"></div>
 
 <script>
@@ -334,36 +353,58 @@ function thumbHtml(f,editable){
     <span class="tag">${esc(label)}</span>${del}</div>`;
 }
 
+function contactCard_(m){
+  const tags=(m.tags||'').split(',').map(t=>t.trim()).filter(Boolean)
+    .map(t=>`<span class="badge">${esc(t)}</span>`).join('');
+  return `<div class="card" onclick="openEdit('${esc(m.meeting_id)}')">
+    <div class="mtg-head">
+      <div>
+        <div class="mtg-company">${esc(m.company||'(회사명 없음)')}</div>
+        <div class="mtg-meta">${esc(m.contact_name||'')}${m.contact_title?' · '+esc(m.contact_title):''}</div>
+      </div>
+      <div class="mtg-meta" style="text-align:right; flex:none">
+        ${fmtDt(m.meeting_datetime)}<br>${esc(m.location_booth||'')}
+      </div>
+    </div>
+    ${m.notes?`<div class="mtg-notes">${esc(m.notes)}</div>`:''}
+    ${tags?`<div style="margin-top:8px">${tags}</div>`:''}
+    ${m.files&&m.files.length?`<div class="thumbs">${m.files.map(f=>thumbHtml(f,false)).join('')}</div>`:''}
+    <div class="cardfoot">
+      <span class="byline">기록: ${esc(m.created_by)} · ${fmtDt(m.created_at)}</span>
+      <span class="cactions">
+        <button onclick="event.stopPropagation();copyContact('${esc(m.meeting_id)}')">📋 복사</button>
+        <button onclick="event.stopPropagation();saveVcf('${esc(m.meeting_id)}')">📱 연락처 저장</button>
+      </span>
+    </div>
+  </div>`;
+}
+
 function renderList(){
   const q=(document.getElementById('q').value||'').toLowerCase();
   const bu=document.getElementById('byUser').value;
   let rows=MEETINGS;
   if(bu) rows=rows.filter(m=>m.created_by===bu);
   if(q) rows=rows.filter(m=>
-    [m.company,m.contact_name,m.location_booth,m.notes,m.tags,m.email]
+    [m.company,m.contact_name,m.location_booth,m.notes,m.tags,m.email,m.address]
       .join(' ').toLowerCase().includes(q));
   const el=document.getElementById('list');
   if(!rows.length){
     el.innerHTML=`<div class="empty"><span class="ico">🗂️</span>기록이 없습니다.<br>부스에서 미팅 후 바로 기록해 보세요.</div>`;
     return;
   }
-  el.innerHTML=rows.map(m=>{
-    const tags=(m.tags||'').split(',').map(t=>t.trim()).filter(Boolean)
-      .map(t=>`<span class="badge">${esc(t)}</span>`).join('');
-    return `<div class="card" onclick="openEdit('${esc(m.meeting_id)}')">
-      <div class="mtg-head">
-        <div>
-          <div class="mtg-company">${esc(m.company||'(회사명 없음)')}</div>
-          <div class="mtg-meta">${esc(m.contact_name||'')}${m.contact_title?' · '+esc(m.contact_title):''}</div>
-        </div>
-        <div class="mtg-meta" style="text-align:right; flex:none">
-          ${fmtDt(m.meeting_datetime)}<br>${esc(m.location_booth||'')}
-        </div>
-      </div>
-      ${m.notes?`<div class="mtg-notes">${esc(m.notes)}</div>`:''}
-      ${tags?`<div style="margin-top:8px">${tags}</div>`:''}
-      ${m.files&&m.files.length?`<div class="thumbs">${m.files.map(f=>thumbHtml(f,false)).join('')}</div>`:''}
-      <div class="byline">기록: ${esc(m.created_by)} · ${fmtDt(m.created_at)}</div>
+  // 회사별 그룹핑 (한 회사에서 여러 명 만난 경우 묶어서 표시)
+  const groups={}; const order=[];
+  rows.forEach(m=>{
+    const key=(m.company||'').trim().toLowerCase()||('__'+m.meeting_id);
+    if(!groups[key]){ groups[key]=[]; order.push(key); }
+    groups[key].push(m);
+  });
+  el.innerHTML=order.map(key=>{
+    const g=groups[key];
+    if(g.length===1) return contactCard_(g[0]);
+    return `<div class="cogroup">
+      <div class="cogroup-head">🏢 ${esc(g[0].company)} <span class="cnt">${g.length}명</span></div>
+      ${g.map(contactCard_).join('')}
     </div>`;
   }).join('');
 }
@@ -384,6 +425,8 @@ function openNew(){
   document.getElementById('fDt').value=nowLocal();
   document.getElementById('attachZone').classList.add('hidden');
   document.getElementById('delRow').classList.add('hidden');
+  document.getElementById('extraRow').classList.add('hidden');
+  document.getElementById('contactRow').classList.add('hidden');
   document.getElementById('formThumbs').innerHTML='';
   document.getElementById('saveBtn').textContent='저장';
   document.getElementById('scanFirst').classList.remove('hidden');
@@ -405,12 +448,84 @@ function openEdit(id){
   document.getElementById('fTags').value=m.tags||'';
   document.getElementById('attachZone').classList.remove('hidden');
   document.getElementById('delRow').classList.remove('hidden');
+  document.getElementById('extraRow').classList.remove('hidden');
+  document.getElementById('contactRow').classList.remove('hidden');
   document.getElementById('saveBtn').textContent='변경 저장';
   document.getElementById('scanFirst').classList.add('hidden');
   renderFormThumbs(m.files||[]);
   showView('form'); window.scrollTo(0,0);
 }
 function closeForm(){ showView('list'); loadMeetings(); }
+
+/* ═══════════ 연락처 복사 / 전화기 저장 / 동료 추가 ═══════════ */
+function findMtg_(id){ return MEETINGS.find(x=>x.meeting_id===id); }
+
+function contactText_(m){
+  return [m.contact_name, m.contact_title, m.company, m.phone, m.email, m.address]
+    .filter(Boolean).join('\n');
+}
+async function copyContact(id){ const m=findMtg_(id); if(m) copyContactObj_(m); }
+async function copyContactObj_(m){
+  const text=contactText_(m);
+  if(!text){ toast('복사할 연락처 정보가 없습니다'); return; }
+  try{ await navigator.clipboard.writeText(text); toast('연락처 복사됨 — 카톡/문자에 붙여넣으세요'); }
+  catch(e){ // http/구형 브라우저 폴백
+    const ta=document.createElement('textarea'); ta.value=text;
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); ta.remove();
+    toast('연락처 복사됨');
+  }
+}
+function vcardEsc_(s){ return String(s||'').replace(/\\/g,'\\\\').replace(/,/g,'\\,').replace(/;/g,'\\;').replace(/\n/g,'\\n'); }
+function saveVcf(id){ const m=findMtg_(id); if(m) saveVcfObj_(m); }
+function saveVcfObj_(m){
+  const note='['+(m.show||'')+'] '+(m.location_booth||'')+(m.notes?' / '+m.notes:'');
+  const vcf=[
+    'BEGIN:VCARD','VERSION:3.0',
+    'N:;'+vcardEsc_(m.contact_name)+';;;',
+    'FN:'+vcardEsc_(m.contact_name||m.company),
+    m.company?'ORG:'+vcardEsc_(m.company):'',
+    m.contact_title?'TITLE:'+vcardEsc_(m.contact_title):'',
+    m.phone?'TEL;TYPE=CELL:'+vcardEsc_(m.phone):'',
+    m.email?'EMAIL:'+vcardEsc_(m.email):'',
+    m.address?'ADR;TYPE=WORK:;;'+vcardEsc_(m.address)+';;;;':'',
+    'NOTE:'+vcardEsc_(note),
+    'END:VCARD'
+  ].filter(Boolean).join('\r\n');
+  const blob=new Blob([vcf],{type:'text/vcard'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=((m.contact_name||m.company||'contact').replace(/[\\/:*?"<>|]/g,'_'))+'.vcf';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+  toast('연락처 파일 다운로드 — 열면 전화기에 저장됩니다');
+}
+
+/* 같은 회사의 다른 담당자 추가: 회사 정보만 복사한 새 미팅 */
+function addColleague(){
+  const src={
+    company:document.getElementById('fCompany').value,
+    booth:document.getElementById('fBooth').value,
+    address:document.getElementById('fAddress').value,
+    tags:document.getElementById('fTags').value
+  };
+  openNew();
+  document.getElementById('fCompany').value=src.company;
+  document.getElementById('fBooth').value=src.booth;
+  document.getElementById('fAddress').value=src.address;
+  document.getElementById('fTags').value=src.tags;
+  toast(src.company+' — 새 담당자 명함을 바로 스캔하세요');
+}
+
+/* 폼 화면용 래퍼 (아직 목록에 없는 신규 미팅도 동작) */
+function formAsMtg_(){
+  const f=collectForm();
+  return {contact_name:f.contact_name,contact_title:f.contact_title,company:f.company,
+          phone:f.phone,email:f.email,address:f.address,show:f.show,
+          location_booth:f.location_booth,notes:f.notes,meeting_id:'__form'};
+}
+function copyContactForm(){ copyContactObj_(formAsMtg_()); }
+function saveVcfForm(){ saveVcfObj_(formAsMtg_()); }
 
 function renderFormThumbs(files){
   document.getElementById('formThumbs').innerHTML=files.map(f=>thumbHtml(f,true)).join('');
@@ -444,6 +559,8 @@ async function saveMeeting(){
     editingId=d.meeting_id;
     document.getElementById('attachZone').classList.remove('hidden');
     document.getElementById('delRow').classList.remove('hidden');
+  document.getElementById('extraRow').classList.remove('hidden');
+  document.getElementById('contactRow').classList.remove('hidden');
     document.getElementById('formTitle').textContent='미팅 수정';
     document.getElementById('scanFirst').classList.add('hidden');
     btn.textContent='변경 저장';
@@ -461,7 +578,12 @@ async function deleteMeeting(){
 }
 
 /* ═══════════ 첨부 ═══════════ */
-function pickFile(type){ pendingType=type; document.getElementById('fileInput').click(); }
+function pickFile(type){
+  pendingType=type;
+  const inp=document.getElementById('fileInput');
+  inp.multiple=(type!=='card');          // 명함은 1장(OCR), 브로셔·상품은 여러 장 가능
+  inp.click();
+}
 
 function compressImage(file,maxW){
   return new Promise((resolve,reject)=>{
@@ -479,102 +601,137 @@ function compressImage(file,maxW){
   });
 }
 
+/* 파일 → base64 준비: 이미지면 압축, PDF면 원본 그대로 */
+function prepFile_(file,maxW){
+  if(file.type==='application/pdf'){
+    if(file.size>15*1024*1024) return Promise.reject(new Error('PDF는 15MB 이하만 가능합니다'));
+    return new Promise((resolve,reject)=>{
+      const r=new FileReader();
+      r.onload=()=>resolve({base64:r.result.split(',')[1],mime:'application/pdf',
+        name:file.name||('doc_'+Date.now()+'.pdf')});
+      r.onerror=()=>reject(new Error('파일 읽기 실패'));
+      r.readAsDataURL(file);
+    });
+  }
+  return compressImage(file,maxW).then(b64=>({base64:b64,mime:'image/jpeg',
+    name:pendingType+'_'+Date.now()+'_'+Math.random().toString(36).slice(2,6)+'.jpg'}));
+}
+
 async function onFilePicked(ev){
-  const file=ev.target.files[0]; ev.target.value='';
-  if(!file) return;
+  const files=[...ev.target.files]; ev.target.value='';
+  if(!files.length) return;
+  const file=files[0];
 
   // ── 명함 우선 흐름: 아직 저장 안 된 새 미팅에서 명함부터 촬영 ──
   if(!editingId){
     if(pendingType!=='card'){ toast('먼저 회사명을 입력하고 저장한 뒤 첨부하세요'); return; }
-    toast('명함 읽는 중…');
+    toast('명함 처리 중…');
     try{
-      const base64=await compressImage(file,1600);
-      // 1) OCR로 필드 자동 입력
-      let ocrOk=false;
-      try{
-        const o=await post({action:'ocrCard',mime_type:'image/jpeg',base64});
-        const info=o.info||{};
-        const map={fCompany:info.company,fName:info.name,fTitle:info.title,
-                   fPhone:info.phone,fEmail:info.email,fAddress:info.address};
-        for(const [id,val] of Object.entries(map)){
-          const el=document.getElementById(id);
-          if(val&&!el.value.trim()) el.value=val;
-        }
-        if(info.website){
-          const notes=document.getElementById('fNotes');
-          if(!notes.value.includes(info.website))
-            notes.value=(notes.value?notes.value+'\n':'')+info.website;
-        }
-        ocrOk=true;
-      }catch(e){ toast('명함 인식 실패 — 직접 입력해 주세요'); }
+      const prep=await prepFile_(file,1400);
+      const isPdf=prep.mime==='application/pdf';
 
-      // 2) 미팅 자동 저장 (회사명 없으면 임시명)
+      // 1) 미팅 즉시 저장 (회사명 없으면 임시명) → meeting_id 확보
       if(!document.getElementById('fCompany').value.trim())
         document.getElementById('fCompany').value='(회사명 확인 필요)';
-      toast('미팅 저장 중…');
-      const meeting=collectForm();
-      const s=await post({action:'saveMeeting',meeting});
+      const s=await post({action:'saveMeeting',meeting:collectForm()});
       editingId=s.meeting_id;
       document.getElementById('attachZone').classList.remove('hidden');
       document.getElementById('delRow').classList.remove('hidden');
+      document.getElementById('extraRow').classList.remove('hidden');
+      document.getElementById('contactRow').classList.remove('hidden');
       document.getElementById('formTitle').textContent='미팅 수정';
       document.getElementById('saveBtn').textContent='변경 저장';
       document.getElementById('scanFirst').classList.add('hidden');
 
-      // 3) 명함 사진 첨부
-      const d=await post({action:'uploadFile',meeting_id:editingId,show:SHOW,
-        file_type:'card',mime_type:'image/jpeg',
-        file_name:'card_'+Date.now()+'.jpg',base64});
-      document.getElementById('formThumbs').insertAdjacentHTML('beforeend',thumbHtml(d.file,true));
-      toast(ocrOk?'완료 ✓ 내용 확인하고 메모를 추가하세요':'명함 저장 완료 — 연락처는 직접 입력해 주세요');
+      // 2) OCR + 업로드 동시 실행 (PDF 명함은 OCR 생략)
+      const jobs=[post({action:'uploadFile',meeting_id:editingId,show:SHOW,
+        file_type:'card',mime_type:prep.mime,file_name:prep.name,base64:prep.base64})];
+      if(!isPdf) jobs.push(post({action:'ocrCard',mime_type:prep.mime,base64:prep.base64}));
+      const [upRes,ocrRes]=await Promise.allSettled(jobs);
+
+      if(upRes.status==='fulfilled')
+        document.getElementById('formThumbs').insertAdjacentHTML('beforeend',thumbHtml(upRes.value.file,true));
+
+      if(!isPdf&&ocrRes&&ocrRes.status==='fulfilled'){
+        applyOcrInfo(ocrRes.value.info||{});
+        const co=document.getElementById('fCompany');
+        if(co.value==='(회사명 확인 필요)'&&(ocrRes.value.info||{}).company)
+          co.value=ocrRes.value.info.company;
+        await post({action:'saveMeeting',meeting:Object.assign(collectForm(),{meeting_id:editingId})});
+        toast('명함 인식 → 자동 저장 완료 ✓ 메모만 추가하세요');
+      }else if(!isPdf&&ocrRes){
+        toast('사진은 저장됨 — 명함 인식 실패: '+ocrRes.reason.message);
+      }else{
+        toast('파일 저장 완료 ✓ 연락처는 직접 입력해 주세요');
+      }
     }catch(e){ toast('처리 실패: '+e.message); }
     return;
   }
 
-  // ── 기존 흐름: 저장된 미팅에 첨부 ──
-  toast('업로드 중…');
-  try{
-    const base64=await compressImage(file,1600);
-    const d=await post({action:'uploadFile',meeting_id:editingId,show:SHOW,
-      file_type:pendingType,mime_type:'image/jpeg',
-      file_name:pendingType+'_'+Date.now()+'.jpg',base64});
-    const m=MEETINGS.find(x=>x.meeting_id===editingId);
-    if(m){ m.files=m.files||[]; m.files.push(d.file); renderFormThumbs(m.files); }
-    else{
-      const zone=document.getElementById('formThumbs');
-      zone.insertAdjacentHTML('beforeend',thumbHtml(d.file,true));
-    }
-    toast('업로드 완료 ✓');
-    if(pendingType==='card') ocrAndFill(base64); // 명함이면 연락처 자동 추출
-  }catch(e){ toast('업로드 실패: '+e.message); }
+  // ── 기존 흐름: 저장된 미팅에 첨부 (여러 파일 가능) ──
+  const isCard=pendingType==='card';
+
+  if(isCard){ // 명함: 1장 + OCR 병렬
+    toast('업로드 중…');
+    try{
+      const prep=await prepFile_(file,1400);
+      const isPdf=prep.mime==='application/pdf';
+      const jobs=[post({action:'uploadFile',meeting_id:editingId,show:SHOW,
+        file_type:'card',mime_type:prep.mime,file_name:prep.name,base64:prep.base64})];
+      if(!isPdf) jobs.push(post({action:'ocrCard',mime_type:prep.mime,base64:prep.base64}));
+      const [upRes,ocrRes]=await Promise.allSettled(jobs);
+
+      if(upRes.status==='fulfilled') addFileToUi_(upRes.value.file);
+      else toast('업로드 실패: '+upRes.reason.message);
+
+      if(!isPdf&&ocrRes&&ocrRes.status==='fulfilled'){
+        const filled=applyOcrInfo(ocrRes.value.info||{});
+        if(filled){
+          await post({action:'saveMeeting',meeting:Object.assign(collectForm(),{meeting_id:editingId})});
+          toast('명함 인식 → '+filled+'개 필드 자동 저장 완료 ✓');
+        }else toast('업로드 완료 ✓ (새로 채울 필드 없음)');
+      }else if(!isPdf&&ocrRes) toast('사진은 저장됨 — 명함 인식 실패: '+ocrRes.reason.message);
+      else if(upRes.status==='fulfilled') toast('업로드 완료 ✓');
+    }catch(e){ toast('업로드 실패: '+e.message); }
+    return;
+  }
+
+  // 브로셔·상품: 여러 파일 순차 업로드
+  let done=0, fail=0;
+  for(let i=0;i<files.length;i++){
+    toast('업로드 중… ('+(i+1)+'/'+files.length+')');
+    try{
+      const prep=await prepFile_(files[i],1600);
+      const d=await post({action:'uploadFile',meeting_id:editingId,show:SHOW,
+        file_type:pendingType,mime_type:prep.mime,file_name:prep.name,base64:prep.base64});
+      addFileToUi_(d.file); done++;
+    }catch(e){ fail++; }
+  }
+  toast(fail?('업로드: '+done+'건 완료, '+fail+'건 실패'):('업로드 완료 ✓ '+done+'건'));
 }
 
-/* 명함 OCR → 비어있는 필드만 자동 입력 → 자동 저장 */
-async function ocrAndFill(base64){
-  toast('명함에서 연락처 읽는 중…');
-  try{
-    const d=await post({action:'ocrCard',mime_type:'image/jpeg',base64});
-    const info=d.info||{};
-    const map={fCompany:info.company,fName:info.name,fTitle:info.title,
-               fPhone:info.phone,fEmail:info.email,fAddress:info.address};
-    let filled=0;
-    for(const [id,val] of Object.entries(map)){
-      const el=document.getElementById(id);
-      if(val&&!el.value.trim()){ el.value=val; filled++; }
+function addFileToUi_(f){
+  const m=MEETINGS.find(x=>x.meeting_id===editingId);
+  if(m){ m.files=m.files||[]; m.files.push(f); renderFormThumbs(m.files); }
+  else document.getElementById('formThumbs').insertAdjacentHTML('beforeend',thumbHtml(f,true));
+}
+
+/* OCR 결과를 비어있는 필드에만 적용, 채운 개수 반환 */
+function applyOcrInfo(info){
+  const map={fCompany:info.company,fName:info.name,fTitle:info.title,
+             fPhone:info.phone,fEmail:info.email,fAddress:info.address};
+  let filled=0;
+  for(const [id,val] of Object.entries(map)){
+    const el=document.getElementById(id);
+    if(val&&!el.value.trim()){ el.value=val; filled++; }
+  }
+  if(info.website){
+    const notes=document.getElementById('fNotes');
+    if(!notes.value.includes(info.website)){
+      notes.value=(notes.value?notes.value+'\n':'')+info.website; filled++;
     }
-    if(info.website){
-      const notes=document.getElementById('fNotes');
-      if(!notes.value.includes(info.website)){
-        notes.value=(notes.value?notes.value+'\n':'')+info.website; filled++;
-      }
-    }
-    if(filled){
-      await saveMeeting();               // 인식 결과 자동 저장
-      toast('명함 인식 → '+filled+'개 필드 자동 저장 완료 ✓');
-    }else{
-      toast('명함 인식 완료 — 새로 채울 필드가 없습니다');
-    }
-  }catch(e){ toast('명함 인식 실패 (사진은 저장됨): '+e.message); }
+  }
+  return filled;
 }
 
 async function attachLink(){
