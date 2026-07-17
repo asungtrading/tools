@@ -278,10 +278,63 @@ html, body { overflow-x: hidden; max-width: 100vw; }
   .sub-btn { font-size: 10px; padding: 5px 10px; }
   .info-banner { padding: 8px 12px; font-size: 10px; }
   .link-btn { font-size: 10px; padding: 3px 7px; }
+  .modal-box { width: 94%; max-height: 88vh; padding: 14px; }
+}
+/* 방문 상세 드릴다운 (클릭 가능 셀 + 모달) */
+.clickable-visitor { cursor: pointer; }
+.clickable-visitor:hover { text-decoration: underline; text-decoration-color: var(--blue2); }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.65); display: none; align-items: center; justify-content: center; z-index: 999; padding: 20px; }
+.modal-overlay.open { display: flex; }
+.modal-box { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; width: 100%; max-width: 640px; max-height: 82vh; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+.modal-hdr { display: flex; justify-content: space-between; align-items: flex-start; padding: 18px 20px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.modal-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.modal-sub { font-size: 11px; color: var(--dim); margin-top: 4px; font-family: 'DM Mono', monospace; }
+.modal-close { background: var(--surface2); border: 1px solid var(--border); color: var(--mid); width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; line-height: 1; flex-shrink: 0; }
+.modal-close:hover { color: var(--text); }
+.modal-body { padding: 8px 20px 20px; overflow-y: auto; flex: 1; }
+.mv-row { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); align-items: flex-start; }
+.mv-row:last-child { border-bottom: none; }
+.mv-icon { width: 20px; text-align: center; flex-shrink: 0; }
+.mv-label { flex: 1; font-size: 12px; color: var(--text); word-break: break-word; }
+.mv-time { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--dim); white-space: nowrap; flex-shrink: 0; }
+/* 인기 페이지 그룹 아코디언 */
+.pg-group { border-bottom: 1px solid var(--border); }
+.pg-group:last-child { border-bottom: none; }
+.pg-group-hdr { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; user-select: none; }
+.pg-group-hdr:hover { background: var(--surface2); }
+.pg-caret { font-size: 10px; color: var(--dim); transition: transform .15s; width: 12px; }
+.pg-group.open .pg-caret { transform: rotate(90deg); }
+.pg-group-name { flex: 1; font-size: 13px; font-weight: 700; color: var(--text); }
+.pg-group-stats { display: flex; gap: 14px; font-family: 'DM Mono', monospace; font-size: 11px; color: var(--mid); }
+.pg-group-stats .pg-anon-hi { color: var(--yellow); }
+.pg-group-body { display: none; padding: 0 16px 10px 38px; }
+.pg-group.open .pg-group-body { display: block; }
+.pg-item { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+.pg-item:last-child { border-bottom: none; }
+.pg-item-label { flex: 1; color: var(--text); word-break: break-all; }
+.pg-item-nums { display: flex; gap: 12px; font-family: 'DM Mono', monospace; font-size: 11px; color: var(--mid); white-space: nowrap; }
+@media (max-width: 768px) {
+  .pg-group-body { padding-left: 20px; }
+  .pg-group-stats { gap: 8px; font-size: 10px; }
+  .pg-item-nums { gap: 8px; font-size: 10px; }
 }
 </style>
 </head>
 <body>
+
+<!-- ══════ 방문 상세 모달 (드릴다운) ══════ -->
+<div class="modal-overlay" id="visitorModalOverlay" onclick="if(event.target===this) closeVisitorModal()">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <div>
+        <div class="modal-title" id="modalTitle">—</div>
+        <div class="modal-sub" id="modalSubtitle">—</div>
+      </div>
+      <button class="modal-close" onclick="closeVisitorModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
 
 <!-- AUTH -->
 <div id="authScreen">
@@ -321,6 +374,7 @@ html, body { overflow-x: hidden; max-width: 100vw; }
   <div class="tab-nav">
     <button class="tab-btn active" onclick="switchTab('overview')">📊 개요</button>
     <button class="tab-btn" onclick="switchTab('spy')">👁 미거래 방문 고객</button>
+    <button class="tab-btn" onclick="switchTab('active')">🛒 구매 고객 방문</button>
     <button class="tab-btn" onclick="switchTab('pages')">📄 인기 페이지</button>
     <button class="tab-btn" onclick="switchTab('products')">🔍 많이 찾는 SKU·브랜드</button>
     <button class="tab-btn" onclick="switchTab('categories')">📂 카테고리 관심도</button>
@@ -393,6 +447,40 @@ html, body { overflow-x: hidden; max-width: 100vw; }
     </div>
     <div class="content" id="spyContent">
       <div class="empty-state"><div class="empty-icon">👁</div><div class="empty-title">미거래 방문 고객</div><div class="empty-desc">분석 버튼을 눌러주세요.</div></div>
+    </div>
+  </div>
+
+  <!-- ══════ TAB: ACTIVE BUYERS ══════ -->
+  <div class="tab-panel" id="tab-active">
+    <div class="search-panel">
+      <div class="search-grid">
+        <div class="field">
+          <label class="field-label">분석 기간</label>
+          <select id="actDays">
+            <option value="7" selected>최근 7일</option>
+            <option value="14">최근 14일</option>
+            <option value="30">최근 30일</option>
+            <option value="90">최근 90일</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label">최소 페이지뷰</label>
+          <select id="actMinViews">
+            <option value="1" selected>1회 이상</option>
+            <option value="3">3회 이상</option>
+            <option value="5">5회 이상</option>
+            <option value="10">10회 이상</option>
+          </select>
+        </div>
+        <div><button class="search-btn" onclick="loadActive()">🔍 분석</button></div>
+      </div>
+    </div>
+    <div class="info-banner">
+      <span>🛒</span>
+      <span>asung.ca에서 <span class="warn">실제로 온라인 주문을 한</span> 구매 고객의 방문 현황입니다. 이름을 클릭하면 그 손님이 본 페이지·상품이 나옵니다 — 어떤 우수 고객이 뭘 관심 있게 보는지 파악할 수 있습니다.</span>
+    </div>
+    <div class="content" id="activeContent">
+      <div class="empty-state"><div class="empty-icon">🛒</div><div class="empty-title">구매 고객 방문</div><div class="empty-desc">분석 버튼을 눌러주세요.</div></div>
     </div>
   </div>
 
@@ -564,6 +652,10 @@ const ALLOWED_DOMAIN = 'asung.ca';
 const WHOLESALE_TIERS = "('Wholesale','USWholesale USD')";
 // 방문 추적 시작일 (고정) — Custom Pixel 최초 배포일. 이후 데이터 정리돼도 이 값 유지.
 const TRACKING_START = '2026-07-16';
+// 직원(staff 태그) 이메일은 모든 방문 통계에서 제외 — 테스트/작업 노이즈 차단
+// tags 예: "wholesale, Asung-Shopify, staff" → 공백 제거 후 ',staff,' 포함 검사 (regex 이스케이프 회피)
+const STAFF_EMAILS = `SELECT LOWER(email) FROM \`geometric-rock-487814-k4.Cin7_Customer_Data.shopify_customer_master\` WHERE email IS NOT NULL AND CONCAT(',', REPLACE(LOWER(IFNULL(tags,'')), ' ', ''), ',') LIKE '%,staff,%'`;
+const NOT_STAFF = `(email IS NULL OR LOWER(email) NOT IN (${STAFF_EMAILS}))`;
 
 let accessToken = null;
 let currentUser = null;
@@ -582,6 +674,7 @@ function switchTab(tab) {
   if (!_loaded[tab]) {
     _loaded[tab] = true;
     if (tab === 'spy') loadSpy();
+    else if (tab === 'active') loadActive();
     else if (tab === 'pages') loadPages();
     else if (tab === 'products') loadProducts();
     else if (tab === 'categories') loadCategories();
@@ -708,6 +801,21 @@ const shortDate = s => {
   }
   return str.slice(0, 10);                              // 이미 날짜 문자열이면 그대로
 };
+// 날짜+시각 (토론토, MM-DD HH:mm) — 방문 상세 모달용
+const shortDateTime = s => {
+  if (s == null || s === '') return '—';
+  const str = String(s);
+  if (/^[\d.]+([eE][+-]?\d+)?$/.test(str)) {
+    const f = parseFloat(str);
+    if (!isNaN(f) && f > 1e9) {
+      const d = new Date(f * 1000);
+      const dd = d.toLocaleDateString('en-CA', { timeZone: 'America/Toronto', month: '2-digit', day: '2-digit' });
+      const tt = d.toLocaleTimeString('en-CA', { timeZone: 'America/Toronto', hour: '2-digit', minute: '2-digit', hour12: false });
+      return dd + ' ' + tt;
+    }
+  }
+  return str.slice(0, 16);
+};
 const TOOLTIP = {backgroundColor:'#0f1218',titleColor:'#f1f5f9',bodyColor:'#94a3b8',borderColor:'#222a38',borderWidth:1};
 function mkChart(id,cfg){ if(charts[id])charts[id].destroy(); const c=document.getElementById(id); if(c)charts[id]=new Chart(c,cfg); }
 function baseOpts(rot){return{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#94a3b8',font:{size:10}}},tooltip:TOOLTIP},scales:{x:{grid:{color:'#1a2233'},ticks:{color:'#475569',font:{size:10},maxRotation:rot||0}},y:{grid:{color:'#1a2233'},ticks:{color:'#475569',font:{size:10}}}}};}
@@ -741,13 +849,15 @@ async function loadOverview() {
           COUNT(DISTINCT CASE WHEN email IS NOT NULL THEN LOWER(email) END) AS logged_in_visitors,
           COUNT(DISTINCT DATE(event_time, 'America/Toronto')) AS active_days
         FROM ${EVT}
-        WHERE DATE(event_time, 'America/Toronto') >= ${since}`),
+        WHERE DATE(event_time, 'America/Toronto') >= ${since}
+          AND ${NOT_STAFF}`),
       bqQuery(`
         SELECT DATE(event_time, 'America/Toronto') AS d,
           COUNTIF(event_type='page_view') AS pv,
           COUNT(DISTINCT client_id) AS visitors
         FROM ${EVT}
         WHERE DATE(event_time, 'America/Toronto') >= ${since}
+          AND ${NOT_STAFF}
         GROUP BY d ORDER BY d`),
     ]);
     const k = kpi[0] || {};
@@ -800,6 +910,7 @@ async function loadSpy() {
         WHERE email IS NOT NULL
           AND event_type IN ('page_view','account_view','product_view')
           AND DATE(event_time, 'America/Toronto') >= DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${days} DAY)
+          AND ${NOT_STAFF}
         GROUP BY LOWER(email)
       ),
       shop AS (SELECT LOWER(email) AS email, orders_count,
@@ -814,7 +925,8 @@ async function loadSpy() {
                   FROM ${CCUST} WHERE email IS NOT NULL GROUP BY LOWER(email))
       SELECT v.email, v.page_views, v.visit_days, v.first_visit, v.last_visit,
         COALESCE(s.orders_count,0) AS shopify_orders,
-        COALESCE(ca.c_name, s.shop_name, s.company) AS store_name,
+        COALESCE(ca.c_name, s.shop_name) AS store_name,
+        s.company AS company,
         COALESCE(s.is_wholesale, false) AS is_wholesale,
         s.signup_period AS signup_period,
         REGEXP_EXTRACT(UPPER(s.tags), r'((?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[0-9]{2})') AS signup_tag,
@@ -841,38 +953,41 @@ async function loadSpy() {
 
     registerTable('미거래방문고객', {
       containerId: 'spyTable',
-      headers: ['스토어/고객명','이메일','승인','지점','가입시기','유형','페이지뷰','방문일수','최근방문'],
-      numCols: [6,7],
+      headers: ['스토어/고객명','이메일','회사명','승인','지점','가입시기','유형','페이지뷰','방문일수','최근방문'],
+      numCols: [7,8],
       rows: filtered.map(r => [
         r.store_name||'', r.email,
+        r.company||'',
         isWs(r) ? '승인' : '미승인',
         r.branch_label||'', r.signup_period||'',
         looksCorporate(r.email)?'회사/역할 계정':'개인 계정',
         parseInt(r.page_views)||0, parseInt(r.visit_days)||0, shortDate(r.last_visit),
-        looksCorporate(r.email),  // [9] 렌더 플래그
-        r.signup_tag||''          // [10] 원본 가입 태그 (JUL26)
+        looksCorporate(r.email),  // [10] 렌더 플래그
+        r.signup_tag||''          // [11] 원본 가입 태그 (JUL26)
       ]),
       cellRender: {
-        0: (v,row)=>{ const isCorp=row[9]; const pv=row[6];
+        0: (v,row)=>{ const isCorp=row[10]; const pv=row[7];
           const risk = isCorp&&pv>=10?'high':(isCorp||pv>=10)?'mid':'low';
           const dot=`<span class="risk-dot risk-${risk}"></span>`;
-          return dot + (v ? esc(v) : '<span style="color:var(--dim)">미등록</span>'); },
+          const label = v ? esc(v) : '<span style="color:var(--dim)">미등록</span>';
+          return `<span class="clickable-visitor" data-email="${esc(row[1])}" data-name="${esc(v||row[1])}" onclick="showVisitorDetail(this.dataset.email, this.dataset.name)" title="클릭하면 방문 상세를 봅니다">${dot}${label}</span>`; },
         1: v=>`<span class="mono">${esc(v)}</span>`,
-        2: v=>`<span class="tag ${v==='승인'?'tag-spy':'tag-anon'}">${esc(v)}</span>`,
-        3: v=> v ? `<span class="tag ${v==='Edmonton'?'tag-edm':'tag-tor'}">${esc(v)}</span>` : '<span style="color:var(--dim)">—</span>',
-        4: (v,row)=>{ const tag=row[10];
+        2: v=> v ? esc(v) : '<span style="color:var(--dim)">—</span>',
+        3: v=>`<span class="tag ${v==='승인'?'tag-spy':'tag-anon'}">${esc(v)}</span>`,
+        4: v=> v ? `<span class="tag ${v==='Edmonton'?'tag-edm':'tag-tor'}">${esc(v)}</span>` : '<span style="color:var(--dim)">—</span>',
+        5: (v,row)=>{ const tag=row[11];
           if (tag) return `<span class="tag tag-b2b">${esc(tag)}</span> <span class="mono" style="color:var(--dim);font-size:10px">${esc(v)}</span>`;
           return v ? `<span class="mono">${esc(v)}</span>` : '<span style="color:var(--dim)">—</span>'; },
-        5: v=>`<span class="tag ${v==='회사/역할 계정'?'tag-spy':'tag-lead'}">${esc(v)}</span>`,
-        6: v=>num(v), 7: v=>num(v),
-        8: v=>`<span class="mono">${esc(v)}</span>`,
+        6: v=>`<span class="tag ${v==='회사/역할 계정'?'tag-spy':'tag-lead'}">${esc(v)}</span>`,
+        7: v=>num(v), 8: v=>num(v),
+        9: v=>`<span class="mono">${esc(v)}</span>`,
       },
-      defaultSort: 6, defaultAsc: false
+      defaultSort: 7, defaultAsc: false
     });
     _csvCache['미거래방문고객'] = {
-      headers: ['스토어/고객명','이메일','승인','지점','가입태그','가입시기','유형','페이지뷰','방문일수','최근방문'],
+      headers: ['스토어/고객명','이메일','회사명','승인','지점','가입태그','가입시기','유형','페이지뷰','방문일수','최근방문'],
       rows: _tables['미거래방문고객'].rows.map(r => [
-        r[0]||'미등록', r[1], r[2], r[3], r[10], r[4], r[5], r[6], r[7], r[8]
+        r[0]||'미등록', r[1], r[2], r[3], r[4], r[11], r[5], r[6], r[7], r[8], r[9]
       ])
     };
 
@@ -891,49 +1006,270 @@ async function loadSpy() {
 }
 
 // ══════════════════════════════════════
+// 2-b) 방문 상세 드릴다운 (손님 클릭 → 본 페이지/상품 목록)
+// ══════════════════════════════════════
+function closeVisitorModal(){
+  document.getElementById('visitorModalOverlay').classList.remove('open');
+}
+async function showVisitorDetail(email, name){
+  const overlay = document.getElementById('visitorModalOverlay');
+  document.getElementById('modalTitle').textContent = name || email;
+  document.getElementById('modalSubtitle').textContent = email;
+  document.getElementById('modalBody').innerHTML = '<div class="loading"><div class="spinner"></div>방문 기록 불러오는 중…</div>';
+  overlay.classList.add('open');
+  try {
+    const safeEmail = String(email).toLowerCase().replace(/'/g, "''");
+    const rows = await bqQuery(`
+      SELECT event_time, event_type, page_url, page_title,
+        product_sku, product_title, product_brand
+      FROM ${EVT}
+      WHERE LOWER(email) = '${safeEmail}'
+        AND event_type IN ('page_view','product_view','account_view')
+      ORDER BY event_time DESC
+      LIMIT 200`);
+    if (!rows.length) {
+      document.getElementById('modalBody').innerHTML = '<div style="text-align:center;color:var(--dim);padding:30px 0;font-size:12px">방문 기록이 없습니다.</div>';
+      return;
+    }
+    // 상품조회 수 / 페이지뷰 수 요약
+    const pv = rows.filter(r=>r.event_type==='page_view').length;
+    const pd = rows.filter(r=>r.event_type==='product_view').length;
+    const items = rows.map(r=>{
+      let icon='📄', label='';
+      if (r.event_type==='product_view') {
+        icon='🛍';
+        label = `<strong>${esc(r.product_title||r.product_sku||'상품')}</strong>`
+          + (r.product_brand ? ` <span style="color:var(--dim)">· ${esc(r.product_brand)}</span>` : '')
+          + (r.product_sku ? ` <span class="mono" style="color:var(--dim);font-size:10px">${esc(r.product_sku)}</span>` : '');
+      } else if (r.event_type==='account_view') {
+        icon='👤';
+        label = esc(r.page_title||'계정 페이지');
+      } else {
+        const t = (r.page_title||'').trim();
+        label = t ? esc(t) : `<span class="mono" style="font-size:11px">${esc(r.page_url||'')}</span>`;
+        if (t && r.page_url) label += ` <span class="mono" style="color:var(--dim);font-size:9px" title="${esc(r.page_url)}">${esc(String(r.page_url).replace(/^https?:\/\/[^\/]+/,''))}</span>`;
+      }
+      return `<div class="mv-row"><div class="mv-icon">${icon}</div><div class="mv-label">${label}</div><div class="mv-time">${shortDateTime(r.event_time)}</div></div>`;
+    }).join('');
+    document.getElementById('modalBody').innerHTML = `
+      <div style="display:flex;gap:14px;padding:10px 0 6px;font-size:11px;color:var(--mid)">
+        <span>📄 페이지뷰 <strong style="color:var(--text)">${num(pv)}</strong></span>
+        <span>🛍 상품조회 <strong style="color:var(--text)">${num(pd)}</strong></span>
+        <span style="color:var(--dim)">최근 ${rows.length}건 (최신순)</span>
+      </div>
+      ${items}`;
+  } catch(e){
+    document.getElementById('modalBody').innerHTML = `<div style="color:var(--red);font-size:12px;padding:16px 0">오류: ${esc(e.message||e)}</div>`;
+  }
+}
+
+// ══════════════════════════════════════
+// 2-c) 구매 고객 방문 (온라인 주문 有 + 방문) — 미거래 탭의 대칭
+// ══════════════════════════════════════
+async function loadActive() {
+  const days = document.getElementById('actDays').value;
+  const minv = document.getElementById('actMinViews').value;
+  loading('activeContent');
+  try {
+    const rows = await bqQuery(`
+      WITH visitors AS (
+        SELECT LOWER(email) AS email,
+          COUNT(*) AS page_views,
+          COUNT(DISTINCT DATE(event_time, 'America/Toronto')) AS visit_days,
+          MAX(event_time) AS last_visit
+        FROM ${EVT}
+        WHERE email IS NOT NULL
+          AND event_type IN ('page_view','account_view','product_view')
+          AND DATE(event_time, 'America/Toronto') >= DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${days} DAY)
+          AND ${NOT_STAFF}
+        GROUP BY LOWER(email)
+      ),
+      shop AS (SELECT LOWER(email) AS email, orders_count, total_spent,
+                 branch_label, company,
+                 NULLIF(TRIM(CONCAT(COALESCE(first_name,''),' ',COALESCE(last_name,''))),'') AS shop_name
+               FROM ${SCUST} WHERE email IS NOT NULL),
+      cin7any AS (SELECT LOWER(email) AS email, ANY_VALUE(customer_name) AS c_name, ANY_VALUE(branch_label) AS c_branch
+                  FROM ${CCUST} WHERE email IS NOT NULL GROUP BY LOWER(email))
+      SELECT v.email, v.page_views, v.visit_days, v.last_visit,
+        s.orders_count AS online_orders,
+        s.total_spent  AS online_spent,
+        COALESCE(ca.c_name, s.shop_name) AS store_name,
+        s.company AS company,
+        COALESCE(ca.c_branch, s.branch_label) AS branch_label
+      FROM visitors v
+      JOIN shop s ON s.email = v.email
+      LEFT JOIN cin7any ca ON ca.email = v.email
+      WHERE COALESCE(s.orders_count,0) > 0    -- 온라인 주문 있는 구매 고객만
+        AND v.page_views >= ${minv}
+      ORDER BY v.page_views DESC
+      LIMIT 500`);
+
+    if (!rows.length) { document.getElementById('activeContent').innerHTML = emptyMsg('🛒','대상 없음','해당 기간에 방문한 구매 고객이 없습니다.'); return; }
+
+    const totOrders = rows.reduce((s,r)=>s+(parseInt(r.online_orders)||0),0);
+    const totSpent  = rows.reduce((s,r)=>s+(parseFloat(r.online_spent)||0),0);
+    const totViews  = rows.reduce((s,r)=>s+(parseInt(r.page_views)||0),0);
+
+    registerTable('구매고객방문', {
+      containerId: 'activeTable',
+      headers: ['스토어/고객명','이메일','회사명','지점','온라인 주문','온라인 구매액','페이지뷰','방문일수','최근방문'],
+      numCols: [4,5,6,7],
+      rows: rows.map(r => [
+        r.store_name||'', r.email,
+        r.company||'',
+        r.branch_label||'',
+        parseInt(r.online_orders)||0,
+        parseFloat(r.online_spent)||0,
+        parseInt(r.page_views)||0, parseInt(r.visit_days)||0, shortDate(r.last_visit)
+      ]),
+      cellRender: {
+        0: (v,row)=>{
+          const label = v ? esc(v) : '<span style="color:var(--dim)">미등록</span>';
+          return `<span class="clickable-visitor" data-email="${esc(row[1])}" data-name="${esc(v||row[1])}" onclick="showVisitorDetail(this.dataset.email, this.dataset.name)" title="클릭하면 방문 상세를 봅니다">${label}</span>`; },
+        1: v=>`<span class="mono">${esc(v)}</span>`,
+        2: v=> v ? esc(v) : '<span style="color:var(--dim)">—</span>',
+        3: v=> v ? `<span class="tag ${v==='Edmonton'?'tag-edm':'tag-tor'}">${esc(v)}</span>` : '<span style="color:var(--dim)">—</span>',
+        4: v=>num(v),
+        5: v=>money(v),
+        6: v=>num(v), 7: v=>num(v),
+        8: v=>`<span class="mono">${esc(v)}</span>`,
+      },
+      defaultSort: 6, defaultAsc: false
+    });
+    _csvCache['구매고객방문'] = {
+      headers: _tables['구매고객방문'].headers,
+      rows: _tables['구매고객방문'].rows.map(r => r.slice(0,9).map((v,i)=> i===0 && !v ? '미등록' : v))
+    };
+
+    document.getElementById('activeContent').innerHTML = `
+      <div class="kpi-strip cols4">
+        <div class="kpi green"><div class="kpi-lbl">방문한 구매 고객</div><div class="kpi-val">${num(rows.length)}</div><div class="kpi-sub">기간 내 로그인 방문</div></div>
+        <div class="kpi blue"><div class="kpi-lbl">이들의 온라인 주문</div><div class="kpi-val">${num(totOrders)}</div><div class="kpi-sub">누적 주문 수</div></div>
+        <div class="kpi purple"><div class="kpi-lbl">누적 온라인 구매액</div><div class="kpi-val">${money(totSpent)}</div><div class="kpi-sub">Shopify 기준</div></div>
+        <div class="kpi teal"><div class="kpi-lbl">기간 내 페이지뷰</div><div class="kpi-val">${num(totViews)}</div><div class="kpi-sub">1인 평균 ${num(Math.round(totViews/rows.length))}</div></div>
+      </div>
+      <div class="tbl-card" style="margin-top:16px">
+        <div class="tbl-hdr"><span class="tbl-title">구매 고객 방문 목록</span><span style="display:flex;gap:10px;align-items:center"><span class="tbl-count">${rows.length}명</span>${csvBtn('구매고객방문')}</span></div>
+        <div class="tbl-wrap" id="activeTable">${renderTable('구매고객방문')}</div>
+      </div>`;
+  } catch(e){ errBox('activeContent', e); }
+}
+
+// ══════════════════════════════════════
 // 3) POPULAR PAGES
 // ══════════════════════════════════════
 async function loadPages() {
   const days = document.getElementById('pgDays').value;
   loading('pagesContent');
   try {
+    // URL 정규화: 검색(/search)은 검색어(q=) 보존, 나머지는 쿼리스트링·앵커 제거 후 합산
     const rows = await bqQuery(`
-      SELECT
-        COALESCE(NULLIF(TRIM(page_title),''), page_url) AS page,
-        page_url,
+      WITH ev AS (
+        SELECT
+          CASE WHEN STRPOS(page_url, '/search') > 0
+               THEN REGEXP_REPLACE(page_url, r'#.*$', '')
+               ELSE REGEXP_REPLACE(page_url, r'[?#].*$', '') END AS norm_url,
+          NULLIF(TRIM(page_title),'') AS page_title,
+          email, client_id
+        FROM ${EVT}
+        WHERE event_type='page_view'
+          AND page_url IS NOT NULL
+          AND DATE(event_time, 'America/Toronto') >= DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${days} DAY)
+          AND ${NOT_STAFF}
+      )
+      SELECT norm_url AS page_url,
+        ANY_VALUE(page_title) AS page_title,
         COUNT(*) AS views,
         COUNTIF(email IS NOT NULL) AS login_views,
         COUNTIF(email IS NULL) AS anon_views,
         COUNT(DISTINCT client_id) AS visitors
-      FROM ${EVT}
-      WHERE event_type='page_view'
-        AND DATE(event_time, 'America/Toronto') >= DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${days} DAY)
-      GROUP BY page, page_url
+      FROM ev
+      GROUP BY norm_url
       ORDER BY views DESC
-      LIMIT 100`);
+      LIMIT 200`);
     if (!rows.length) { document.getElementById('pagesContent').innerHTML = emptyMsg('📄','데이터 없음','아직 페이지뷰가 없습니다.'); return; }
-    registerTable('인기페이지', {
-      containerId: 'pagesTable',
-      headers: ['페이지','총조회','로그인','익명','익명%','순방문자'],
-      numCols: [1,2,3,4,5],
-      rows: rows.map(r => { const t=parseInt(r.views)||0, p=t?Math.round((parseInt(r.anon_views)||0)/t*100):0;
-        return [ r.page, t, parseInt(r.login_views)||0, parseInt(r.anon_views)||0, p, parseInt(r.visitors)||0, r.page_url ]; }),
-      cellRender: {
-        0: (v,row)=>`<span title="${esc(row[6])}">${esc(v)}</span>`,
-        1:v=>num(v),2:v=>num(v),3:v=>num(v),
-        4:v=>`<span class="tag ${v>=60?'tag-b2c':'tag-anon'}">${v}%</span>`,
-        5:v=>num(v),
-      },
-      defaultSort: 1, defaultAsc: false
+
+    // ── 그룹 분류 ──
+    const pathOf = url => { try { return new URL(url).pathname + (new URL(url).search||''); } catch(e){ return String(url||''); } };
+    const GROUPS = ['🏠 홈','📂 컬렉션·카테고리','🛍 상품 상세','🔍 검색','👤 계정·등록','🛒 장바구니·결제','📄 안내 페이지','❓ 기타'];
+    function classifyPage(url){
+      const p = pathOf(url);
+      if (p === '/' || p === '') return '🏠 홈';
+      if (p.startsWith('/collections')) return '📂 컬렉션·카테고리';
+      if (p.startsWith('/products')) return '🛍 상품 상세';
+      if (p.startsWith('/search')) return '🔍 검색';
+      if (p.startsWith('/account') || p.startsWith('/pages/register') || p.indexOf('login')!==-1 || p.startsWith('/customer_')) return '👤 계정·등록';
+      if (p.startsWith('/cart') || p.startsWith('/checkout')) return '🛒 장바구니·결제';
+      if (p.startsWith('/pages') || p.startsWith('/policies') || p.startsWith('/blogs')) return '📄 안내 페이지';
+      return '❓ 기타';
+    }
+    // 페이지 표시 라벨: 검색이면 검색어, 아니면 title→경로
+    function pageLabel(r){
+      const p = pathOf(r.page_url);
+      if (p.startsWith('/search')) {
+        const m = p.match(/[?&]q=([^&]*)/);
+        if (m) { try { return '🔎 "' + decodeURIComponent(m[1].replace(/\+/g,' ')) + '"'; } catch(e){ return '🔎 ' + m[1]; } }
+        return '검색 페이지';
+      }
+      return r.page_title || p;
+    }
+
+    // 그룹핑 + 집계
+    const grouped = {};
+    let totalViews = 0;
+    rows.forEach(r=>{
+      const g = classifyPage(r.page_url);
+      if (!grouped[g]) grouped[g] = { pages: [], views:0, login:0, anon:0 };
+      const v = parseInt(r.views)||0;
+      grouped[g].pages.push(r);
+      grouped[g].views += v;
+      grouped[g].login += parseInt(r.login_views)||0;
+      grouped[g].anon  += parseInt(r.anon_views)||0;
+      totalViews += v;
     });
+
+    // 아코디언 HTML (그룹은 조회수 순, 그룹 내부도 조회수 순 — 첫 그룹만 펼침)
+    const orderedGroups = GROUPS.filter(g=>grouped[g]).sort((a,b)=>grouped[b].views-grouped[a].views);
+    const html = orderedGroups.map((g,gi)=>{
+      const d = grouped[g];
+      const anonPct = d.views ? Math.round(d.anon/d.views*100) : 0;
+      const items = d.pages.map(r=>{
+        const t=parseInt(r.views)||0, p=t?Math.round((parseInt(r.anon_views)||0)/t*100):0;
+        return `<div class="pg-item">
+          <div class="pg-item-label" title="${esc(r.page_url)}">${esc(pageLabel(r))}</div>
+          <div class="pg-item-nums">
+            <span title="총 조회">${num(t)}</span>
+            <span title="로그인" style="color:var(--teal)">${num(r.login_views)}</span>
+            <span title="익명" style="color:var(--dim)">${num(r.anon_views)}</span>
+            <span class="tag ${p>=60?'tag-b2c':'tag-anon'}" title="익명%">${p}%</span>
+          </div>
+        </div>`;
+      }).join('');
+      return `<div class="pg-group${gi===0?' open':''}">
+        <div class="pg-group-hdr" onclick="this.parentElement.classList.toggle('open')">
+          <span class="pg-caret">▶</span>
+          <span class="pg-group-name">${g} <span style="color:var(--dim);font-weight:400;font-size:11px">(${d.pages.length}개 페이지)</span></span>
+          <span class="pg-group-stats">
+            <span title="총 조회">${num(d.views)}회</span>
+            <span title="익명 비율" class="${anonPct>=60?'pg-anon-hi':''}">익명 ${anonPct}%</span>
+            <span title="전체 대비" style="color:var(--dim)">${totalViews?Math.round(d.views/totalViews*100):0}%</span>
+          </span>
+        </div>
+        <div class="pg-group-body">${items}</div>
+      </div>`;
+    }).join('');
+
+    // CSV (평면: 그룹 컬럼 포함)
     _csvCache['인기페이지'] = {
-      headers: ['페이지','URL','총조회','로그인','익명','익명%','순방문자'],
-      rows: _tables['인기페이지'].rows.map(r => [ r[0], r[6], r[1], r[2], r[3], r[4], r[5] ])
+      headers: ['그룹','페이지','URL','총조회','로그인','익명','익명%','순방문자'],
+      rows: rows.map(r => { const t=parseInt(r.views)||0, p=t?Math.round((parseInt(r.anon_views)||0)/t*100):0;
+        return [ classifyPage(r.page_url).replace(/^[^\s]+\s/,''), pageLabel(r), r.page_url, t, parseInt(r.login_views)||0, parseInt(r.anon_views)||0, p, parseInt(r.visitors)||0 ]; })
     };
+
     document.getElementById('pagesContent').innerHTML = `
       <div class="tbl-card">
-        <div class="tbl-hdr"><span class="tbl-title">인기 페이지 — 로그인 vs 익명</span><span style="display:flex;gap:10px;align-items:center"><span class="tbl-count">${rows.length}개</span>${csvBtn('인기페이지')}</span></div>
-        <div class="tbl-wrap" id="pagesTable">${renderTable('인기페이지')}</div>
+        <div class="tbl-hdr"><span class="tbl-title">인기 페이지 — 메뉴·위치별</span><span style="display:flex;gap:10px;align-items:center"><span class="tbl-count">${rows.length}개 페이지 · ${orderedGroups.length}개 그룹</span>${csvBtn('인기페이지')}</span></div>
+        <div>${html}</div>
       </div>`;
   } catch(e){ errBox('pagesContent', e); }
 }
@@ -958,6 +1294,7 @@ async function loadProducts() {
         FROM ${EVT}
         WHERE event_type='product_view' AND product_sku IS NOT NULL
           AND DATE(event_time, 'America/Toronto') >= ${since}
+          AND ${NOT_STAFF}
         GROUP BY product_sku ORDER BY views DESC LIMIT 150`),
       bqQuery(`
         SELECT UPPER(TRIM(product_brand)) AS brand,
@@ -969,6 +1306,7 @@ async function loadProducts() {
         FROM ${EVT}
         WHERE event_type='product_view' AND product_brand IS NOT NULL AND TRIM(product_brand)!=''
           AND DATE(event_time, 'America/Toronto') >= ${since}
+          AND ${NOT_STAFF}
         GROUP BY brand ORDER BY views DESC LIMIT 60`),
     ]);
     if (!skus.length && !brands.length) { document.getElementById('productsContent').innerHTML = emptyMsg('🔍','데이터 없음','아직 상품 조회 데이터가 없습니다. product_view 픽셀이 방금 추가되어 데이터가 쌓이는 중입니다.'); return; }
@@ -977,41 +1315,154 @@ async function loadProducts() {
 
     registerTable('브랜드관심도', {
       containerId: 'brandTable',
-      headers: ['브랜드','총조회','로그인','익명','익명%','SKU수'],
+      headers: ['브랜드','총조회','로그인','익명','익명%','SKU수','조회자'],
       numCols: [1,2,3,4,5],
-      rows: brands.map(r => [ r.brand, parseInt(r.views)||0, parseInt(r.login_views)||0, parseInt(r.anon_views)||0, anonPct(r), parseInt(r.skus)||0 ]),
-      cellRender: { 1:v=>num(v),2:v=>num(v),3:v=>num(v),4:v=>`<span class="tag ${v>=60?'tag-b2c':'tag-anon'}">${v}%</span>`,5:v=>num(v) },
+      rows: brands.map(r => [ r.brand, parseInt(r.views)||0, parseInt(r.login_views)||0, parseInt(r.anon_views)||0, anonPct(r), parseInt(r.skus)||0, '' ]),
+      cellRender: {
+        0: v=>`<span class="clickable-visitor" data-brand="${esc(v)}" onclick="filterSkuByBrand(this.dataset.brand)" title="클릭하면 아래 SKU 표가 이 브랜드로 필터링됩니다">${esc(v)}</span>`,
+        1:v=>num(v),2:v=>num(v),3:v=>num(v),4:v=>`<span class="tag ${v>=60?'tag-b2c':'tag-anon'}">${v}%</span>`,5:v=>num(v),
+        6:(v,row)=>`<button class="export-btn" data-brand="${esc(row[0])}" onclick="showProductViewers('brand', this.dataset.brand)" title="이 브랜드를 조회한 손님 보기">👥</button>`
+      },
       defaultSort: 1, defaultAsc: false
     });
     registerTable('SKU관심도', {
       containerId: 'skuTable',
-      headers: ['SKU','상품명','브랜드','총조회','로그인','익명','익명%'],
+      headers: ['SKU','상품명','브랜드','총조회','로그인','익명','익명%','조회자'],
       numCols: [3,4,5,6],
-      rows: skus.map(r => [ r.sku, r.title, r.brand, parseInt(r.views)||0, parseInt(r.login_views)||0, parseInt(r.anon_views)||0, anonPct(r) ]),
+      rows: skus.map(r => [ r.sku, r.title, r.brand, parseInt(r.views)||0, parseInt(r.login_views)||0, parseInt(r.anon_views)||0, anonPct(r), '' ]),
       cellRender: {
         0:v=>`<span class="mono">${esc(v)}</span>`,
         1:v=>`<span title="${esc(v)}" style="display:inline-block;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom">${esc(v)}</span>`,
-        3:v=>num(v),4:v=>num(v),5:v=>num(v),6:v=>`<span class="tag ${v>=60?'tag-b2c':'tag-anon'}">${v}%</span>`
+        3:v=>num(v),4:v=>num(v),5:v=>num(v),6:v=>`<span class="tag ${v>=60?'tag-b2c':'tag-anon'}">${v}%</span>`,
+        7:(v,row)=>`<button class="export-btn" data-sku="${esc(row[0])}" onclick="showProductViewers('sku', this.dataset.sku)" title="이 SKU를 조회한 손님 보기">👥</button>`
       },
       defaultSort: 3, defaultAsc: false
     });
-    _csvCache['브랜드관심도'] = { headers: _tables['브랜드관심도'].headers, rows: _tables['브랜드관심도'].rows };
-    _csvCache['SKU관심도']   = { headers: _tables['SKU관심도'].headers,   rows: _tables['SKU관심도'].rows };
+    // 브랜드 필터용 원본 보관
+    _tables['SKU관심도'].allRows = _tables['SKU관심도'].rows;
+    _skuBrandFilter = null;
+    _csvCache['브랜드관심도'] = { headers: _tables['브랜드관심도'].headers.slice(0,-1), rows: _tables['브랜드관심도'].rows.map(r=>r.slice(0,-1)) };
+    _csvCache['SKU관심도']   = { headers: _tables['SKU관심도'].headers.slice(0,-1),   rows: _tables['SKU관심도'].rows.map(r=>r.slice(0,-1)) };
 
     document.getElementById('productsContent').innerHTML = `
       <div class="info-banner" style="border-top:1px solid rgba(59,130,246,.15)">
         <span>💡</span>
-        <span><strong>익명%</strong>가 높은(<span class="warn">60%+</span>) 상품/브랜드는 로그인 안 한 방문자(정체불명·잠재 정탐 포함)가 특히 주목하는 항목입니다. 헤더를 클릭해 정렬하세요.</span>
+        <span><strong>브랜드를 클릭</strong>하면 아래 SKU 표가 그 브랜드로 필터링됩니다. <strong>익명%</strong>가 높은(<span class="warn">60%+</span>) 항목은 정체불명 방문자가 특히 주목하는 것입니다.</span>
       </div>
       <div class="tbl-card">
         <div class="tbl-hdr"><span class="tbl-title">🏷 브랜드 — 로그인 vs 익명</span><span style="display:flex;gap:10px;align-items:center"><span class="tbl-count">${brands.length}</span>${csvBtn('브랜드관심도')}</span></div>
         <div class="tbl-wrap" style="max-height:360px" id="brandTable">${renderTable('브랜드관심도')}</div>
       </div>
       <div class="tbl-card" style="margin-top:16px">
-        <div class="tbl-hdr"><span class="tbl-title">🔍 SKU — 로그인 vs 익명</span><span style="display:flex;gap:10px;align-items:center"><span class="tbl-count">${skus.length}</span>${csvBtn('SKU관심도')}</span></div>
+        <div class="tbl-hdr"><span class="tbl-title">🔍 SKU — 로그인 vs 익명</span><span style="display:flex;gap:10px;align-items:center"><span id="skuFilterChip"></span><span class="tbl-count" id="skuCount">${skus.length}</span>${csvBtn('SKU관심도')}</span></div>
         <div class="tbl-wrap" style="max-height:480px" id="skuTable">${renderTable('SKU관심도')}</div>
       </div>`;
   } catch(e){ errBox('productsContent', e); }
+}
+
+// ── 브랜드 클릭 → SKU 필터 ──
+let _skuBrandFilter = null;
+function filterSkuByBrand(brand){
+  const t = _tables['SKU관심도'];
+  if (!t || !t.allRows) return;
+  if (_skuBrandFilter === brand) { clearSkuFilter(); return; }  // 같은 브랜드 재클릭 = 해제
+  _skuBrandFilter = brand;
+  const bnorm = String(brand).toUpperCase().trim();
+  t.rows = t.allRows.filter(r => String(r[2]||'').toUpperCase().trim() === bnorm);
+  const el = document.getElementById('skuTable');
+  if (el) el.innerHTML = renderTable('SKU관심도');
+  const chip = document.getElementById('skuFilterChip');
+  if (chip) chip.innerHTML = `<span class="tag tag-b2b" style="cursor:pointer" onclick="clearSkuFilter()" title="클릭하면 필터 해제">필터: ${esc(brand)} ✕</span>`;
+  const cnt = document.getElementById('skuCount');
+  if (cnt) cnt.textContent = t.rows.length;
+  _csvCache['SKU관심도'] = { headers: t.headers.slice(0,-1), rows: t.rows.map(r=>r.slice(0,-1)) };
+  // SKU 표로 스크롤
+  const card = document.getElementById('skuTable');
+  if (card) card.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+function clearSkuFilter(){
+  const t = _tables['SKU관심도'];
+  if (!t || !t.allRows) return;
+  _skuBrandFilter = null;
+  t.rows = t.allRows;
+  const el = document.getElementById('skuTable');
+  if (el) el.innerHTML = renderTable('SKU관심도');
+  const chip = document.getElementById('skuFilterChip');
+  if (chip) chip.innerHTML = '';
+  const cnt = document.getElementById('skuCount');
+  if (cnt) cnt.textContent = t.rows.length;
+  _csvCache['SKU관심도'] = { headers: t.headers.slice(0,-1), rows: t.rows.map(r=>r.slice(0,-1)) };
+}
+
+// ══════════════════════════════════════
+// 4-a) SKU/브랜드 조회자 보기 (👥 → 누가 봤나)
+// ══════════════════════════════════════
+async function showProductViewers(type, value){
+  const overlay = document.getElementById('visitorModalOverlay');
+  const label = type === 'sku' ? 'SKU' : '브랜드';
+  document.getElementById('modalTitle').textContent = value;
+  document.getElementById('modalSubtitle').textContent = `이 ${label}를 조회한 손님 (기간 필터 기준)`;
+  document.getElementById('modalBody').innerHTML = '<div class="loading"><div class="spinner"></div>조회자 불러오는 중…</div>';
+  overlay.classList.add('open');
+  try {
+    const days = document.getElementById('prDays').value;
+    const safe = String(value).replace(/'/g, "''");
+    const cond = type === 'sku'
+      ? `product_sku = '${safe}'`
+      : `UPPER(TRIM(product_brand)) = '${safe.toUpperCase()}'`;
+    const base = `FROM ${EVT}
+      WHERE event_type='product_view' AND ${cond}
+        AND DATE(event_time, 'America/Toronto') >= DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${days} DAY)
+        AND ${NOT_STAFF}`;
+    const [viewers, anon] = await Promise.all([
+      bqQuery(`
+        WITH v AS (
+          SELECT LOWER(email) AS email, COUNT(*) AS views, MAX(event_time) AS last_view
+          ${base} AND email IS NOT NULL
+          GROUP BY LOWER(email)
+        ),
+        shop AS (SELECT LOWER(email) AS email, orders_count, company,
+                   NULLIF(TRIM(CONCAT(COALESCE(first_name,''),' ',COALESCE(last_name,''))),'') AS shop_name
+                 FROM ${SCUST} WHERE email IS NOT NULL),
+        cin7any AS (SELECT LOWER(email) AS email, ANY_VALUE(customer_name) AS c_name
+                    FROM ${CCUST} WHERE email IS NOT NULL GROUP BY LOWER(email))
+        SELECT v.email, v.views, v.last_view,
+          COALESCE(ca.c_name, s.shop_name, s.company) AS name,
+          COALESCE(s.orders_count,0) AS orders
+        FROM v
+        LEFT JOIN shop s ON s.email=v.email
+        LEFT JOIN cin7any ca ON ca.email=v.email
+        ORDER BY v.views DESC LIMIT 100`),
+      bqQuery(`SELECT COUNT(*) AS views, COUNT(DISTINCT client_id) AS visitors ${base} AND email IS NULL`),
+    ]);
+    const a = anon[0] || {};
+    const anonLine = `<div style="display:flex;gap:14px;padding:10px 0;border-bottom:1px solid var(--border);font-size:11px;color:var(--mid)">
+      <span>👤 로그인 조회자 <strong style="color:var(--text)">${num(viewers.length)}</strong>명</span>
+      <span>🕶 익명 조회 <strong style="color:var(--text)">${num(a.views)}</strong>회 (브라우저 ${num(a.visitors)}개)</span>
+    </div>`;
+    if (!viewers.length) {
+      document.getElementById('modalBody').innerHTML = anonLine +
+        '<div style="text-align:center;color:var(--dim);padding:24px 0;font-size:12px">로그인 상태로 조회한 손님이 없습니다.</div>';
+      return;
+    }
+    const items = viewers.map(r=>{
+      const nm = r.name ? esc(r.name) : '<span style="color:var(--dim)">미등록</span>';
+      const buyer = (parseInt(r.orders)||0) > 0
+        ? '<span class="tag tag-lead" style="margin-left:6px">구매고객</span>'
+        : '<span class="tag tag-anon" style="margin-left:6px">미거래</span>';
+      return `<div class="mv-row">
+        <div class="mv-icon">👤</div>
+        <div class="mv-label">
+          <span class="clickable-visitor" data-email="${esc(r.email)}" data-name="${esc(r.name||r.email)}" onclick="showVisitorDetail(this.dataset.email, this.dataset.name)" title="클릭하면 이 손님의 전체 방문 상세를 봅니다"><strong>${nm}</strong></span>${buyer}
+          <div class="mono" style="color:var(--dim);font-size:10px;margin-top:2px">${esc(r.email)}</div>
+        </div>
+        <div class="mv-time">${num(r.views)}회 · ${shortDate(r.last_view)}</div>
+      </div>`;
+    }).join('');
+    document.getElementById('modalBody').innerHTML = anonLine + items;
+  } catch(e){
+    document.getElementById('modalBody').innerHTML = `<div style="color:var(--red);font-size:12px;padding:16px 0">오류: ${esc(e.message||e)}</div>`;
+  }
 }
 
 // ══════════════════════════════════════
@@ -1032,6 +1483,7 @@ async function loadCategories() {
           AND page_url IS NOT NULL
           AND REGEXP_CONTAINS(page_url, r'/collections/')
           AND DATE(event_time, 'America/Toronto') >= DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${days} DAY)
+          AND ${NOT_STAFF}
       )
       SELECT collection,
         COUNT(*) AS views,
@@ -1152,7 +1604,7 @@ async function loadRegion(){
   loading('regionContent');
   try {
     const visitorCTE = (mode==='visited')
-      ? `visitors AS (SELECT DISTINCT LOWER(email) AS email FROM ${EVT} WHERE email IS NOT NULL AND DATE(event_time, 'America/Toronto') >= DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${days} DAY)),`
+      ? `visitors AS (SELECT DISTINCT LOWER(email) AS email FROM ${EVT} WHERE email IS NOT NULL AND ${NOT_STAFF} AND DATE(event_time, 'America/Toronto') >= DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${days} DAY)),`
       : '';
     const finalSel = (mode==='visited')
       ? `SELECT m.state, m.city, m.branch FROM merged m JOIN visitors v ON v.email = m.email`
@@ -1240,7 +1692,7 @@ async function loadDormant() {
       ),
       last_visit AS (
         SELECT LOWER(email) AS email, MAX(event_time) AS last_visit, COUNT(*) AS total_views
-        FROM ${EVT} WHERE email IS NOT NULL GROUP BY LOWER(email)
+        FROM ${EVT} WHERE email IS NOT NULL AND ${NOT_STAFF} GROUP BY LOWER(email)
       ),
       sales AS (
         SELECT LOWER(customer) AS cust_name_lower, SUM(sale) AS revenue, MAX(invoice_date) AS last_order
@@ -1296,7 +1748,7 @@ async function loadNeverVisit() {
         WHERE email IS NOT NULL AND price_tier IN ${WHOLESALE_TIERS}
         GROUP BY LOWER(email)
       ),
-      visited AS (SELECT DISTINCT LOWER(email) AS email FROM ${EVT} WHERE email IS NOT NULL),
+      visited AS (SELECT DISTINCT LOWER(email) AS email FROM ${EVT} WHERE email IS NOT NULL AND ${NOT_STAFF}),
       sales AS (
         SELECT LOWER(customer) AS cust_name_lower, SUM(sale) AS revenue,
           MAX(invoice_date) AS last_order, COUNT(DISTINCT order_number) AS orders
