@@ -372,6 +372,7 @@ tr.vd-open > td { background: rgba(59,130,246,.05); }
       <span class="hdr-title">Visitor Analytics</span>
     </div>
     <div class="hdr-user">
+      <span class="mono" id="lastRefresh" style="font-size:10px;color:var(--dim)"></span>
       <a class="link-btn" href="analytics.html">→ 매출 분석</a>
       <img class="hdr-avatar" id="userAvatar" src="" alt="">
       <span class="hdr-name" id="userName">—</span>
@@ -679,18 +680,16 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelector(`.tab-btn[onclick="switchTab('${tab}')"]`).classList.add('active');
   document.getElementById('tab-' + tab).classList.add('active');
-  // 처음 열 때 자동 로드
-  if (!_loaded[tab]) {
-    _loaded[tab] = true;
-    if (tab === 'spy') loadSpy();
-    else if (tab === 'active') loadActive();
-    else if (tab === 'pages') loadPages();
-    else if (tab === 'products') loadProducts();
-    else if (tab === 'categories') loadCategories();
-    else if (tab === 'region') loadRegion();
-    else if (tab === 'dormant') loadDormant();
-    else if (tab === 'nevervisit') loadNeverVisit();
-  }
+  // 탭 전환 시 항상 최신 데이터 재조회 (오래 켜둬도 stale 방지)
+  if (tab === 'overview') loadOverview();
+  else if (tab === 'spy') loadSpy();
+  else if (tab === 'active') loadActive();
+  else if (tab === 'pages') loadPages();
+  else if (tab === 'products') loadProducts();
+  else if (tab === 'categories') loadCategories();
+  else if (tab === 'region') loadRegion();
+  else if (tab === 'dormant') loadDormant();
+  else if (tab === 'nevervisit') loadNeverVisit();
 }
 
 // ══════════════════════════════════════
@@ -778,6 +777,9 @@ async function bqQuery(sql) {
   }
   const data = await res.json();
   if (data.error) throw new Error(data.error.message);
+  // 조회 성공 시 헤더에 마지막 조회 시각 표시 (토론토)
+  const lr = document.getElementById('lastRefresh');
+  if (lr) lr.textContent = '조회: ' + new Date().toLocaleTimeString('en-CA', { timeZone: 'America/Toronto', hour: '2-digit', minute: '2-digit', hour12: false });
   let rows = data.rows || [];
   let pageToken = data.pageToken;
   const jobId = data.jobReference?.jobId;
@@ -859,7 +861,9 @@ async function loadOverview() {
           COUNT(DISTINCT DATE(event_time, 'America/Toronto')) AS active_days
         FROM ${EVT}
         WHERE DATE(event_time, 'America/Toronto') >= ${since}
-          AND ${NOT_STAFF}`),
+          AND ${NOT_STAFF}
+          AND event_time >= TIMESTAMP(DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${Number(days)+2} DAY))  -- 파티션 프루닝
+          `),
       bqQuery(`
         SELECT DATE(event_time, 'America/Toronto') AS d,
           COUNTIF(event_type='page_view') AS pv,
@@ -867,6 +871,7 @@ async function loadOverview() {
         FROM ${EVT}
         WHERE DATE(event_time, 'America/Toronto') >= ${since}
           AND ${NOT_STAFF}
+          AND event_time >= TIMESTAMP(DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${Number(days)+2} DAY))  -- 파티션 프루닝
         GROUP BY d ORDER BY d`),
     ]);
     const k = kpi[0] || {};
@@ -920,6 +925,7 @@ async function loadSpy() {
           AND event_type IN ('page_view','account_view','product_view')
           AND DATE(event_time, 'America/Toronto') >= DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${days} DAY)
           AND ${NOT_STAFF}
+          AND event_time >= TIMESTAMP(DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${Number(days)+2} DAY))  -- 파티션 프루닝
         GROUP BY LOWER(email)
       ),
       shop AS (SELECT LOWER(email) AS email, orders_count,
@@ -1026,6 +1032,7 @@ async function fetchVisitorEvents(email){
     FROM ${EVT}
     WHERE LOWER(email) = '${safeEmail}'
       AND event_type IN ('page_view','product_view','account_view')
+      AND event_time >= TIMESTAMP(DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL 180 DAY))  -- 최근 180일 (파티션 프루닝)
     ORDER BY event_time DESC
     LIMIT 200`);
 }
@@ -1141,6 +1148,7 @@ async function loadActive() {
           AND event_type IN ('page_view','account_view','product_view')
           AND DATE(event_time, 'America/Toronto') >= DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${days} DAY)
           AND ${NOT_STAFF}
+          AND event_time >= TIMESTAMP(DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${Number(days)+2} DAY))  -- 파티션 프루닝
         GROUP BY LOWER(email)
       ),
       shop AS (SELECT LOWER(email) AS email, orders_count, total_spent,
@@ -1235,6 +1243,7 @@ async function loadPages() {
           AND page_url IS NOT NULL
           AND DATE(event_time, 'America/Toronto') >= DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${days} DAY)
           AND ${NOT_STAFF}
+          AND event_time >= TIMESTAMP(DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${Number(days)+2} DAY))  -- 파티션 프루닝
       )
       SELECT norm_url AS page_url,
         ANY_VALUE(page_title) AS page_title,
@@ -1354,6 +1363,7 @@ async function loadProducts() {
         WHERE event_type='product_view' AND product_sku IS NOT NULL
           AND DATE(event_time, 'America/Toronto') >= ${since}
           AND ${NOT_STAFF}
+          AND event_time >= TIMESTAMP(DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${Number(days)+2} DAY))  -- 파티션 프루닝
         GROUP BY product_sku ORDER BY views DESC LIMIT 150`),
       bqQuery(`
         SELECT UPPER(TRIM(product_brand)) AS brand,
@@ -1366,6 +1376,7 @@ async function loadProducts() {
         WHERE event_type='product_view' AND product_brand IS NOT NULL AND TRIM(product_brand)!=''
           AND DATE(event_time, 'America/Toronto') >= ${since}
           AND ${NOT_STAFF}
+          AND event_time >= TIMESTAMP(DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${Number(days)+2} DAY))  -- 파티션 프루닝
         GROUP BY brand ORDER BY views DESC LIMIT 60`),
     ]);
     if (!skus.length && !brands.length) { document.getElementById('productsContent').innerHTML = emptyMsg('🔍','데이터 없음','아직 상품 조회 데이터가 없습니다. product_view 픽셀이 방금 추가되어 데이터가 쌓이는 중입니다.'); return; }
@@ -1472,7 +1483,9 @@ async function showProductViewers(type, value){
     const base = `FROM ${EVT}
       WHERE event_type='product_view' AND ${cond}
         AND DATE(event_time, 'America/Toronto') >= DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${days} DAY)
-        AND ${NOT_STAFF}`;
+        AND ${NOT_STAFF}
+        AND event_time >= TIMESTAMP(DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${Number(days)+2} DAY))  -- 파티션 프루닝
+        `;
     const [viewers, anon] = await Promise.all([
       bqQuery(`
         WITH v AS (
@@ -1549,6 +1562,7 @@ async function loadCategories() {
           AND REGEXP_CONTAINS(page_url, r'/collections/')
           AND DATE(event_time, 'America/Toronto') >= DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${days} DAY)
           AND ${NOT_STAFF}
+          AND event_time >= TIMESTAMP(DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${Number(days)+2} DAY))  -- 파티션 프루닝
       )
       SELECT collection,
         COUNT(*) AS views,
@@ -1669,7 +1683,7 @@ async function loadRegion(){
   loading('regionContent');
   try {
     const visitorCTE = (mode==='visited')
-      ? `visitors AS (SELECT DISTINCT LOWER(email) AS email FROM ${EVT} WHERE email IS NOT NULL AND ${NOT_STAFF} AND DATE(event_time, 'America/Toronto') >= DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${days} DAY)),`
+      ? `visitors AS (SELECT DISTINCT LOWER(email) AS email FROM ${EVT} WHERE email IS NOT NULL AND ${NOT_STAFF} AND event_time >= TIMESTAMP(DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${Number(days)+2} DAY)) AND DATE(event_time, 'America/Toronto') >= DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${days} DAY)),`
       : '';
     const finalSel = (mode==='visited')
       ? `SELECT m.state, m.city, m.branch FROM merged m JOIN visitors v ON v.email = m.email`
