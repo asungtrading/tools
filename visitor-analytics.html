@@ -266,6 +266,19 @@ html, body { overflow-x: hidden; max-width: 100vw; }
 .sub-btn.active { background: var(--blue); color:#fff; border-color: var(--blue); }
 .link-btn { font-size: 11px; color: var(--blue2); text-decoration:none; border:1px solid var(--border2); padding:4px 10px; border-radius:6px; }
 .link-btn:hover { background: var(--surface2); }
+/* KPI/그리드 컬럼 수 (인라인 스타일 대신 클래스 — 모바일 오버라이드 가능) */
+.kpi-strip.cols2 { grid-template-columns: repeat(2,1fr); }
+.kpi-strip.cols3 { grid-template-columns: repeat(3,1fr); }
+.kpi-strip.cols4 { grid-template-columns: repeat(4,1fr); }
+.charts-grid.two { grid-template-columns: 1fr 1fr; }
+@media (max-width: 768px) {
+  .kpi-strip.cols2, .kpi-strip.cols3, .kpi-strip.cols4 { grid-template-columns: repeat(2,1fr); }
+  .charts-grid.two { grid-template-columns: 1fr; }
+  .sub-nav { padding: 10px 12px 0; }
+  .sub-btn { font-size: 10px; padding: 5px 10px; }
+  .info-banner { padding: 8px 12px; font-size: 10px; }
+  .link-btn { font-size: 10px; padding: 3px 7px; }
+}
 </style>
 </head>
 <body>
@@ -683,7 +696,18 @@ async function bqQuery(sql) {
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const num = n => (parseInt(n)||0).toLocaleString();
 const money = n => '$' + (parseFloat(n)||0).toLocaleString('en-CA',{minimumFractionDigits:2,maximumFractionDigits:2});
-const shortDate = s => s ? String(s).slice(0,10) : '—';
+// BQ REST는 TIMESTAMP를 epoch초 문자열("1.784250114E9")로 반환 → 토론토 날짜로 변환
+const shortDate = s => {
+  if (s == null || s === '') return '—';
+  const str = String(s);
+  if (/^[\d.]+([eE][+-]?\d+)?$/.test(str)) {           // epoch 숫자 형태
+    const f = parseFloat(str);
+    if (!isNaN(f) && f > 1e9) {
+      return new Date(f * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Toronto' }); // YYYY-MM-DD
+    }
+  }
+  return str.slice(0, 10);                              // 이미 날짜 문자열이면 그대로
+};
 const TOOLTIP = {backgroundColor:'#0f1218',titleColor:'#f1f5f9',bodyColor:'#94a3b8',borderColor:'#222a38',borderWidth:1};
 function mkChart(id,cfg){ if(charts[id])charts[id].destroy(); const c=document.getElementById(id); if(c)charts[id]=new Chart(c,cfg); }
 function baseOpts(rot){return{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#94a3b8',font:{size:10}}},tooltip:TOOLTIP},scales:{x:{grid:{color:'#1a2233'},ticks:{color:'#475569',font:{size:10},maxRotation:rot||0}},y:{grid:{color:'#1a2233'},ticks:{color:'#475569',font:{size:10}}}}};}
@@ -743,12 +767,14 @@ async function loadOverview() {
         <div class="chart-box tall"><canvas id="ovTrendChart"></canvas></div>
       </div>`;
 
+    // 데이터가 1~2일뿐이면 line이 안 보이므로 bar로, 그 이상이면 line으로
+    const chartType = trend.length <= 2 ? 'bar' : 'line';
     mkChart('ovTrendChart', {
-      type:'line',
+      type: chartType,
       data:{ labels: trend.map(r=>r.d),
         datasets:[
-          {label:'페이지뷰', data:trend.map(r=>parseInt(r.pv)||0), borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,.1)', fill:true, tension:.3},
-          {label:'순 방문자', data:trend.map(r=>parseInt(r.visitors)||0), borderColor:'#14b8a6', backgroundColor:'rgba(20,184,166,.1)', fill:true, tension:.3},
+          {label:'페이지뷰', data:trend.map(r=>parseInt(r.pv)||0), borderColor:'#3b82f6', backgroundColor: chartType==='bar' ? 'rgba(59,130,246,.55)' : 'rgba(59,130,246,.1)', fill:true, tension:.3, pointRadius:4, pointHoverRadius:6, borderWidth:2, maxBarThickness:80},
+          {label:'순 방문자', data:trend.map(r=>parseInt(r.visitors)||0), borderColor:'#14b8a6', backgroundColor: chartType==='bar' ? 'rgba(20,184,166,.55)' : 'rgba(20,184,166,.1)', fill:true, tension:.3, pointRadius:4, pointHoverRadius:6, borderWidth:2, maxBarThickness:80},
         ]},
       options: baseOpts(0)
     });
@@ -845,7 +871,7 @@ async function loadSpy() {
     };
 
     document.getElementById('spyContent').innerHTML = `
-      <div class="kpi-strip" style="grid-template-columns:repeat(4,1fr)">
+      <div class="kpi-strip cols4">
         <div class="kpi red"><div class="kpi-lbl">미거래 방문 고객</div><div class="kpi-val">${num(filtered.length)}</div><div class="kpi-sub">구매기록 전무 방문자</div></div>
         <div class="kpi purple"><div class="kpi-lbl">승인(가격 열람)</div><div class="kpi-val">${num(approved)}</div><div class="kpi-sub">wholesale 태그 有</div></div>
         <div class="kpi yellow"><div class="kpi-lbl">회사/역할 계정</div><div class="kpi-val">${num(corp)}</div><div class="kpi-sub">주시 대상</div></div>
@@ -867,7 +893,7 @@ async function loadPages() {
   try {
     const rows = await bqQuery(`
       SELECT
-        COALESCE(page_title, page_url) AS page,
+        COALESCE(NULLIF(TRIM(page_title),''), page_url) AS page,
         page_url,
         COUNT(*) AS views,
         COUNTIF(email IS NOT NULL) AS login_views,
@@ -1167,14 +1193,14 @@ async function loadRegion(){
 
     const modeLabel = mode==='visited' ? '방문 고객' : '전체 등록 고객';
     document.getElementById('regionContent').innerHTML = `
-      <div class="kpi-strip" style="grid-template-columns:repeat(4,1fr)">
+      <div class="kpi-strip cols4">
         <div class="kpi blue"><div class="kpi-lbl">${modeLabel}</div><div class="kpi-val">${num(total)}</div><div class="kpi-sub">${mode==='visited'?'로그인 방문(순 이메일)':'등록 고객(중복제거)'}</div></div>
         <div class="kpi teal"><div class="kpi-lbl">토론토 지점</div><div class="kpi-val">${num(byBranch.Toronto)}</div><div class="kpi-sub">${total?Math.round(byBranch.Toronto/total*100):0}%</div></div>
         <div class="kpi orange"><div class="kpi-lbl">에드먼턴 지점</div><div class="kpi-val">${num(byBranch.Edmonton)}</div><div class="kpi-sub">${total?Math.round(byBranch.Edmonton/total*100):0}%</div></div>
         <div class="kpi yellow"><div class="kpi-lbl">캐나다 外/미상</div><div class="kpi-val">${num(nonCA)}</div><div class="kpi-sub">주 코드 없음</div></div>
       </div>
 
-      <div class="charts-grid" style="grid-template-columns:1fr 1fr;margin-top:16px">
+      <div class="charts-grid two" style="margin-top:16px">
         <div class="card">
           <div class="card-hdr"><span class="card-title">주별 분포 (색이 진할수록 많음)</span></div>
           <div style="display:flex;justify-content:center;padding:8px 0">${buildCanadaMap(byProv)}</div>
@@ -1297,7 +1323,7 @@ async function loadNeverVisit() {
     });
     _csvCache['미방문고객'] = { headers: _tables['미방문고객'].headers, rows: _tables['미방문고객'].rows };
     document.getElementById('neverVisitContent').innerHTML = `
-      <div class="kpi-strip" style="grid-template-columns:repeat(2,1fr)">
+      <div class="kpi-strip cols2">
         <div class="kpi purple"><div class="kpi-lbl">미방문 구매고객</div><div class="kpi-val">${num(rows.length)}명</div><div class="kpi-sub">온라인 전환 대상</div></div>
         <div class="kpi green"><div class="kpi-lbl">이들의 총 매출</div><div class="kpi-val">${money(totalRev)}</div><div class="kpi-sub">기존 거래 규모</div></div>
       </div>
@@ -1365,12 +1391,13 @@ function renderTable(key){
     });
   }
   const arrow = i => st.col===i ? (st.asc?' ▲':' ▼') : '';
+  const nCols = t.headers.length;  // 헤더 개수만 렌더링 (초과분은 렌더용 숨김 데이터)
   const thead = t.headers.map((h,i)=>{
     const cls = (t.numCols||[]).includes(i) ? 'num' : '';
     return `<th class="${cls}" onclick="sortTable('${key}',${i})">${esc(h)}${arrow(i)}</th>`;
   }).join('');
   const tbody = rows.map(r=>{
-    const tds = r.map((v,i)=>{
+    const tds = r.slice(0, nCols).map((v,i)=>{
       const cls = (t.numCols||[]).includes(i) ? 'num' : '';
       const html = (t.cellRender && t.cellRender[i]) ? t.cellRender[i](v, r) : esc(v);
       return `<td class="${cls}">${html}</td>`;
