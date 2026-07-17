@@ -305,9 +305,10 @@ html, body { overflow-x: hidden; max-width: 100vw; }
   <!-- TAB NAV -->
   <div class="tab-nav">
     <button class="tab-btn active" onclick="switchTab('overview')">📊 개요</button>
-    <button class="tab-btn" onclick="switchTab('spy')">🕵 정탐꾼 후보</button>
+    <button class="tab-btn" onclick="switchTab('spy')">👁 미거래 방문 고객</button>
     <button class="tab-btn" onclick="switchTab('pages')">📄 인기 페이지</button>
     <button class="tab-btn" onclick="switchTab('products')">🔍 많이 찾는 SKU·브랜드</button>
+    <button class="tab-btn" onclick="switchTab('categories')">📂 카테고리 관심도</button>
     <button class="tab-btn" onclick="switchTab('dormant')">😴 이탈 고객</button>
     <button class="tab-btn" onclick="switchTab('nevervisit')">🚫 미방문 고객</button>
   </div>
@@ -363,11 +364,11 @@ html, body { overflow-x: hidden; max-width: 100vw; }
       </div>
     </div>
     <div class="info-banner">
-      <span>🕵</span>
-      <span>구매 기록이 전혀 없는데(<span class="warn">Shopify 주문 0 + Cin7 Wholesale 없음</span>) asung.ca를 둘러보는 손님입니다. 회사 이메일·동종업계 이름·높은 방문 빈도일수록 정탐 가능성이 높습니다.</span>
+      <span>👁</span>
+      <span>구매 기록이 전혀 없는데(<span class="warn">Shopify 주문 0 + Cin7 Wholesale 없음</span>) asung.ca를 둘러보는 손님입니다. 회사·역할 이메일이거나 방문 빈도가 높을수록 주시할 대상입니다.</span>
     </div>
     <div class="content" id="spyContent">
-      <div class="empty-state"><div class="empty-icon">🕵</div><div class="empty-title">정탐꾼 후보 감지</div><div class="empty-desc">분석 버튼을 눌러주세요.</div></div>
+      <div class="empty-state"><div class="empty-icon">👁</div><div class="empty-title">미거래 방문 고객</div><div class="empty-desc">분석 버튼을 눌러주세요.</div></div>
     </div>
   </div>
 
@@ -414,6 +415,31 @@ html, body { overflow-x: hidden; max-width: 100vw; }
     </div>
     <div class="content" id="productsContent">
       <div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">많이 찾는 SKU·브랜드</div><div class="empty-desc">분석 버튼을 눌러주세요.</div></div>
+    </div>
+  </div>
+
+  <!-- ══════ TAB: CATEGORIES ══════ -->
+  <div class="tab-panel" id="tab-categories">
+    <div class="search-panel">
+      <div class="search-grid">
+        <div class="field">
+          <label class="field-label">분석 기간</label>
+          <select id="ctDays">
+            <option value="7" selected>최근 7일</option>
+            <option value="14">최근 14일</option>
+            <option value="30">최근 30일</option>
+            <option value="90">최근 90일</option>
+          </select>
+        </div>
+        <div><button class="search-btn" onclick="loadCategories()">🔍 분석</button></div>
+      </div>
+    </div>
+    <div class="info-banner">
+      <span>📂</span>
+      <span>손님들이 둘러본 <span class="warn">collection(카테고리/메뉴)</span> 관심도입니다. URL의 <span class="mono">/collections/…</span> 경로 기준. 익명% 높은 카테고리는 정체불명 방문자가 주목하는 영역입니다.</span>
+    </div>
+    <div class="content" id="categoriesContent">
+      <div class="empty-state"><div class="empty-icon">📂</div><div class="empty-title">카테고리 관심도</div><div class="empty-desc">분석 버튼을 눌러주세요.</div></div>
     </div>
   </div>
 
@@ -481,8 +507,10 @@ const SCUST = '`' + PROJECT_ID + '.' + CDATA + '.shopify_customer_master`';
 const CCUST = '`' + PROJECT_ID + '.' + CDATA + '.asung_customer_master`';
 const SALES = '`' + PROJECT_ID + '.' + SDATA + '.asung_sales_unified`';
 const ALLOWED_DOMAIN = 'asung.ca';
-// Wholesale(B2B) tier 값 — 정탐/이탈 분석은 이 tier만 "구매고객" 기준
+// Wholesale(B2B) tier 값 — 미거래/이탈 분석은 이 tier만 "구매고객" 기준
 const WHOLESALE_TIERS = "('Wholesale','USWholesale USD')";
+// 방문 추적 시작일 (고정) — Custom Pixel 최초 배포일. 이후 데이터 정리돼도 이 값 유지.
+const TRACKING_START = '2026-07-16';
 
 let accessToken = null;
 let currentUser = null;
@@ -503,6 +531,7 @@ function switchTab(tab) {
     if (tab === 'spy') loadSpy();
     else if (tab === 'pages') loadPages();
     else if (tab === 'products') loadProducts();
+    else if (tab === 'categories') loadCategories();
     else if (tab === 'dormant') loadDormant();
     else if (tab === 'nevervisit') loadNeverVisit();
   }
@@ -637,7 +666,7 @@ async function loadOverview() {
   loading('overviewContent');
   try {
     const since = `DATE_SUB(CURRENT_DATE(), INTERVAL ${days} DAY)`;
-    const [kpi, trend, tstart] = await Promise.all([
+    const [kpi, trend] = await Promise.all([
       bqQuery(`
         SELECT
           COUNT(*) AS events,
@@ -655,10 +684,9 @@ async function loadOverview() {
         FROM ${EVT}
         WHERE DATE(event_time) >= ${since}
         GROUP BY d ORDER BY d`),
-      bqQuery(`SELECT MIN(DATE(event_time)) AS start FROM ${EVT}`),
     ]);
     const k = kpi[0] || {};
-    if (tstart[0] && tstart[0].start) document.getElementById('ovTrackStart').textContent = tstart[0].start;
+    document.getElementById('ovTrackStart').textContent = TRACKING_START;
 
     document.getElementById('overviewContent').innerHTML = `
       <div class="kpi-strip">
@@ -687,7 +715,7 @@ async function loadOverview() {
 }
 
 // ══════════════════════════════════════
-// 2) SPY CANDIDATES (구매기록 전무 + 방문)
+// 2) 미거래 방문 고객 (구매기록 전무 + 방문)
 // ══════════════════════════════════════
 async function loadSpy() {
   const days = document.getElementById('spyDays').value;
@@ -706,19 +734,27 @@ async function loadSpy() {
           AND DATE(event_time) >= DATE_SUB(CURRENT_DATE(), INTERVAL ${days} DAY)
         GROUP BY LOWER(email)
       ),
-      shop AS (SELECT LOWER(email) AS email, orders_count FROM ${SCUST} WHERE email IS NOT NULL),
-      whole AS (SELECT DISTINCT LOWER(email) AS email FROM ${CCUST} WHERE email IS NOT NULL AND price_tier IN ${WHOLESALE_TIERS})
+      shop AS (SELECT LOWER(email) AS email, orders_count,
+                 NULLIF(TRIM(CONCAT(COALESCE(first_name,''),' ',COALESCE(last_name,''))),'') AS shop_name
+               FROM ${SCUST} WHERE email IS NOT NULL),
+      whole AS (SELECT DISTINCT LOWER(email) AS email FROM ${CCUST} WHERE email IS NOT NULL AND price_tier IN ${WHOLESALE_TIERS}),
+      -- 이름 fallback: Cin7 전체 고객(어느 tier든) 이름도 끌어옴
+      cin7any AS (SELECT LOWER(email) AS email, ANY_VALUE(customer_name) AS c_name, ANY_VALUE(price_tier) AS tier
+                  FROM ${CCUST} WHERE email IS NOT NULL GROUP BY LOWER(email))
       SELECT v.email, v.page_views, v.visit_days, v.first_visit, v.last_visit,
-        COALESCE(s.orders_count,0) AS shopify_orders
+        COALESCE(s.orders_count,0) AS shopify_orders,
+        COALESCE(ca.c_name, s.shop_name) AS store_name,
+        ca.tier AS cin7_tier
       FROM visitors v
       LEFT JOIN shop s ON s.email=v.email
       LEFT JOIN whole w ON w.email=v.email
+      LEFT JOIN cin7any ca ON ca.email=v.email
       WHERE w.email IS NULL AND COALESCE(s.orders_count,0)=0
         AND v.page_views >= ${minv}
       ORDER BY v.page_views DESC
       LIMIT 300`);
 
-    if (!rows.length) { document.getElementById('spyContent').innerHTML = emptyMsg('🕵','정탐꾼 후보 없음','조건에 맞는 손님이 없습니다.'); return; }
+    if (!rows.length) { document.getElementById('spyContent').innerHTML = emptyMsg('👁','대상 없음','조건에 맞는 미거래 방문 고객이 없습니다.'); return; }
 
     const corp = rows.filter(r=>looksCorporate(r.email)).length;
     const body = rows.map(r=>{
@@ -726,8 +762,11 @@ async function loadSpy() {
       const risk = isCorp && r.page_views>=10 ? 'high' : isCorp || r.page_views>=10 ? 'mid' : 'low';
       const dot = `<span class="risk-dot risk-${risk}"></span>`;
       const tag = isCorp ? '<span class="tag tag-spy">회사/역할 계정</span>' : '<span class="tag tag-lead">개인 계정</span>';
+      // store_name이 있으면 표시, 없으면 "—" (Cin7·Shopify 어디에도 이름 없음)
+      const store = r.store_name ? esc(r.store_name) : '<span style="color:var(--dim)">미등록</span>';
       return `<tr>
-        <td>${dot}${esc(r.email)}</td>
+        <td>${dot}${store}</td>
+        <td class="mono">${esc(r.email)}</td>
         <td>${tag}</td>
         <td class="num">${num(r.page_views)}</td>
         <td class="num">${num(r.visit_days)}</td>
@@ -736,16 +775,22 @@ async function loadSpy() {
       </tr>`;
     }).join('');
 
+    _csvCache['미거래방문고객'] = {
+      headers: ['스토어/고객명','이메일','유형','페이지뷰','방문일수','첫방문','최근방문'],
+      rows: rows.map(r => [ r.store_name||'미등록', r.email, looksCorporate(r.email)?'회사/역할계정':'개인계정',
+        parseInt(r.page_views)||0, parseInt(r.visit_days)||0, shortDate(r.first_visit), shortDate(r.last_visit) ])
+    };
+
     document.getElementById('spyContent').innerHTML = `
       <div class="kpi-strip" style="grid-template-columns:repeat(3,1fr)">
-        <div class="kpi red"><div class="kpi-lbl">정탐 후보</div><div class="kpi-val">${num(rows.length)}</div><div class="kpi-sub">구매기록 전무 방문자</div></div>
-        <div class="kpi yellow"><div class="kpi-lbl">회사/역할 계정</div><div class="kpi-val">${num(corp)}</div><div class="kpi-sub">의심 가중</div></div>
+        <div class="kpi red"><div class="kpi-lbl">미거래 방문 고객</div><div class="kpi-val">${num(rows.length)}</div><div class="kpi-sub">구매기록 전무 방문자</div></div>
+        <div class="kpi yellow"><div class="kpi-lbl">회사/역할 계정</div><div class="kpi-val">${num(corp)}</div><div class="kpi-sub">주시 대상</div></div>
         <div class="kpi green"><div class="kpi-lbl">개인 계정</div><div class="kpi-val">${num(rows.length-corp)}</div><div class="kpi-sub">잠재고객 가능</div></div>
       </div>
       <div class="tbl-card" style="margin-top:16px">
-        <div class="tbl-hdr"><span class="tbl-title">정탐꾼 후보 목록</span><span class="tbl-count">${rows.length}명</span></div>
+        <div class="tbl-hdr"><span class="tbl-title">미거래 방문 고객 목록</span><span style="display:flex;gap:10px;align-items:center"><span class="tbl-count">${rows.length}명</span>${csvBtn('미거래방문고객')}</span></div>
         <div class="tbl-wrap"><table>
-          <thead><tr><th>이메일</th><th>유형</th><th class="num">페이지뷰</th><th class="num">방문일수</th><th>첫 방문</th><th>최근 방문</th></tr></thead>
+          <thead><tr><th>스토어/고객명</th><th>이메일</th><th>유형</th><th class="num">페이지뷰</th><th class="num">방문일수</th><th>첫 방문</th><th>최근 방문</th></tr></thead>
           <tbody>${body}</tbody>
         </table></div>
       </div>`;
@@ -764,8 +809,9 @@ async function loadPages() {
         COALESCE(page_title, page_url) AS page,
         page_url,
         COUNT(*) AS views,
-        COUNT(DISTINCT client_id) AS visitors,
-        COUNT(DISTINCT CASE WHEN email IS NOT NULL THEN LOWER(email) END) AS logged_in
+        COUNTIF(email IS NOT NULL) AS login_views,
+        COUNTIF(email IS NULL) AS anon_views,
+        COUNT(DISTINCT client_id) AS visitors
       FROM ${EVT}
       WHERE event_type='page_view'
         AND DATE(event_time) >= DATE_SUB(CURRENT_DATE(), INTERVAL ${days} DAY)
@@ -773,17 +819,28 @@ async function loadPages() {
       ORDER BY views DESC
       LIMIT 100`);
     if (!rows.length) { document.getElementById('pagesContent').innerHTML = emptyMsg('📄','데이터 없음','아직 페이지뷰가 없습니다.'); return; }
-    const body = rows.map(r=>`<tr>
-      <td title="${esc(r.page_url)}">${esc(r.page)}</td>
-      <td class="num">${num(r.views)}</td>
-      <td class="num">${num(r.visitors)}</td>
-      <td class="num">${num(r.logged_in)}</td>
-    </tr>`).join('');
+    const body = rows.map(r=>{
+      const t=parseInt(r.views)||0, p=t?Math.round((parseInt(r.anon_views)||0)/t*100):0;
+      const pctTag = `<span class="tag ${p>=60?'tag-b2c':'tag-anon'}">${p}%</span>`;
+      return `<tr>
+        <td title="${esc(r.page_url)}">${esc(r.page)}</td>
+        <td class="num">${num(r.views)}</td>
+        <td class="num">${num(r.login_views)}</td>
+        <td class="num">${num(r.anon_views)}</td>
+        <td class="num">${pctTag}</td>
+        <td class="num">${num(r.visitors)}</td>
+      </tr>`;
+    }).join('');
+    _csvCache['인기페이지'] = {
+      headers: ['페이지','URL','총조회','로그인','익명','익명%','순방문자'],
+      rows: rows.map(r => { const t=parseInt(r.views)||0, p=t?Math.round((parseInt(r.anon_views)||0)/t*100):0;
+        return [ r.page, r.page_url, t, parseInt(r.login_views)||0, parseInt(r.anon_views)||0, p, parseInt(r.visitors)||0 ]; })
+    };
     document.getElementById('pagesContent').innerHTML = `
       <div class="tbl-card">
-        <div class="tbl-hdr"><span class="tbl-title">인기 페이지 (조회순)</span><span class="tbl-count">${rows.length}개</span></div>
+        <div class="tbl-hdr"><span class="tbl-title">인기 페이지 — 로그인 vs 익명</span><span style="display:flex;gap:10px;align-items:center"><span class="tbl-count">${rows.length}개</span>${csvBtn('인기페이지')}</span></div>
         <div class="tbl-wrap"><table>
-          <thead><tr><th>페이지</th><th class="num">조회수</th><th class="num">순 방문자</th><th class="num">로그인</th></tr></thead>
+          <thead><tr><th>페이지</th><th class="num">총 조회</th><th class="num">로그인</th><th class="num">익명</th><th class="num">익명%</th><th class="num">순 방문자</th></tr></thead>
           <tbody>${body}</tbody>
         </table></div>
       </div>`;
@@ -798,53 +855,147 @@ async function loadProducts() {
   loading('productsContent');
   try {
     const since = `DATE_SUB(CURRENT_DATE(), INTERVAL ${days} DAY)`;
+    // 로그인/익명 구분: email IS NOT NULL = 로그인, NULL = 익명
     const [skus, brands] = await Promise.all([
       bqQuery(`
         SELECT product_sku AS sku, ANY_VALUE(product_title) AS title,
           ANY_VALUE(product_brand) AS brand,
-          COUNT(*) AS views, COUNT(DISTINCT client_id) AS visitors
+          COUNT(*) AS views,
+          COUNTIF(email IS NOT NULL) AS login_views,
+          COUNTIF(email IS NULL) AS anon_views,
+          COUNT(DISTINCT client_id) AS visitors
         FROM ${EVT}
         WHERE event_type='product_view' AND product_sku IS NOT NULL
           AND DATE(event_time) >= ${since}
-        GROUP BY product_sku ORDER BY views DESC LIMIT 100`),
+        GROUP BY product_sku ORDER BY views DESC LIMIT 150`),
       bqQuery(`
         SELECT UPPER(TRIM(product_brand)) AS brand,
-          COUNT(*) AS views, COUNT(DISTINCT client_id) AS visitors,
+          COUNT(*) AS views,
+          COUNTIF(email IS NOT NULL) AS login_views,
+          COUNTIF(email IS NULL) AS anon_views,
+          COUNT(DISTINCT client_id) AS visitors,
           COUNT(DISTINCT product_sku) AS skus
         FROM ${EVT}
         WHERE event_type='product_view' AND product_brand IS NOT NULL AND TRIM(product_brand)!=''
           AND DATE(event_time) >= ${since}
-        GROUP BY brand ORDER BY views DESC LIMIT 50`),
+        GROUP BY brand ORDER BY views DESC LIMIT 60`),
     ]);
     if (!skus.length && !brands.length) { document.getElementById('productsContent').innerHTML = emptyMsg('🔍','데이터 없음','아직 상품 조회 데이터가 없습니다. product_view 픽셀이 방금 추가되어 데이터가 쌓이는 중입니다.'); return; }
 
-    const brandBody = brands.map(r=>`<tr><td>${esc(r.brand)}</td><td class="num">${num(r.views)}</td><td class="num">${num(r.visitors)}</td><td class="num">${num(r.skus)}</td></tr>`).join('');
-    const skuBody = skus.map(r=>`<tr>
-      <td class="mono">${esc(r.sku)}</td>
-      <td title="${esc(r.title)}" style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.title)}</td>
+    const anonPct = r => { const t=parseInt(r.views)||0; return t? Math.round((parseInt(r.anon_views)||0)/t*100):0; };
+    const pctTag = p => `<span class="tag ${p>=60?'tag-b2c':'tag-anon'}">${p}%</span>`;
+
+    const brandBody = brands.map(r=>{ const p=anonPct(r); return `<tr>
       <td>${esc(r.brand)}</td>
       <td class="num">${num(r.views)}</td>
-      <td class="num">${num(r.visitors)}</td>
-    </tr>`).join('');
+      <td class="num">${num(r.login_views)}</td>
+      <td class="num">${num(r.anon_views)}</td>
+      <td class="num">${pctTag(p)}</td>
+      <td class="num">${num(r.skus)}</td>
+    </tr>`; }).join('');
+
+    const skuBody = skus.map(r=>{ const p=anonPct(r); return `<tr>
+      <td class="mono">${esc(r.sku)}</td>
+      <td title="${esc(r.title)}" style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.title)}</td>
+      <td>${esc(r.brand)}</td>
+      <td class="num">${num(r.views)}</td>
+      <td class="num">${num(r.login_views)}</td>
+      <td class="num">${num(r.anon_views)}</td>
+      <td class="num">${pctTag(p)}</td>
+    </tr>`; }).join('');
+
+    _csvCache['브랜드관심도'] = {
+      headers: ['브랜드','총조회','로그인','익명','익명%','SKU수'],
+      rows: brands.map(r => [ r.brand, parseInt(r.views)||0, parseInt(r.login_views)||0, parseInt(r.anon_views)||0, anonPct(r), parseInt(r.skus)||0 ])
+    };
+    _csvCache['SKU관심도'] = {
+      headers: ['SKU','상품명','브랜드','총조회','로그인','익명','익명%'],
+      rows: skus.map(r => [ r.sku, r.title, r.brand, parseInt(r.views)||0, parseInt(r.login_views)||0, parseInt(r.anon_views)||0, anonPct(r) ])
+    };
 
     document.getElementById('productsContent').innerHTML = `
-      <div class="charts-grid" style="grid-template-columns:1fr 1fr">
-        <div class="tbl-card">
-          <div class="tbl-hdr"><span class="tbl-title">🏷 브랜드 (조회순)</span><span class="tbl-count">${brands.length}</span></div>
-          <div class="tbl-wrap" style="max-height:480px"><table>
-            <thead><tr><th>브랜드</th><th class="num">조회</th><th class="num">방문자</th><th class="num">SKU수</th></tr></thead>
-            <tbody>${brandBody||'<tr><td colspan=4 style="text-align:center;color:var(--dim);padding:20px">없음</td></tr>'}</tbody>
-          </table></div>
-        </div>
-        <div class="tbl-card">
-          <div class="tbl-hdr"><span class="tbl-title">🔍 SKU (조회순)</span><span class="tbl-count">${skus.length}</span></div>
-          <div class="tbl-wrap" style="max-height:480px"><table>
-            <thead><tr><th>SKU</th><th>상품명</th><th>브랜드</th><th class="num">조회</th><th class="num">방문자</th></tr></thead>
-            <tbody>${skuBody||'<tr><td colspan=5 style="text-align:center;color:var(--dim);padding:20px">없음</td></tr>'}</tbody>
-          </table></div>
-        </div>
+      <div class="info-banner" style="border-top:1px solid rgba(59,130,246,.15)">
+        <span>💡</span>
+        <span><strong>익명%</strong>가 높은(<span class="warn">60%+</span>) 상품/브랜드는 로그인 안 한 방문자(정체불명·잠재 정탐 포함)가 특히 주목하는 항목입니다.</span>
+      </div>
+      <div class="tbl-card">
+        <div class="tbl-hdr"><span class="tbl-title">🏷 브랜드 — 로그인 vs 익명</span><span style="display:flex;gap:10px;align-items:center"><span class="tbl-count">${brands.length}</span>${csvBtn('브랜드관심도')}</span></div>
+        <div class="tbl-wrap" style="max-height:360px"><table>
+          <thead><tr><th>브랜드</th><th class="num">총 조회</th><th class="num">로그인</th><th class="num">익명</th><th class="num">익명%</th><th class="num">SKU수</th></tr></thead>
+          <tbody>${brandBody||'<tr><td colspan=6 style="text-align:center;color:var(--dim);padding:20px">없음</td></tr>'}</tbody>
+        </table></div>
+      </div>
+      <div class="tbl-card" style="margin-top:16px">
+        <div class="tbl-hdr"><span class="tbl-title">🔍 SKU — 로그인 vs 익명</span><span style="display:flex;gap:10px;align-items:center"><span class="tbl-count">${skus.length}</span>${csvBtn('SKU관심도')}</span></div>
+        <div class="tbl-wrap" style="max-height:480px"><table>
+          <thead><tr><th>SKU</th><th>상품명</th><th>브랜드</th><th class="num">총 조회</th><th class="num">로그인</th><th class="num">익명</th><th class="num">익명%</th></tr></thead>
+          <tbody>${skuBody||'<tr><td colspan=7 style="text-align:center;color:var(--dim);padding:20px">없음</td></tr>'}</tbody>
+        </table></div>
       </div>`;
   } catch(e){ errBox('productsContent', e); }
+}
+
+// ══════════════════════════════════════
+// 4-b) CATEGORIES (collection 관심도, 로그인/익명 구분)
+// ══════════════════════════════════════
+async function loadCategories() {
+  const days = document.getElementById('ctDays').value;
+  loading('categoriesContent');
+  try {
+    // page_url에서 /collections/<handle> 추출 (그 뒤 /products/... 나 쿼리스트링 제거)
+    const rows = await bqQuery(`
+      WITH ev AS (
+        SELECT
+          REGEXP_EXTRACT(page_url, r'/collections/([^/?#]+)') AS collection,
+          email, client_id
+        FROM ${EVT}
+        WHERE event_type IN ('page_view','product_view')
+          AND page_url IS NOT NULL
+          AND REGEXP_CONTAINS(page_url, r'/collections/')
+          AND DATE(event_time) >= DATE_SUB(CURRENT_DATE(), INTERVAL ${days} DAY)
+      )
+      SELECT collection,
+        COUNT(*) AS views,
+        COUNTIF(email IS NOT NULL) AS login_views,
+        COUNTIF(email IS NULL) AS anon_views,
+        COUNT(DISTINCT client_id) AS visitors
+      FROM ev
+      WHERE collection IS NOT NULL AND collection != ''
+      GROUP BY collection
+      ORDER BY views DESC
+      LIMIT 100`);
+    if (!rows.length) { document.getElementById('categoriesContent').innerHTML = emptyMsg('📂','데이터 없음','아직 카테고리 방문 데이터가 없습니다.'); return; }
+
+    const body = rows.map(r=>{
+      const t=parseInt(r.views)||0, p=t?Math.round((parseInt(r.anon_views)||0)/t*100):0;
+      const pctTag = `<span class="tag ${p>=60?'tag-b2c':'tag-anon'}">${p}%</span>`;
+      // handle을 보기 좋게: 하이픈→공백, 각 단어 첫글자만 그대로 (원본 handle도 tooltip)
+      const label = String(r.collection).replace(/[-_]/g,' ');
+      return `<tr>
+        <td title="${esc(r.collection)}">${esc(label)}</td>
+        <td class="num">${num(r.views)}</td>
+        <td class="num">${num(r.login_views)}</td>
+        <td class="num">${num(r.anon_views)}</td>
+        <td class="num">${pctTag}</td>
+        <td class="num">${num(r.visitors)}</td>
+      </tr>`;
+    }).join('');
+
+    _csvCache['카테고리관심도'] = {
+      headers: ['카테고리(handle)','총조회','로그인','익명','익명%','순방문자'],
+      rows: rows.map(r => { const t=parseInt(r.views)||0, p=t?Math.round((parseInt(r.anon_views)||0)/t*100):0;
+        return [ r.collection, t, parseInt(r.login_views)||0, parseInt(r.anon_views)||0, p, parseInt(r.visitors)||0 ]; })
+    };
+
+    document.getElementById('categoriesContent').innerHTML = `
+      <div class="tbl-card">
+        <div class="tbl-hdr"><span class="tbl-title">카테고리 관심도 — 로그인 vs 익명</span><span style="display:flex;gap:10px;align-items:center"><span class="tbl-count">${rows.length}개</span>${csvBtn('카테고리관심도')}</span></div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>카테고리(collection)</th><th class="num">총 조회</th><th class="num">로그인</th><th class="num">익명</th><th class="num">익명%</th><th class="num">순 방문자</th></tr></thead>
+          <tbody>${body}</tbody>
+        </table></div>
+      </div>`;
+  } catch(e){ errBox('categoriesContent', e); }
 }
 
 // ══════════════════════════════════════
@@ -889,9 +1040,14 @@ async function loadDormant() {
       <td class="num">${r.revenue!=null?money(r.revenue):'—'}</td>
       <td class="mono">${shortDate(r.last_order)}</td>
     </tr>`).join('');
+    _csvCache['이탈고객'] = {
+      headers: ['고객명','이메일','최근방문','총방문뷰','총매출','최근주문'],
+      rows: rows.map(r => [ r.name||r.email, r.email, shortDate(r.last_visit), parseInt(r.total_views)||0,
+        r.revenue!=null?(parseFloat(r.revenue)||0):'', shortDate(r.last_order) ])
+    };
     document.getElementById('dormantContent').innerHTML = `
       <div class="tbl-card">
-        <div class="tbl-hdr"><span class="tbl-title">이탈 고객 (구매O, ${gap}일+ 미방문)</span><span class="tbl-count">${rows.length}명</span></div>
+        <div class="tbl-hdr"><span class="tbl-title">이탈 고객 (구매O, ${gap}일+ 미방문)</span><span style="display:flex;gap:10px;align-items:center"><span class="tbl-count">${rows.length}명</span>${csvBtn('이탈고객')}</span></div>
         <div class="tbl-wrap"><table>
           <thead><tr><th>고객명</th><th>이메일</th><th>최근 방문</th><th class="num">총 방문뷰</th><th class="num">총 매출</th><th>최근 주문</th></tr></thead>
           <tbody>${body}</tbody>
@@ -939,13 +1095,17 @@ async function loadNeverVisit() {
       <td class="num">${money(r.revenue)}</td>
       <td class="mono">${shortDate(r.last_order)}</td>
     </tr>`).join('');
+    _csvCache['미방문고객'] = {
+      headers: ['고객명','이메일','주문수','총매출','최근주문'],
+      rows: rows.map(r => [ r.name||r.email, r.email, parseInt(r.orders)||0, parseFloat(r.revenue)||0, shortDate(r.last_order) ])
+    };
     document.getElementById('neverVisitContent').innerHTML = `
       <div class="kpi-strip" style="grid-template-columns:repeat(2,1fr)">
         <div class="kpi purple"><div class="kpi-lbl">미방문 구매고객</div><div class="kpi-val">${num(rows.length)}명</div><div class="kpi-sub">온라인 전환 대상</div></div>
         <div class="kpi green"><div class="kpi-lbl">이들의 총 매출</div><div class="kpi-val">${money(totalRev)}</div><div class="kpi-sub">기존 거래 규모</div></div>
       </div>
       <div class="tbl-card" style="margin-top:16px">
-        <div class="tbl-hdr"><span class="tbl-title">미방문 고객 (구매O, 방문 전무)</span><span class="tbl-count">${rows.length}명</span></div>
+        <div class="tbl-hdr"><span class="tbl-title">미방문 고객 (구매O, 방문 전무)</span><span style="display:flex;gap:10px;align-items:center"><span class="tbl-count">${rows.length}명</span>${csvBtn('미방문고객')}</span></div>
         <div class="tbl-wrap"><table>
           <thead><tr><th>고객명</th><th>이메일</th><th class="num">주문수</th><th class="num">총 매출</th><th>최근 주문</th></tr></thead>
           <tbody>${body}</tbody>
@@ -955,6 +1115,32 @@ async function loadNeverVisit() {
 }
 
 function emptyMsg(icon,title,desc){ return `<div class="empty-state"><div class="empty-icon">${icon}</div><div class="empty-title">${title}</div><div class="empty-desc">${desc}</div></div>`; }
+
+// ══════════════════════════════════════
+// CSV EXPORT
+// ══════════════════════════════════════
+const _csvCache = {};   // key → { headers:[], rows:[[]] }
+
+function csvCell(v){
+  const s = (v==null?'':String(v));
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+}
+function downloadCsv(key){
+  const d = _csvCache[key];
+  if(!d || !d.rows.length){ alert('내려받을 데이터가 없습니다.'); return; }
+  const lines = [ d.headers.map(csvCell).join(',') ];
+  d.rows.forEach(r => lines.push(r.map(csvCell).join(',')));
+  // BOM 추가 → Excel에서 한글 안 깨짐
+  const blob = new Blob(['\uFEFF' + lines.join('\r\n')], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0,10);
+  a.href = url; a.download = `${key}_${stamp}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+// 표 헤더 우측에 붙일 다운로드 버튼 HTML
+function csvBtn(key){ return `<button class="export-btn" onclick="downloadCsv('${key}')">⬇ CSV</button>`; }
 
 // ══════════════════════════════════════
 // INIT
