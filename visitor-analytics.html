@@ -256,6 +256,8 @@ html, body { overflow-x: hidden; max-width: 100vw; }
 .tag-lead { background: rgba(34,197,94,.15); color: var(--green); }
 .tag-b2c { background: rgba(234,179,8,.15); color: var(--yellow); }
 .tag-anon { background: rgba(148,163,184,.15); color: var(--mid); }
+.tag-bot { background: rgba(239,68,68,.18); color: var(--red); border:1px solid rgba(239,68,68,.45); }
+.tag-botmid { background: rgba(249,115,22,.15); color: var(--orange); }
 .risk-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; }
 .risk-high { background: var(--red); }
 .risk-mid { background: var(--yellow); }
@@ -270,9 +272,10 @@ html, body { overflow-x: hidden; max-width: 100vw; }
 .kpi-strip.cols2 { grid-template-columns: repeat(2,1fr); }
 .kpi-strip.cols3 { grid-template-columns: repeat(3,1fr); }
 .kpi-strip.cols4 { grid-template-columns: repeat(4,1fr); }
+.kpi-strip.cols5 { grid-template-columns: repeat(5,1fr); }
 .charts-grid.two { grid-template-columns: 1fr 1fr; }
 @media (max-width: 768px) {
-  .kpi-strip.cols2, .kpi-strip.cols3, .kpi-strip.cols4 { grid-template-columns: repeat(2,1fr); }
+  .kpi-strip.cols2, .kpi-strip.cols3, .kpi-strip.cols4, .kpi-strip.cols5 { grid-template-columns: repeat(2,1fr); }
   .charts-grid.two { grid-template-columns: 1fr; }
   .sub-nav { padding: 10px 12px 0; }
   .sub-btn { font-size: 10px; padding: 5px 10px; }
@@ -453,7 +456,7 @@ tr.vd-open > td { background: rgba(59,130,246,.05); }
     </div>
     <div class="info-banner">
       <span>👁</span>
-      <span>구매 기록이 없는데 asung.ca를 둘러보는 손님입니다. <span class="warn">승인(wholesale)</span> 손님은 가격을 다 볼 수 있어 특히 주시 대상 — 회사·역할 이메일이거나 방문이 잦을수록 의심됩니다. 미승인 손님은 가격을 못 봐 사실상 무해합니다.</span>
+      <span>구매 기록이 없는데 asung.ca를 둘러보는 손님입니다. <span class="warn">승인(wholesale)</span> 손님은 가격을 다 볼 수 있어 특히 주시 대상 — 회사·역할 이메일이거나 방문이 잦을수록 의심됩니다. 미승인 손님은 가격을 못 봐 사실상 무해합니다. <span class="warn">🤖 봇 위험</span> 열은 대량 페이지를 초 단위로 연속 조회하는 계정(스크래퍼 의심)을 표시합니다 — 이름을 클릭하면 실제 조회 간격을 확인할 수 있습니다.</span>
     </div>
     <div class="content" id="spyContent">
       <div class="empty-state"><div class="empty-icon">👁</div><div class="empty-title">미거래 방문 고객</div><div class="empty-desc">분석 버튼을 눌러주세요.</div></div>
@@ -842,6 +845,26 @@ function looksCorporate(email){
   return !free.includes(dom.toLowerCase()) || roleAcct;
 }
 
+// 봇/스크래퍼 판정 — 대량 페이지뷰 + 기계적(초 단위) 연속 조회 속도로 판단.
+// BQ가 넘겨주는 값은 문자열일 수 있으므로 Number()로 정규화. 값이 없으면(방문 1건 등) null.
+//  level 2 = 봇 의심(스크래핑 강력 의심), 1 = 의심(주의), 0 = 정상
+function botAssess(pageViews, visitDays, medianGapSec, fastRatio){
+  const pv   = parseInt(pageViews)||0;
+  const days = Math.max(parseInt(visitDays)||1, 1);
+  const g = (medianGapSec===null||medianGapSec===undefined||medianGapSec==='') ? null : Number(medianGapSec); // 연속 조회 중앙 간격(초)
+  const f = (fastRatio===null||fastRatio===undefined||fastRatio==='') ? null : Number(fastRatio);            // 3초 이내 연속 조회 비율
+  const pvPerDay = pv / days;
+  // "기계적" = 연속 조회가 초 단위로 붙음 / "빠름" = 사람 치고 이상하게 빠름
+  const machine = (g!==null && g <= 3) || (f!==null && f >= 0.75);
+  const brisk   = (g!==null && g <= 8) || (f!==null && f >= 0.50);
+  let level = 0;
+  if      (pv >= 200 && machine)           level = 2;   // 대량 + 초 단위 연속 로드 → 스크래퍼
+  else if (pv >= 600 && brisk)             level = 2;   // 초대량 + 빠른 속도
+  else if (pv >= 80  && machine)           level = 1;   // 중간 대량 + 기계 속도
+  else if (pvPerDay >= 300 && brisk)       level = 1;   // 하루 300+ 페이지 + 빠름
+  return { level, pvPerDay, g, f };
+}
+
 // ══════════════════════════════════════
 // 1) OVERVIEW
 // ══════════════════════════════════════
@@ -915,18 +938,30 @@ async function loadSpy() {
   loading('spyContent');
   try {
     const rows = await bqQuery(`
-      WITH visitors AS (
-        SELECT LOWER(email) AS email,
-          COUNT(*) AS page_views,
-          COUNT(DISTINCT DATE(event_time)) AS visit_days,
-          MIN(event_time) AS first_visit, MAX(event_time) AS last_visit
+      WITH ev AS (
+        -- 이벤트에 직전 이벤트와의 간격(초)을 붙임 → 봇/스크래퍼 판정용
+        SELECT LOWER(email) AS email, event_time,
+          TIMESTAMP_DIFF(event_time,
+            LAG(event_time) OVER (PARTITION BY LOWER(email) ORDER BY event_time),
+            SECOND) AS gap_sec
         FROM ${EVT}
         WHERE email IS NOT NULL
           AND event_type IN ('page_view','account_view','product_view')
           AND DATE(event_time, 'America/Toronto') >= DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${days} DAY)
           AND ${NOT_STAFF}
           AND event_time >= TIMESTAMP(DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${Number(days)+2} DAY))  -- 파티션 프루닝
-        GROUP BY LOWER(email)
+      ),
+      visitors AS (
+        SELECT email,
+          COUNT(*) AS page_views,
+          COUNT(DISTINCT DATE(event_time)) AS visit_days,
+          MIN(event_time) AS first_visit, MAX(event_time) AS last_visit,
+          -- 연속 조회 중앙 간격(초). 세션 사이 긴 유휴(>1h)는 제외해 세션 내 속도만 봄.
+          APPROX_QUANTILES(IF(gap_sec BETWEEN 0 AND 3600, gap_sec, NULL), 100)[SAFE_OFFSET(50)] AS median_gap_sec,
+          -- 3초 이내로 붙어 넘어간 연속 조회 비율 (사람이면 낮고, 스크래퍼면 높음)
+          SAFE_DIVIDE(COUNTIF(gap_sec BETWEEN 0 AND 3), COUNTIF(gap_sec >= 0)) AS fast_ratio
+        FROM ev
+        GROUP BY email
       ),
       shop AS (SELECT LOWER(email) AS email, orders_count,
                  is_wholesale, signup_period, branch_label, tags,
@@ -939,6 +974,7 @@ async function loadSpy() {
                     ANY_VALUE(price_tier) AS tier, ANY_VALUE(branch_label) AS c_branch
                   FROM ${CCUST} WHERE email IS NOT NULL GROUP BY LOWER(email))
       SELECT v.email, v.page_views, v.visit_days, v.first_visit, v.last_visit,
+        v.median_gap_sec, v.fast_ratio,
         COALESCE(s.orders_count,0) AS shopify_orders,
         COALESCE(ca.c_name, s.shop_name) AS store_name,
         s.company AS company,
@@ -965,52 +1001,75 @@ async function loadSpy() {
     const isWs = r => (r.is_wholesale === true || r.is_wholesale === 'true');
     const corp = filtered.filter(r=>looksCorporate(r.email)).length;
     const approved = filtered.filter(isWs).length;
+    // 각 손님 봇/스크래퍼 판정 (연속 조회 속도 기반)
+    filtered.forEach(r => { r._bot = botAssess(r.page_views, r.visit_days, r.median_gap_sec, r.fast_ratio); });
+    const botCount = filtered.filter(r=>r._bot.level>=1).length;
 
     registerTable('미거래방문고객', {
       containerId: 'spyTable',
-      headers: ['스토어/고객명','이메일','회사명','승인','지점','가입시기','유형','페이지뷰','방문일수','최근방문'],
-      numCols: [7,8],
+      headers: ['스토어/고객명','이메일','회사명','승인','지점','가입시기','유형','페이지뷰','방문일수','봇 위험','최근방문'],
+      numCols: [7,8,9],
       rows: filtered.map(r => [
         r.store_name||'', r.email,
         r.company||'',
         isWs(r) ? '승인' : '미승인',
         r.branch_label||'', r.signup_period||'',
         looksCorporate(r.email)?'회사/역할 계정':'개인 계정',
-        parseInt(r.page_views)||0, parseInt(r.visit_days)||0, shortDate(r.last_visit),
-        looksCorporate(r.email),  // [10] 렌더 플래그
-        r.signup_tag||''          // [11] 원본 가입 태그 (JUL26)
+        parseInt(r.page_views)||0, parseInt(r.visit_days)||0,
+        r._bot.level,                       // [9]  봇 위험 (정렬용 숫자 0/1/2)
+        shortDate(r.last_visit),            // [10] 최근방문
+        looksCorporate(r.email),            // [11] 렌더 플래그 (회사 이메일)
+        r.signup_tag||'',                   // [12] 원본 가입 태그 (JUL26)
+        r._bot.pvPerDay,                    // [13] 하루평균 PV
+        r._bot.g,                           // [14] 연속 조회 중앙 간격(초)
+        r._bot.f                            // [15] 3초내 연속 비율
       ]),
       cellRender: {
-        0: (v,row)=>{ const isCorp=row[10]; const pv=row[7];
+        0: (v,row)=>{ const isCorp=row[11]; const pv=row[7]; const botLv=row[9];
           const risk = isCorp&&pv>=10?'high':(isCorp||pv>=10)?'mid':'low';
           const dot=`<span class="risk-dot risk-${risk}"></span>`;
+          const botBadge = botLv>=2 ? '<span class="tag tag-bot" title="대량·기계적 속도의 연속 조회 — 스크래핑 강력 의심">🤖 봇 의심</span> '
+                         : botLv>=1 ? '<span class="tag tag-botmid" title="빠른 대량 조회 — 봇 가능성 주의">⚠ 의심</span> ' : '';
           const label = v ? esc(v) : '<span style="color:var(--dim)">미등록</span>';
-          return `<span class="clickable-visitor" data-email="${esc(row[1])}" data-name="${esc(v||row[1])}" onclick="toggleVisitorRow(this, this.dataset.email, this.dataset.name)" title="클릭하면 아래로 방문 상세가 펼쳐집니다"><span class="vd-caret">▶</span>${dot}${label}</span>`; },
+          return `<span class="clickable-visitor" data-email="${esc(row[1])}" data-name="${esc(v||row[1])}" onclick="toggleVisitorRow(this, this.dataset.email, this.dataset.name)" title="클릭하면 아래로 방문 상세가 펼쳐집니다"><span class="vd-caret">▶</span>${dot}${botBadge}${label}</span>`; },
         1: v=>`<span class="mono">${esc(v)}</span>`,
         2: v=> v ? esc(v) : '<span style="color:var(--dim)">—</span>',
         3: v=>`<span class="tag ${v==='승인'?'tag-spy':'tag-anon'}">${esc(v)}</span>`,
         4: v=> v ? `<span class="tag ${v==='Edmonton'?'tag-edm':'tag-tor'}">${esc(v)}</span>` : '<span style="color:var(--dim)">—</span>',
-        5: (v,row)=>{ const tag=row[11];
+        5: (v,row)=>{ const tag=row[12];
           if (tag) return `<span class="tag tag-b2b">${esc(tag)}</span> <span class="mono" style="color:var(--dim);font-size:10px">${esc(v)}</span>`;
           return v ? `<span class="mono">${esc(v)}</span>` : '<span style="color:var(--dim)">—</span>'; },
         6: v=>`<span class="tag ${v==='회사/역할 계정'?'tag-spy':'tag-lead'}">${esc(v)}</span>`,
         7: v=>num(v), 8: v=>num(v),
-        9: v=>`<span class="mono">${esc(v)}</span>`,
+        9: (v,row)=>{ const g=row[14], f=row[15], ppd=row[13];
+          const tip = `하루평균 ${num(Math.round(ppd))} PV`
+            + (g!=null?` · 연속 조회 중앙 간격 ${g}s`:'')
+            + (f!=null?` · 3초내 연속 ${Math.round(f*100)}%`:'');
+          if (v>=2) return `<span class="tag tag-bot" title="${esc(tip)}">봇 의심</span>`;
+          if (v>=1) return `<span class="tag tag-botmid" title="${esc(tip)}">의심</span>`;
+          return `<span class="tag tag-anon" title="${esc(tip)}">정상</span>`; },
+        10: v=>`<span class="mono">${esc(v)}</span>`,
       },
       defaultSort: 7, defaultAsc: false
     });
     _csvCache['미거래방문고객'] = {
-      headers: ['스토어/고객명','이메일','회사명','승인','지점','가입태그','가입시기','유형','페이지뷰','방문일수','최근방문'],
+      headers: ['스토어/고객명','이메일','회사명','승인','지점','가입태그','가입시기','유형','페이지뷰','방문일수','봇 위험','하루평균PV','연속조회 중앙간격(초)','3초내 연속비율','최근방문'],
       rows: _tables['미거래방문고객'].rows.map(r => [
-        r[0]||'미등록', r[1], r[2], r[3], r[4], r[11], r[5], r[6], r[7], r[8], r[9]
+        r[0]||'미등록', r[1], r[2], r[3], r[4], r[12], r[5], r[6], r[7], r[8],
+        r[9]>=2?'봇 의심':r[9]>=1?'의심':'정상',
+        Math.round(r[13]||0),
+        r[14]==null?'':r[14],
+        r[15]==null?'':(Math.round(r[15]*100)+'%'),
+        r[10]
       ])
     };
 
     document.getElementById('spyContent').innerHTML = `
-      <div class="kpi-strip cols4">
+      <div class="kpi-strip cols5">
         <div class="kpi red"><div class="kpi-lbl">미거래 방문 고객</div><div class="kpi-val">${num(filtered.length)}</div><div class="kpi-sub">구매기록 전무 방문자</div></div>
         <div class="kpi purple"><div class="kpi-lbl">승인(가격 열람)</div><div class="kpi-val">${num(approved)}</div><div class="kpi-sub">wholesale 태그 有</div></div>
         <div class="kpi yellow"><div class="kpi-lbl">회사/역할 계정</div><div class="kpi-val">${num(corp)}</div><div class="kpi-sub">주시 대상</div></div>
+        <div class="kpi orange"><div class="kpi-lbl">🤖 봇 의심 계정</div><div class="kpi-val">${num(botCount)}</div><div class="kpi-sub">대량·기계적 연속 조회</div></div>
         <div class="kpi green"><div class="kpi-lbl">개인 계정</div><div class="kpi-val">${num(filtered.length-corp)}</div><div class="kpi-sub">잠재고객 가능</div></div>
       </div>
       <div class="tbl-card" style="margin-top:16px">
@@ -1040,6 +1099,7 @@ function renderVisitorEvents(rows, csvKey){
   if (!rows.length) return '<div style="text-align:center;color:var(--dim);padding:24px 0;font-size:12px">방문 기록이 없습니다.</div>';
   const pv = rows.filter(r=>r.event_type==='page_view').length;
   const pd = rows.filter(r=>r.event_type==='product_view').length;
+  const cad = cadenceChip(rows);   // 연속 조회 속도(봇 근거)
   // CSV 캐시 (버튼 클릭 시 다운로드)
   let csvBtnHtml = '';
   if (csvKey) {
@@ -1075,10 +1135,31 @@ function renderVisitorEvents(rows, csvKey){
     <div style="display:flex;gap:14px;align-items:center;padding:8px 0 4px;font-size:11px;color:var(--mid)">
       <span>📄 페이지뷰 <strong style="color:var(--text)">${num(pv)}</strong></span>
       <span>🛍 상품조회 <strong style="color:var(--text)">${num(pd)}</strong></span>
+      ${cad ? `<span style="border-left:1px solid var(--border);padding-left:14px">${cad}</span>` : ''}
       <span style="color:var(--dim)">최근 ${rows.length}건 (최신순)</span>
       <span style="margin-left:auto">${csvBtnHtml}</span>
     </div>
     ${items}`;
+}
+
+// 방문 상세 이벤트로부터 연속 조회 속도를 계산해 칩으로 표시 (봇 판정 근거).
+// 최근 200건 기준이라 대표성만 가짐 — 참고용.
+function cadenceChip(rows){
+  const ts = rows
+    .filter(r=>r.event_type==='page_view'||r.event_type==='product_view')
+    .map(r=> new Date(r.event_time).getTime())
+    .filter(t=>!isNaN(t))
+    .sort((a,b)=>a-b);
+  if (ts.length < 5) return '';
+  const gaps=[];
+  for (let i=1;i<ts.length;i++){ const g=(ts[i]-ts[i-1])/1000; if (g>=0 && g<=3600) gaps.push(g); }
+  if (!gaps.length) return '';
+  gaps.sort((a,b)=>a-b);
+  const med = gaps[Math.floor(gaps.length/2)];
+  const fast = gaps.filter(g=>g<=3).length/gaps.length;
+  const botish = (med<=3 || fast>=0.6);
+  const color = botish ? 'var(--red)' : 'var(--dim)';
+  return `<span style="color:${color}">⏱ 연속 조회 중앙 간격 <strong>${med<10?med.toFixed(1):Math.round(med)}s</strong> · 3초내 연속 <strong>${Math.round(fast*100)}%</strong>${botish?' · 🤖 기계적 패턴':''}</span>`;
 }
 
 // 인라인 확장: 미거래/구매고객 표에서 이름 클릭 → 행 아래로 펼침 (customer-portal 스타일)
