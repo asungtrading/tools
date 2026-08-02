@@ -170,6 +170,13 @@ tbody td:first-child { color: var(--text); font-weight: 500; }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
 
+/* ── STORE SWITCHER (asung.ca / aonebeauty.com) ── */
+.store-sw { display: flex; gap: 2px; background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: 2px; margin-left: 16px; }
+.store-btn { background: none; border: none; border-radius: 5px; color: var(--dim); font-size: 11px; font-weight: 700; padding: 5px 11px; cursor: pointer; transition: all .18s; white-space: nowrap; letter-spacing: .2px; display: flex; align-items: center; gap: 6px; }
+.store-btn:hover { color: var(--mid); }
+.store-btn.active { background: var(--blue2); color: #fff; }
+.store-tag { font-size: 8.5px; font-weight: 800; opacity: .75; border: 1px solid currentColor; border-radius: 3px; padding: 0 3px; letter-spacing: .5px; }
+
 /* ── PRICE ANALYSIS ── */
 .price-search { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
 .price-kpi-strip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 20px; }
@@ -373,6 +380,10 @@ tr.vd-open > td { background: rgba(59,130,246,.05); }
       <span class="hdr-logo-img-wrap"><img class="hdr-logo-img" src="asung-logo-white.png" alt="Asung Trading Inc." /></span>
       <span class="hdr-sep">|</span>
       <span class="hdr-title">Visitor Analytics</span>
+      <div class="store-sw">
+        <button class="store-btn active" id="storeBtn-asung" onclick="switchStore('asung')">asung.ca <span class="store-tag">B2B</span></button>
+        <button class="store-btn" id="storeBtn-aone" onclick="switchStore('aone')">aonebeauty.com <span class="store-tag">B2C</span></button>
+      </div>
     </div>
     <div class="hdr-user">
       <span class="mono" id="lastRefresh" style="font-size:10px;color:var(--dim)"></span>
@@ -383,8 +394,8 @@ tr.vd-open > td { background: rgba(59,130,246,.05); }
     </div>
   </div>
 
-  <!-- TAB NAV -->
-  <div class="tab-nav">
+  <!-- TAB NAV: asung.ca -->
+  <div class="tab-nav" id="tabnav-asung">
     <button class="tab-btn active" onclick="switchTab('overview')">📊 개요</button>
     <button class="tab-btn" onclick="switchTab('spy')">👁 미거래 방문 고객</button>
     <button class="tab-btn" onclick="switchTab('active')">🛒 구매 고객 방문</button>
@@ -394,6 +405,11 @@ tr.vd-open > td { background: rgba(59,130,246,.05); }
     <button class="tab-btn" onclick="switchTab('region')">🗺 지역 분포</button>
     <button class="tab-btn" onclick="switchTab('dormant')">😴 이탈 고객</button>
     <button class="tab-btn" onclick="switchTab('nevervisit')">🚫 미방문 고객</button>
+  </div>
+
+  <!-- TAB NAV: aonebeauty.com (B2C) -->
+  <div class="tab-nav" id="tabnav-aone" style="display:none">
+    <button class="tab-btn active" onclick="switchTab('aoverview')">📊 개요</button>
   </div>
 
   <!-- ══════ TAB: OVERVIEW ══════ -->
@@ -646,6 +662,31 @@ tr.vd-open > td { background: rgba(59,130,246,.05); }
     </div>
   </div>
 
+  <!-- ══════ TAB: AONE OVERVIEW (B2C) ══════ -->
+  <div class="tab-panel" id="tab-aoverview">
+    <div class="search-panel">
+      <div class="search-grid">
+        <div class="field">
+          <label class="field-label">분석 기간</label>
+          <select id="aoDays">
+            <option value="7" selected>최근 7일</option>
+            <option value="14">최근 14일</option>
+            <option value="30">최근 30일</option>
+            <option value="90">최근 90일</option>
+          </select>
+        </div>
+        <div><button class="search-btn" onclick="loadAoneOverview()">🔄 새로고침</button></div>
+      </div>
+    </div>
+    <div class="info-banner">
+      <span>💡</span>
+      <span>aonebeauty.com은 <strong>B2C</strong>라 방문자 대부분이 비로그인(익명)입니다. 추적 시작: <strong id="aoTrackStart">—</strong>. 직원·자기 방문은 익명이라 걸러지지 않으니 초기 소량 데이터 해석에 주의하세요.</span>
+    </div>
+    <div class="content" id="aoneOverviewContent">
+      <div class="empty-state"><div class="empty-icon">📊</div><div class="empty-title">aonebeauty.com 방문 개요</div><div class="empty-desc">새로고침을 눌러 데이터를 불러오세요.</div></div>
+    </div>
+  </div>
+
 </div><!-- /mainApp -->
 
 <script>
@@ -656,7 +697,14 @@ const CLIENT_ID  = '105948904172-t1fvd0e8t2tl3ki6u17a4ok9vp0catp2';
 const PROJECT_ID = 'geometric-rock-487814-k4';
 const CDATA      = 'Cin7_Customer_Data';   // 방문/손님 마스터 데이터셋
 const SDATA      = 'Cin7_Sales_Data';      // 매출 데이터셋
-const EVT   = '`' + PROJECT_ID + '.' + CDATA + '.shopify_customer_login_event`';
+const EVT_TBL = '`' + PROJECT_ID + '.' + CDATA + '.shopify_customer_login_event`';
+// ⭐ 스토어 스코핑 — 이벤트 테이블은 두 스토어(asung.ca / aonebeauty.com)를 공유한다.
+//   상수 자체를 서브쿼리로 감싸서, 기존 13곳의 `FROM ${EVT}`를 한 글자도 고치지 않고 전부 스코핑.
+//   기존 행은 shop_domain이 NULL(트래커 v2 이전 적재) → 전부 asung.ca이므로 IFNULL로 처리.
+//   BigQuery가 외부 날짜 조건을 서브쿼리로 밀어넣으므로(predicate pushdown) 파티션 프루닝은 유지됨.
+const EVT   = `(SELECT * FROM ${EVT_TBL} WHERE IFNULL(shop_domain,'asung.ca')='asung.ca')`;
+// aonebeauty(B2C). 테스트 행(client_id 'test-%')은 스키마 검증용이라 제외.
+const EVT_AONE = `(SELECT * FROM ${EVT_TBL} WHERE shop_domain='aonebeauty.com' AND IFNULL(client_id,'') NOT LIKE 'test-%')`;
 const SCUST = '`' + PROJECT_ID + '.' + CDATA + '.shopify_customer_master`';
 const CCUST = '`' + PROJECT_ID + '.' + CDATA + '.asung_customer_master`';
 const SALES = '`' + PROJECT_ID + '.' + SDATA + '.asung_sales_unified`';
@@ -665,6 +713,8 @@ const ALLOWED_DOMAIN = 'asung.ca';
 const WHOLESALE_TIERS = "('Wholesale','USWholesale USD')";
 // 방문 추적 시작일 (고정) — Custom Pixel 최초 배포일. 이후 데이터 정리돼도 이 값 유지.
 const TRACKING_START = '2026-07-16';
+// aonebeauty.com Custom Pixel(aone-behavior-custom) 최초 배포일
+const AONE_TRACKING_START = '2026-08-02';
 // 직원(staff 태그) 이메일은 모든 방문 통계에서 제외 — 테스트/작업 노이즈 차단
 // tags 예: "wholesale, Asung-Shopify, staff" → 공백 제거 후 ',staff,' 포함 검사 (regex 이스케이프 회피)
 const STAFF_EMAILS = `SELECT LOWER(email) FROM \`geometric-rock-487814-k4.Cin7_Customer_Data.shopify_customer_master\` WHERE email IS NOT NULL AND CONCAT(',', REPLACE(LOWER(IFNULL(tags,'')), ' ', ''), ',') LIKE '%,staff,%'`;
@@ -678,6 +728,21 @@ const charts = {};
 // TABS
 // ══════════════════════════════════════
 const _loaded = {};
+
+// ── 스토어 전환 (asung.ca ↔ aonebeauty.com) ──
+let currentStore = 'asung';
+const STORE_FIRST_TAB = { asung: 'overview', aone: 'aoverview' };
+
+function switchStore(store) {
+  if (currentStore === store) return;
+  currentStore = store;
+  document.querySelectorAll('.store-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('storeBtn-' + store).classList.add('active');
+  document.getElementById('tabnav-asung').style.display = (store === 'asung') ? 'flex' : 'none';
+  document.getElementById('tabnav-aone').style.display  = (store === 'aone')  ? 'flex' : 'none';
+  switchTab(STORE_FIRST_TAB[store]);
+}
+
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -693,6 +758,89 @@ function switchTab(tab) {
   else if (tab === 'region') loadRegion();
   else if (tab === 'dormant') loadDormant();
   else if (tab === 'nevervisit') loadNeverVisit();
+  // ── aonebeauty.com (B2C) ──
+  else if (tab === 'aoverview') loadAoneOverview();
+}
+
+// ══════════════════════════════════════
+// AONEBEAUTY.COM (B2C) — 개요
+// ⚠️ NOT_STAFF 미적용: 익명 방문이라 staff 태그로 걸러낼 email이 없음
+// ══════════════════════════════════════
+async function loadAoneOverview() {
+  const days = document.getElementById('aoDays').value;
+  loading('aoneOverviewContent');
+  try {
+    const since = `DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${days} DAY)`;
+    const prune = `AND event_time >= TIMESTAMP(DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${Number(days)+2} DAY))`;
+    const [kpi, trend] = await Promise.all([
+      bqQuery(`
+        SELECT
+          COUNT(DISTINCT client_id) AS visitors,
+          COUNTIF(event_type='page_view')   AS page_views,
+          COUNTIF(event_type='search')      AS searches,
+          COUNTIF(event_type='product_view')AS product_views,
+          COUNTIF(event_type='cart_add')    AS cart_adds,
+          COUNTIF(event_type='checkout')    AS orders,
+          COUNTIF(event_type='search' AND search_results = 0) AS zero_searches,
+          COUNT(DISTINCT CASE WHEN event_type='search'   THEN client_id END) AS search_visitors,
+          COUNT(DISTINCT CASE WHEN event_type='cart_add' THEN client_id END) AS cart_visitors,
+          SUM(CASE WHEN event_type='checkout' THEN CAST(order_total AS FLOAT64) END) AS revenue,
+          COUNT(DISTINCT DATE(event_time, 'America/Toronto')) AS active_days
+        FROM ${EVT_AONE}
+        WHERE DATE(event_time, 'America/Toronto') >= ${since}
+          ${prune}`),
+      bqQuery(`
+        SELECT DATE(event_time, 'America/Toronto') AS d,
+          COUNT(DISTINCT client_id)      AS visitors,
+          COUNTIF(event_type='search')   AS searches,
+          COUNTIF(event_type='cart_add') AS carts
+        FROM ${EVT_AONE}
+        WHERE DATE(event_time, 'America/Toronto') >= ${since}
+          ${prune}
+        GROUP BY d ORDER BY d`),
+    ]);
+    const k = kpi[0] || {};
+    document.getElementById('aoTrackStart').textContent = AONE_TRACKING_START;
+
+    const vis      = parseInt(k.visitors) || 0;
+    const searchV  = parseInt(k.search_visitors) || 0;
+    const cartV    = parseInt(k.cart_visitors) || 0;
+    const searches = parseInt(k.searches) || 0;
+    const zero     = parseInt(k.zero_searches) || 0;
+    const pct = (a, b) => b > 0 ? (a / b * 100).toFixed(1) + '%' : '—';
+
+    document.getElementById('aoneOverviewContent').innerHTML = `
+      <div class="kpi-strip">
+        <div class="kpi blue"><div class="kpi-lbl">순 방문자</div><div class="kpi-val">${num(vis)}</div><div class="kpi-sub">client_id 기준 · ${num(k.active_days)}일간</div></div>
+        <div class="kpi teal"><div class="kpi-lbl">검색 방문자</div><div class="kpi-val">${num(searchV)}</div><div class="kpi-sub">방문자의 ${pct(searchV, vis)}</div></div>
+        <div class="kpi green"><div class="kpi-lbl">검색 횟수</div><div class="kpi-val">${num(searches)}</div><div class="kpi-sub">0건 결과 ${num(zero)}회</div></div>
+        <div class="kpi purple"><div class="kpi-lbl">상품 조회</div><div class="kpi-val">${num(k.product_views)}</div><div class="kpi-sub">페이지뷰 ${num(k.page_views)}</div></div>
+        <div class="kpi yellow"><div class="kpi-lbl">장바구니 담기</div><div class="kpi-val">${num(k.cart_adds)}</div><div class="kpi-sub">담은 방문자 ${pct(cartV, vis)}</div></div>
+        <div class="kpi blue"><div class="kpi-lbl">주문</div><div class="kpi-val">${num(k.orders)}</div><div class="kpi-sub">${k.revenue != null ? '$' + num(Math.round(parseFloat(k.revenue))) : '—'}</div></div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <div class="card-hdr"><span class="card-title">일별 방문 · 검색 · 장바구니 추이</span></div>
+        <div class="chart-box tall"><canvas id="aoTrendChart"></canvas></div>
+      </div>`;
+
+    // 데이터가 1~2일뿐이면 line이 안 보이므로 bar로
+    const chartType = trend.length <= 2 ? 'bar' : 'line';
+    const ds = (label, key, color) => ({
+      label, data: trend.map(r => parseInt(r[key]) || 0),
+      borderColor: color,
+      backgroundColor: chartType === 'bar' ? color.replace('rgb', 'rgba').replace(')', ',.55)') : color.replace('rgb', 'rgba').replace(')', ',.1)'),
+      fill: true, tension: .3, pointRadius: 4, pointHoverRadius: 6, borderWidth: 2, maxBarThickness: 80,
+    });
+    mkChart('aoTrendChart', {
+      type: chartType,
+      data: { labels: trend.map(r => r.d), datasets: [
+        ds('순 방문자',  'visitors', 'rgb(59,130,246)'),
+        ds('검색',       'searches', 'rgb(20,184,166)'),
+        ds('장바구니',   'carts',    'rgb(234,179,8)'),
+      ]},
+      options: baseOpts(0)
+    });
+  } catch(e){ errBox('aoneOverviewContent', e); }
 }
 
 // ══════════════════════════════════════
