@@ -410,6 +410,11 @@ tr.vd-open > td { background: rgba(59,130,246,.05); }
   <!-- TAB NAV: aonebeauty.com (B2C) -->
   <div class="tab-nav" id="tabnav-aone" style="display:none">
     <button class="tab-btn active" onclick="switchTab('aoverview')">📊 개요</button>
+    <button class="tab-btn" onclick="switchTab('asearch')">🔎 검색 분석</button>
+    <button class="tab-btn" onclick="switchTab('abuyers')">🛒 구매 고객</button>
+    <button class="tab-btn" onclick="switchTab('apages')">📄 인기 페이지</button>
+    <button class="tab-btn" onclick="switchTab('aproducts')">🔍 인기 상품·브랜드</button>
+    <button class="tab-btn" onclick="switchTab('acategories')">📂 카테고리 관심도</button>
   </div>
 
   <!-- ══════ TAB: OVERVIEW ══════ -->
@@ -687,6 +692,116 @@ tr.vd-open > td { background: rgba(59,130,246,.05); }
     </div>
   </div>
 
+  <!-- ══════ TAB: AONE ASEARCH ══════ -->
+  <div class="tab-panel" id="tab-asearch">
+    <div class="search-panel">
+      <div class="search-grid">
+        <div class="field">
+          <label class="field-label">분석 기간</label>
+          <select id="asDays">
+            <option value="7" selected>최근 7일</option>
+            <option value="14">최근 14일</option>
+            <option value="30">최근 30일</option>
+            <option value="90">최근 90일</option>
+          </select>
+        </div>
+        <div><button class="search-btn" onclick="loadAoneSearch()">🔄 새로고침</button></div>
+      </div>
+    </div>
+    <div class="info-banner"><span>💡</span><span><strong>클릭 없는 검색어</strong>가 핵심 지표입니다. Shopify 검색은 퍼지 매칭이라 엉뚱한 결과가 1건이라도 뜨면 "0건"으로 안 잡히므로, <span class="warn">결과는 떴지만 아무것도 안 누른 검색</span>이 더 강한 신호입니다. ※ 결과수는 테마 페이지 크기에서 잘리므로 <strong>0 vs 0초과</strong>만 신뢰하세요.</span></div>
+    <div class="content" id="aoneSearchContent">
+      <div class="empty-state"><div class="empty-icon">🔎</div><div class="empty-title">검색 분석</div><div class="empty-desc">새로고침을 눌러 데이터를 불러오세요.</div></div>
+    </div>
+  </div>
+
+  <!-- ══════ TAB: AONE ABUYERS ══════ -->
+  <div class="tab-panel" id="tab-abuyers">
+    <div class="search-panel">
+      <div class="search-grid">
+        <div class="field">
+          <label class="field-label">분석 기간</label>
+          <select id="abDays">
+            <option value="7" selected>최근 7일</option>
+            <option value="14">최근 14일</option>
+            <option value="30">최근 30일</option>
+            <option value="90">최근 90일</option>
+          </select>
+        </div>
+        <div><button class="search-btn" onclick="loadAoneBuyers()">🔄 새로고침</button></div>
+      </div>
+    </div>
+    <div class="info-banner"><span>🛒</span><span>주문 완료(checkout) 이벤트 기준입니다. <strong>배송지 시·주</strong>는 손님이 직접 입력한 값이라 정확합니다. 익명 방문자는 <strong>client_id</strong>로 구매 전 행동을 역추적하므로, 기기·브라우저를 바꾼 경우는 이어지지 않습니다.</span></div>
+    <div class="content" id="aoneBuyersContent">
+      <div class="empty-state"><div class="empty-icon">🛒</div><div class="empty-title">구매 고객</div><div class="empty-desc">새로고침을 눌러 데이터를 불러오세요.</div></div>
+    </div>
+  </div>
+
+  <!-- ══════ TAB: AONE APAGES ══════ -->
+  <div class="tab-panel" id="tab-apages">
+    <div class="search-panel">
+      <div class="search-grid">
+        <div class="field">
+          <label class="field-label">분석 기간</label>
+          <select id="apDays">
+            <option value="7" selected>최근 7일</option>
+            <option value="14">최근 14일</option>
+            <option value="30">최근 30일</option>
+            <option value="90">최근 90일</option>
+          </select>
+        </div>
+        <div><button class="search-btn" onclick="loadAonePages()">🔄 새로고침</button></div>
+      </div>
+    </div>
+    <div class="info-banner"><span>📄</span><span>쿼리스트링을 제거한 경로 기준입니다. 검색어는 별도 <strong>검색 분석</strong> 탭에서 원문으로 확인하세요.</span></div>
+    <div class="content" id="aonePagesContent">
+      <div class="empty-state"><div class="empty-icon">📄</div><div class="empty-title">인기 페이지</div><div class="empty-desc">새로고침을 눌러 데이터를 불러오세요.</div></div>
+    </div>
+  </div>
+
+  <!-- ══════ TAB: AONE APRODUCTS ══════ -->
+  <div class="tab-panel" id="tab-aproducts">
+    <div class="search-panel">
+      <div class="search-grid">
+        <div class="field">
+          <label class="field-label">분석 기간</label>
+          <select id="aprDays">
+            <option value="7" selected>최근 7일</option>
+            <option value="14">최근 14일</option>
+            <option value="30">최근 30일</option>
+            <option value="90">최근 90일</option>
+          </select>
+        </div>
+        <div><button class="search-btn" onclick="loadAoneProductsTab()">🔄 새로고침</button></div>
+      </div>
+    </div>
+    <div class="info-banner"><span>🔍</span><span>⚠️ <strong>상품 조회</strong>는 페이지 로드 시점의 <span class="warn">기본 variant</span> SKU를 기록하므로 variant 단위로는 부정확합니다. SKU 단위 정답은 <strong>장바구니</strong> 기준 표를 보세요.</span></div>
+    <div class="content" id="aoneProductsContent">
+      <div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">인기 상품·브랜드</div><div class="empty-desc">새로고침을 눌러 데이터를 불러오세요.</div></div>
+    </div>
+  </div>
+
+  <!-- ══════ TAB: AONE ACATEGORIES ══════ -->
+  <div class="tab-panel" id="tab-acategories">
+    <div class="search-panel">
+      <div class="search-grid">
+        <div class="field">
+          <label class="field-label">분석 기간</label>
+          <select id="acDays">
+            <option value="7" selected>최근 7일</option>
+            <option value="14">최근 14일</option>
+            <option value="30">최근 30일</option>
+            <option value="90">최근 90일</option>
+          </select>
+        </div>
+        <div><button class="search-btn" onclick="loadAoneCategories()">🔄 새로고침</button></div>
+      </div>
+    </div>
+    <div class="info-banner"><span>📂</span><span>/collections/ 경로 기준 컬렉션별 관심도입니다.</span></div>
+    <div class="content" id="aoneCatContent">
+      <div class="empty-state"><div class="empty-icon">📂</div><div class="empty-title">카테고리 관심도</div><div class="empty-desc">새로고침을 눌러 데이터를 불러오세요.</div></div>
+    </div>
+  </div>
+
 </div><!-- /mainApp -->
 
 <script>
@@ -760,6 +875,11 @@ function switchTab(tab) {
   else if (tab === 'nevervisit') loadNeverVisit();
   // ── aonebeauty.com (B2C) ──
   else if (tab === 'aoverview') loadAoneOverview();
+  else if (tab === 'asearch') loadAoneSearch();
+  else if (tab === 'abuyers') loadAoneBuyers();
+  else if (tab === 'apages') loadAonePages();
+  else if (tab === 'aproducts') loadAoneProductsTab();
+  else if (tab === 'acategories') loadAoneCategories();
 }
 
 // ══════════════════════════════════════
@@ -841,6 +961,555 @@ async function loadAoneOverview() {
       options: baseOpts(0)
     });
   } catch(e){ errBox('aoneOverviewContent', e); }
+}
+
+// ══════════════════════════════════════
+// AONEBEAUTY.COM (B2C) — 공통 기간 헬퍼
+// ⚠️ 전 탭 NOT_STAFF 미적용: 익명 방문이라 staff 태그로 걸러낼 email이 없음
+// ⚠️ R6: 토론토 날짜 필터 + 파티션 프루닝(prune) 항상 병행
+// ══════════════════════════════════════
+function aoneWin(days) {
+  const d = Number(days);
+  return {
+    since: `DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${d} DAY)`,
+    prune: `AND event_time >= TIMESTAMP(DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${d + 2} DAY))`,
+  };
+}
+const aonePct = (a, b) => b > 0 ? (a / b * 100).toFixed(1) + '%' : '—';
+const aoneMoney = v => v == null ? '—' : '$' + (Math.round(parseFloat(v) * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// ══════════════════════════════════════
+// AONE 1) 🔎 검색 분석  (B2C 주력)
+//  검색 직후 행동은 "다음 검색 전까지, 최대 30분" 창으로 귀속.
+//  → 재검색한 경우 앞선 검색은 클릭 0으로 남아 실패가 드러난다.
+// ══════════════════════════════════════
+async function loadAoneSearch() {
+  const days = document.getElementById('asDays').value;
+  loading('aoneSearchContent');
+  try {
+    const w = aoneWin(days);
+    const prefix = `
+      WITH ev AS (
+        SELECT client_id, event_type, event_time, search_query, search_results,
+               product_sku, product_title, product_brand
+        FROM ${EVT_AONE}
+        WHERE DATE(event_time, 'America/Toronto') >= ${w.since}
+          ${w.prune}
+      ),
+      s0 AS (
+        SELECT client_id, event_time, LOWER(TRIM(search_query)) AS q, search_results,
+               LEAD(event_time) OVER (PARTITION BY client_id ORDER BY event_time) AS next_s
+        FROM ev
+        WHERE event_type='search' AND search_query IS NOT NULL AND TRIM(search_query) != ''
+      ),
+      s AS (
+        SELECT client_id, event_time, q, search_results,
+               LEAST(IFNULL(next_s, TIMESTAMP_ADD(event_time, INTERVAL 30 MINUTE)),
+                     TIMESTAMP_ADD(event_time, INTERVAL 30 MINUTE)) AS win_end
+        FROM s0
+      )`;
+
+    const [terms, clicked, kpi] = await Promise.all([
+      bqQuery(`${prefix},
+        att AS (
+          SELECT s.q, s.client_id, s.event_time, s.search_results,
+                 COUNTIF(e.event_type='product_view') AS clicks,
+                 COUNTIF(e.event_type='cart_add')     AS carts
+          FROM s
+          LEFT JOIN ev e
+            ON e.client_id = s.client_id
+           AND e.event_time > s.event_time
+           AND e.event_time <= s.win_end
+           AND e.event_type IN ('product_view','cart_add')
+          GROUP BY 1, 2, 3, 4
+        )
+        SELECT q AS query,
+          COUNT(*)                  AS searches,
+          COUNT(DISTINCT client_id) AS visitors,
+          MAX(search_results)       AS results,
+          COUNTIF(clicks = 0)       AS noclick,
+          SUM(carts)                AS carts
+        FROM att GROUP BY q ORDER BY searches DESC, visitors DESC LIMIT 300`),
+      bqQuery(`${prefix}
+        SELECT s.q AS query, e.product_sku AS sku,
+          ANY_VALUE(e.product_title)             AS title,
+          UPPER(TRIM(ANY_VALUE(e.product_brand))) AS brand,
+          COUNT(*)                                AS clicks
+        FROM s
+        JOIN ev e
+          ON e.client_id = s.client_id
+         AND e.event_time > s.event_time
+         AND e.event_time <= s.win_end
+         AND e.event_type = 'product_view'
+         AND e.product_sku IS NOT NULL
+        GROUP BY query, sku ORDER BY clicks DESC LIMIT 300`),
+      bqQuery(`${prefix},
+        sess AS (SELECT client_id, COUNT(*) AS n FROM s GROUP BY client_id)
+        SELECT
+          (SELECT COUNT(*) FROM s)                                            AS searches,
+          (SELECT COUNT(DISTINCT client_id) FROM s)                           AS search_visitors,
+          (SELECT COUNTIF(search_results = 0) FROM s)                         AS zero_res,
+          (SELECT COUNT(*) FROM sess WHERE n >= 2)                            AS research_visitors,
+          (SELECT COUNT(DISTINCT client_id) FROM ev WHERE event_type='page_view') AS all_visitors`),
+    ]);
+
+    if (!terms.length) {
+      document.getElementById('aoneSearchContent').innerHTML =
+        emptyMsg('🔎', '검색 데이터 없음', '이 기간에 검색 이벤트가 없습니다. 기간을 늘려보세요.');
+      return;
+    }
+
+    const k = kpi[0] || {};
+    const totSearch  = parseInt(k.searches) || 0;
+    const searchVis  = parseInt(k.search_visitors) || 0;
+    const allVis     = parseInt(k.all_visitors) || 0;
+    const zeroRes    = parseInt(k.zero_res) || 0;
+    const reSearch   = parseInt(k.research_visitors) || 0;
+    const totNoclick = terms.reduce((a, r) => a + (parseInt(r.noclick) || 0), 0);
+    const totCarts   = terms.reduce((a, r) => a + (parseInt(r.carts) || 0), 0);
+
+    const rowsOf = arr => arr.map(r => {
+      const se = parseInt(r.searches) || 0, nc = parseInt(r.noclick) || 0;
+      return [ r.query, se, parseInt(r.visitors) || 0, r.results == null ? -1 : parseInt(r.results),
+               nc, parseInt(r.carts) || 0, se > 0 ? Math.round(nc / se * 100) : 0 ];
+    });
+    const searchRender = {
+      1: v => num(v), 2: v => num(v),
+      3: v => v < 0 ? '<span class="tag tag-anon">—</span>'
+                    : (v === 0 ? '<span class="tag tag-b2c">0건</span>' : num(v)),
+      4: (v, row) => v > 0 && v === row[1] ? `<span class="tag tag-b2c">${num(v)}</span>` : num(v),
+      5: v => v > 0 ? `<span class="warn">${num(v)}</span>` : '0',
+    };
+
+    registerTable('AONE검색어', {
+      containerId: 'aoneTermTable',
+      headers: ['검색어', '검색수', '순방문자', '결과수', '클릭없음', '장바구니'],
+      numCols: [1, 2, 3, 4, 5],
+      rows: rowsOf(terms), cellRender: searchRender, defaultSort: 1, defaultAsc: false,
+    });
+
+    // 놓치고 있는 검색어 = 결과 0건 OR 전부 클릭 없음
+    const missed = terms.filter(r => {
+      const se = parseInt(r.searches) || 0;
+      return parseInt(r.results) === 0 || (se > 0 && (parseInt(r.noclick) || 0) === se);
+    });
+    registerTable('AONE놓친검색어', {
+      containerId: 'aoneMissTable',
+      headers: ['검색어', '검색수', '순방문자', '결과수', '클릭없음', '장바구니'],
+      numCols: [1, 2, 3, 4, 5],
+      rows: rowsOf(missed), cellRender: searchRender, defaultSort: 1, defaultAsc: false,
+    });
+
+    registerTable('AONE검색어클릭SKU', {
+      containerId: 'aoneClickTable',
+      headers: ['검색어', 'SKU', '상품명', '브랜드', '클릭'],
+      numCols: [4],
+      rows: clicked.map(r => [ r.query, r.sku, r.title, r.brand, parseInt(r.clicks) || 0 ]),
+      cellRender: {
+        1: v => `<span class="mono">${esc(v)}</span>`,
+        2: v => `<span title="${esc(v)}" style="display:inline-block;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom">${esc(v)}</span>`,
+        4: v => num(v),
+      },
+      defaultSort: 4, defaultAsc: false,
+    });
+
+    ['AONE검색어', 'AONE놓친검색어', 'AONE검색어클릭SKU'].forEach(key => {
+      _csvCache[key] = { headers: _tables[key].headers, rows: _tables[key].rows.map(r => r.slice(0, _tables[key].headers.length)) };
+    });
+
+    document.getElementById('aoneSearchContent').innerHTML = `
+      <div class="kpi-strip">
+        <div class="kpi blue"><div class="kpi-lbl">총 검색</div><div class="kpi-val">${num(totSearch)}</div><div class="kpi-sub">검색어 ${num(terms.length)}종</div></div>
+        <div class="kpi teal"><div class="kpi-lbl">검색 방문자</div><div class="kpi-val">${num(searchVis)}</div><div class="kpi-sub">방문자의 ${aonePct(searchVis, allVis)}</div></div>
+        <div class="kpi purple"><div class="kpi-lbl">결과 0건</div><div class="kpi-val">${num(zeroRes)}</div><div class="kpi-sub">미취급·오타 신호</div></div>
+        <div class="kpi yellow"><div class="kpi-lbl">클릭 없는 검색</div><div class="kpi-val">${num(totNoclick)}</div><div class="kpi-sub">검색의 ${aonePct(totNoclick, totSearch)} ⭐</div></div>
+        <div class="kpi green"><div class="kpi-lbl">장바구니 도달</div><div class="kpi-val">${num(totCarts)}</div><div class="kpi-sub">검색의 ${aonePct(totCarts, totSearch)}</div></div>
+        <div class="kpi blue"><div class="kpi-lbl">재검색 방문자</div><div class="kpi-val">${num(reSearch)}</div><div class="kpi-sub">2회 이상 검색 = 첫 검색 실패</div></div>
+      </div>
+      <div class="tbl-card" style="margin-top:16px">
+        <div class="tbl-hdr"><span class="tbl-title">🚨 놓치고 있는 검색어 — 결과 0건 또는 아무것도 안 누름</span><span style="display:flex;gap:10px;align-items:center"><span class="tbl-count">${missed.length}</span>${csvBtn('AONE놓친검색어')}</span></div>
+        <div class="tbl-wrap" style="max-height:360px" id="aoneMissTable">${renderTable('AONE놓친검색어')}</div>
+      </div>
+      <div class="tbl-card" style="margin-top:16px">
+        <div class="tbl-hdr"><span class="tbl-title">🔎 전체 검색어</span><span style="display:flex;gap:10px;align-items:center"><span class="tbl-count">${terms.length}</span>${csvBtn('AONE검색어')}</span></div>
+        <div class="tbl-wrap" style="max-height:420px" id="aoneTermTable">${renderTable('AONE검색어')}</div>
+      </div>
+      <div class="tbl-card" style="margin-top:16px">
+        <div class="tbl-hdr"><span class="tbl-title">🖱 검색어 → 실제로 클릭한 상품</span><span style="display:flex;gap:10px;align-items:center"><span class="tbl-count">${clicked.length}</span>${csvBtn('AONE검색어클릭SKU')}</span></div>
+        <div class="tbl-wrap" style="max-height:420px" id="aoneClickTable">${renderTable('AONE검색어클릭SKU')}</div>
+      </div>`;
+  } catch (e) { errBox('aoneSearchContent', e); }
+}
+
+// ══════════════════════════════════════
+// AONE 2) 🛒 구매 고객  (checkout 이벤트 기준 + 배송지 시·주)
+// ══════════════════════════════════════
+async function loadAoneBuyers() {
+  const days = document.getElementById('abDays').value;
+  loading('aoneBuyersContent');
+  try {
+    const w = aoneWin(days);
+    const ckWhere = `WHERE event_type='checkout' AND DATE(event_time, 'America/Toronto') >= ${w.since} ${w.prune}`;
+
+    const [orders, region, kpi] = await Promise.all([
+      bqQuery(`
+        WITH ck AS (
+          SELECT client_id, email, order_id, order_total, currency,
+                 ship_city, ship_state, ship_country, event_time, line_items
+          FROM ${EVT_AONE} ${ckWhere}
+        ),
+        beh AS (
+          SELECT c.order_id,
+            COUNTIF(e.event_type='search')       AS pre_searches,
+            COUNTIF(e.event_type='product_view') AS pre_views,
+            MIN(e.event_time)                    AS first_seen
+          FROM ck c
+          LEFT JOIN ${EVT_AONE} e
+            ON e.client_id = c.client_id
+           AND e.event_time <= c.event_time
+           AND DATE(e.event_time, 'America/Toronto') >= ${w.since}
+           AND e.event_time >= TIMESTAMP(DATE_SUB(CURRENT_DATE('America/Toronto'), INTERVAL ${Number(days) + 2} DAY))
+          GROUP BY c.order_id
+        )
+        SELECT
+          FORMAT_TIMESTAMP('%m-%d %H:%M', c.event_time, 'America/Toronto') AS ordered_at,
+          c.order_id, c.email,
+          c.ship_city, c.ship_state, c.ship_country,
+          CAST(c.order_total AS FLOAT64) AS total,
+          ARRAY_LENGTH(JSON_EXTRACT_ARRAY(IFNULL(c.line_items, '[]'))) AS lines,
+          b.pre_searches, b.pre_views,
+          TIMESTAMP_DIFF(c.event_time, b.first_seen, MINUTE) AS mins
+        FROM ck c LEFT JOIN beh b USING (order_id)
+        ORDER BY c.event_time DESC LIMIT 500`),
+      bqQuery(`
+        SELECT IFNULL(NULLIF(TRIM(ship_state), ''), '미상') AS state,
+               IFNULL(NULLIF(TRIM(ship_city), ''), '미상')  AS city,
+               COUNT(*) AS orders,
+               SUM(CAST(order_total AS FLOAT64)) AS revenue
+        FROM ${EVT_AONE} ${ckWhere}
+        GROUP BY state, city ORDER BY orders DESC LIMIT 300`),
+      bqQuery(`
+        SELECT COUNT(*) AS orders,
+               COUNT(DISTINCT client_id) AS buyers,
+               COUNT(DISTINCT LOWER(email)) AS emails,
+               SUM(CAST(order_total AS FLOAT64)) AS revenue,
+               AVG(CAST(order_total AS FLOAT64)) AS aov,
+               COUNT(DISTINCT IF(TRIM(IFNULL(ship_state,'')) != '', ship_state, NULL)) AS states
+        FROM ${EVT_AONE} ${ckWhere}`),
+    ]);
+
+    if (!orders.length) {
+      document.getElementById('aoneBuyersContent').innerHTML = emptyMsg('🛒', '주문 데이터 없음',
+        `주문(checkout) 추적은 ${AONE_TRACKING_START}부터 시작되었습니다. 첫 주문이 들어오면 여기에 배송지 시·주와 구매 전 행동이 함께 표시됩니다.`);
+      return;
+    }
+
+    const k = kpi[0] || {};
+    // 주(state) 단위 집계
+    const byState = {};
+    region.forEach(r => {
+      const s = r.state || '미상';
+      byState[s] = byState[s] || { state: s, orders: 0, revenue: 0, cities: 0 };
+      byState[s].orders += parseInt(r.orders) || 0;
+      byState[s].revenue += parseFloat(r.revenue) || 0;
+      byState[s].cities += 1;
+    });
+    const stateRows = Object.values(byState).sort((a, b) => b.orders - a.orders);
+
+    registerTable('AONE주문', {
+      containerId: 'aoneOrderTable',
+      headers: ['주문시각', '주문번호', '이메일', '도시', '주', '금액', '라인', '구매전검색', '구매전조회', '첫방문→주문'],
+      numCols: [5, 6, 7, 8, 9],
+      rows: orders.map(r => [
+        r.ordered_at, r.order_id, r.email || '—',
+        r.ship_city || '—', r.ship_state || '—',
+        parseFloat(r.total) || 0, parseInt(r.lines) || 0,
+        parseInt(r.pre_searches) || 0, parseInt(r.pre_views) || 0,
+        parseInt(r.mins) || 0,
+      ]),
+      cellRender: {
+        1: v => `<span class="mono">${esc(v)}</span>`,
+        5: v => aoneMoney(v), 6: v => num(v), 7: v => num(v), 8: v => num(v),
+        9: v => v >= 60 ? `${Math.floor(v / 60)}시간 ${v % 60}분` : `${v}분`,
+      },
+      defaultSort: null,
+    });
+    registerTable('AONE주별주문', {
+      containerId: 'aoneStateTable',
+      headers: ['주/도', '주문', '매출', '도시수'],
+      numCols: [1, 2, 3],
+      rows: stateRows.map(r => [r.state, r.orders, r.revenue, r.cities]),
+      cellRender: { 1: v => num(v), 2: v => aoneMoney(v), 3: v => num(v) },
+      defaultSort: 1, defaultAsc: false,
+    });
+    registerTable('AONE도시별주문', {
+      containerId: 'aoneCityTable',
+      headers: ['도시', '주/도', '주문', '매출'],
+      numCols: [2, 3],
+      rows: region.map(r => [r.city, r.state, parseInt(r.orders) || 0, parseFloat(r.revenue) || 0]),
+      cellRender: { 2: v => num(v), 3: v => aoneMoney(v) },
+      defaultSort: 2, defaultAsc: false,
+    });
+    ['AONE주문', 'AONE주별주문', 'AONE도시별주문'].forEach(key => {
+      _csvCache[key] = { headers: _tables[key].headers, rows: _tables[key].rows };
+    });
+
+    const searchDriven = orders.filter(r => (parseInt(r.pre_searches) || 0) > 0).length;
+
+    document.getElementById('aoneBuyersContent').innerHTML = `
+      <div class="kpi-strip">
+        <div class="kpi blue"><div class="kpi-lbl">주문</div><div class="kpi-val">${num(k.orders)}</div><div class="kpi-sub">구매 방문자 ${num(k.buyers)}</div></div>
+        <div class="kpi green"><div class="kpi-lbl">매출</div><div class="kpi-val">${aoneMoney(k.revenue)}</div><div class="kpi-sub">기간 합계</div></div>
+        <div class="kpi teal"><div class="kpi-lbl">평균 주문액</div><div class="kpi-val">${aoneMoney(k.aov)}</div><div class="kpi-sub">AOV</div></div>
+        <div class="kpi purple"><div class="kpi-lbl">검색 후 구매</div><div class="kpi-val">${num(searchDriven)}</div><div class="kpi-sub">주문의 ${aonePct(searchDriven, orders.length)}</div></div>
+        <div class="kpi yellow"><div class="kpi-lbl">배송 지역</div><div class="kpi-val">${num(k.states)}</div><div class="kpi-sub">주/도 · 도시 ${num(region.length)}</div></div>
+        <div class="kpi blue"><div class="kpi-lbl">식별된 이메일</div><div class="kpi-val">${num(k.emails)}</div><div class="kpi-sub">체크아웃 수집</div></div>
+      </div>
+      <div class="tbl-card" style="margin-top:16px">
+        <div class="tbl-hdr"><span class="tbl-title">🛒 주문 — 배송지 · 구매 전 행동</span><span style="display:flex;gap:10px;align-items:center"><span class="tbl-count">${orders.length}</span>${csvBtn('AONE주문')}</span></div>
+        <div class="tbl-wrap" style="max-height:440px" id="aoneOrderTable">${renderTable('AONE주문')}</div>
+      </div>
+      <div class="tbl-card" style="margin-top:16px">
+        <div class="tbl-hdr"><span class="tbl-title">🗺 주/도별 주문</span><span style="display:flex;gap:10px;align-items:center"><span class="tbl-count">${stateRows.length}</span>${csvBtn('AONE주별주문')}</span></div>
+        <div class="tbl-wrap" style="max-height:300px" id="aoneStateTable">${renderTable('AONE주별주문')}</div>
+      </div>
+      <div class="tbl-card" style="margin-top:16px">
+        <div class="tbl-hdr"><span class="tbl-title">🏙 도시별 주문</span><span style="display:flex;gap:10px;align-items:center"><span class="tbl-count">${region.length}</span>${csvBtn('AONE도시별주문')}</span></div>
+        <div class="tbl-wrap" style="max-height:360px" id="aoneCityTable">${renderTable('AONE도시별주문')}</div>
+      </div>`;
+  } catch (e) { errBox('aoneBuyersContent', e); }
+}
+
+// ══════════════════════════════════════
+// AONE 3) 📄 인기 페이지
+// ══════════════════════════════════════
+async function loadAonePages() {
+  const days = document.getElementById('apDays').value;
+  loading('aonePagesContent');
+  try {
+    const w = aoneWin(days);
+    const rows = await bqQuery(`
+      SELECT REGEXP_REPLACE(IFNULL(NULLIF(TRIM(page), ''), '/'), r'[?#].*$', '') AS path,
+             COUNT(*) AS pv,
+             COUNT(DISTINCT client_id) AS visitors
+      FROM ${EVT_AONE}
+      WHERE event_type='page_view'
+        AND DATE(event_time, 'America/Toronto') >= ${w.since}
+        ${w.prune}
+      GROUP BY path ORDER BY pv DESC LIMIT 400`);
+
+    if (!rows.length) {
+      document.getElementById('aonePagesContent').innerHTML = emptyMsg('📄', '데이터 없음', '이 기간에 페이지뷰가 없습니다.');
+      return;
+    }
+
+    const kindOf = p => {
+      const s = String(p || '');
+      if (s === '/' || s === '') return '홈';
+      if (s.startsWith('/collections/')) return '컬렉션';
+      if (s.startsWith('/products/')) return '상품';
+      if (s.startsWith('/search')) return '검색';
+      if (s.startsWith('/cart') || s.startsWith('/checkouts')) return '장바구니·결제';
+      if (s.startsWith('/account') || s.includes('customer_authentication')) return '계정';
+      if (s.startsWith('/pages/') || s.startsWith('/blogs/')) return '안내·블로그';
+      return '기타';
+    };
+    const byKind = {};
+    let totPv = 0;
+    rows.forEach(r => {
+      const kd = kindOf(r.path), pv = parseInt(r.pv) || 0;
+      totPv += pv;
+      byKind[kd] = (byKind[kd] || 0) + pv;
+    });
+    const kindOrder = Object.entries(byKind).sort((a, b) => b[1] - a[1]);
+    const palette = ['blue', 'teal', 'green', 'purple', 'yellow', 'blue'];
+
+    registerTable('AONE페이지', {
+      containerId: 'aonePageTable',
+      headers: ['페이지', '유형', 'PV', '순방문자'],
+      numCols: [2, 3],
+      rows: rows.map(r => [r.path, kindOf(r.path), parseInt(r.pv) || 0, parseInt(r.visitors) || 0]),
+      cellRender: {
+        0: v => `<span class="mono" title="${esc(v)}" style="display:inline-block;max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom">${esc(v)}</span>`,
+        1: v => `<span class="tag tag-anon">${esc(v)}</span>`,
+        2: v => num(v), 3: v => num(v),
+      },
+      defaultSort: 2, defaultAsc: false,
+    });
+    _csvCache['AONE페이지'] = { headers: _tables['AONE페이지'].headers, rows: _tables['AONE페이지'].rows };
+
+    document.getElementById('aonePagesContent').innerHTML = `
+      <div class="kpi-strip">
+        ${kindOrder.slice(0, 6).map(([kd, pv], i) => `
+        <div class="kpi ${palette[i % palette.length]}"><div class="kpi-lbl">${esc(kd)}</div><div class="kpi-val">${num(pv)}</div><div class="kpi-sub">전체의 ${aonePct(pv, totPv)}</div></div>`).join('')}
+      </div>
+      <div class="tbl-card" style="margin-top:16px">
+        <div class="tbl-hdr"><span class="tbl-title">📄 페이지별 조회</span><span style="display:flex;gap:10px;align-items:center"><span class="tbl-count">${rows.length}</span>${csvBtn('AONE페이지')}</span></div>
+        <div class="tbl-wrap" style="max-height:560px" id="aonePageTable">${renderTable('AONE페이지')}</div>
+      </div>`;
+  } catch (e) { errBox('aonePagesContent', e); }
+}
+
+// ══════════════════════════════════════
+// AONE 4) 🔍 인기 상품·브랜드
+//  ⚠️ product_view의 SKU는 기본 variant → 상품 단위로 집계.
+//     SKU 단위 정답은 cart_add 기준.
+// ══════════════════════════════════════
+async function loadAoneProductsTab() {
+  const days = document.getElementById('aprDays').value;
+  loading('aoneProductsContent');
+  try {
+    const w = aoneWin(days);
+    const dw = `AND DATE(event_time, 'America/Toronto') >= ${w.since} ${w.prune}`;
+
+    const [brands, viewed, carted] = await Promise.all([
+      bqQuery(`
+        SELECT UPPER(TRIM(product_brand)) AS brand,
+          COUNTIF(event_type='product_view') AS views,
+          COUNTIF(event_type='cart_add')     AS carts,
+          COUNT(DISTINCT client_id)          AS visitors,
+          COUNT(DISTINCT product_sku)        AS skus
+        FROM ${EVT_AONE}
+        WHERE event_type IN ('product_view','cart_add')
+          AND product_brand IS NOT NULL AND TRIM(product_brand) != '' ${dw}
+        GROUP BY brand ORDER BY views DESC LIMIT 120`),
+      bqQuery(`
+        SELECT IFNULL(NULLIF(TRIM(product_title), ''), product_sku) AS title,
+          ANY_VALUE(product_sku)                  AS sku,
+          UPPER(TRIM(ANY_VALUE(product_brand)))   AS brand,
+          COUNT(*)                                AS views,
+          COUNT(DISTINCT client_id)               AS visitors
+        FROM ${EVT_AONE}
+        WHERE event_type='product_view' AND product_sku IS NOT NULL ${dw}
+        GROUP BY title ORDER BY views DESC LIMIT 250`),
+      bqQuery(`
+        SELECT product_sku AS sku,
+          ANY_VALUE(product_title)               AS title,
+          UPPER(TRIM(ANY_VALUE(product_brand)))  AS brand,
+          COUNT(*)                               AS adds,
+          SUM(IFNULL(quantity, 0))               AS qty,
+          COUNT(DISTINCT client_id)              AS visitors
+        FROM ${EVT_AONE}
+        WHERE event_type='cart_add' AND product_sku IS NOT NULL ${dw}
+        GROUP BY sku ORDER BY adds DESC LIMIT 250`),
+    ]);
+
+    if (!brands.length && !viewed.length) {
+      document.getElementById('aoneProductsContent').innerHTML = emptyMsg('🔍', '데이터 없음', '이 기간에 상품 조회 데이터가 없습니다.');
+      return;
+    }
+
+    const titleCell = v => `<span title="${esc(v)}" style="display:inline-block;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom">${esc(v)}</span>`;
+
+    registerTable('AONE브랜드', {
+      containerId: 'aoneBrandTable',
+      headers: ['브랜드', '조회', '장바구니', '담기전환율', '순방문자', 'SKU수'],
+      numCols: [1, 2, 3, 4, 5],
+      rows: brands.map(r => {
+        const vw = parseInt(r.views) || 0, ct = parseInt(r.carts) || 0;
+        return [r.brand, vw, ct, vw > 0 ? Math.round(ct / vw * 100) : 0, parseInt(r.visitors) || 0, parseInt(r.skus) || 0];
+      }),
+      cellRender: {
+        1: v => num(v), 2: v => num(v),
+        3: v => v > 0 ? `<span class="tag tag-b2b">${v}%</span>` : '<span class="tag tag-anon">0%</span>',
+        4: v => num(v), 5: v => num(v),
+      },
+      defaultSort: 1, defaultAsc: false,
+    });
+    registerTable('AONE상품조회', {
+      containerId: 'aoneViewedTable',
+      headers: ['상품명', '대표SKU', '브랜드', '조회', '순방문자'],
+      numCols: [3, 4],
+      rows: viewed.map(r => [r.title, r.sku, r.brand, parseInt(r.views) || 0, parseInt(r.visitors) || 0]),
+      cellRender: { 0: titleCell, 1: v => `<span class="mono">${esc(v)}</span>`, 3: v => num(v), 4: v => num(v) },
+      defaultSort: 3, defaultAsc: false,
+    });
+    registerTable('AONE장바구니SKU', {
+      containerId: 'aoneCartedTable',
+      headers: ['SKU', '상품명', '브랜드', '담긴횟수', '총수량', '순방문자'],
+      numCols: [3, 4, 5],
+      rows: carted.map(r => [r.sku, r.title, r.brand, parseInt(r.adds) || 0, parseInt(r.qty) || 0, parseInt(r.visitors) || 0]),
+      cellRender: { 0: v => `<span class="mono">${esc(v)}</span>`, 1: titleCell, 3: v => num(v), 4: v => num(v), 5: v => num(v) },
+      defaultSort: 3, defaultAsc: false,
+    });
+    ['AONE브랜드', 'AONE상품조회', 'AONE장바구니SKU'].forEach(key => {
+      _csvCache[key] = { headers: _tables[key].headers, rows: _tables[key].rows };
+    });
+
+    document.getElementById('aoneProductsContent').innerHTML = `
+      <div class="tbl-card">
+        <div class="tbl-hdr"><span class="tbl-title">🏷 브랜드 — 조회 → 장바구니 전환</span><span style="display:flex;gap:10px;align-items:center"><span class="tbl-count">${brands.length}</span>${csvBtn('AONE브랜드')}</span></div>
+        <div class="tbl-wrap" style="max-height:360px" id="aoneBrandTable">${renderTable('AONE브랜드')}</div>
+      </div>
+      <div class="tbl-card" style="margin-top:16px">
+        <div class="tbl-hdr"><span class="tbl-title">👁 상품 조회 TOP <span style="font-weight:400;color:var(--dim)">(상품 단위 — variant 무관)</span></span><span style="display:flex;gap:10px;align-items:center"><span class="tbl-count">${viewed.length}</span>${csvBtn('AONE상품조회')}</span></div>
+        <div class="tbl-wrap" style="max-height:440px" id="aoneViewedTable">${renderTable('AONE상품조회')}</div>
+      </div>
+      <div class="tbl-card" style="margin-top:16px">
+        <div class="tbl-hdr"><span class="tbl-title">🛒 장바구니 SKU <span style="font-weight:400;color:var(--dim)">(variant 정답 — 재고·마진 조인용)</span></span><span style="display:flex;gap:10px;align-items:center"><span class="tbl-count">${carted.length}</span>${csvBtn('AONE장바구니SKU')}</span></div>
+        <div class="tbl-wrap" style="max-height:440px" id="aoneCartedTable">${renderTable('AONE장바구니SKU')}</div>
+      </div>`;
+  } catch (e) { errBox('aoneProductsContent', e); }
+}
+
+// ══════════════════════════════════════
+// AONE 5) 📂 카테고리 관심도  (/collections/ 기준)
+// ══════════════════════════════════════
+async function loadAoneCategories() {
+  const days = document.getElementById('acDays').value;
+  loading('aoneCatContent');
+  try {
+    const w = aoneWin(days);
+    const rows = await bqQuery(`
+      SELECT REGEXP_EXTRACT(page, r'^/collections/([^/?#]+)') AS collection,
+             COUNT(*) AS pv,
+             COUNT(DISTINCT client_id) AS visitors
+      FROM ${EVT_AONE}
+      WHERE event_type='page_view' AND page LIKE '/collections/%'
+        AND DATE(event_time, 'America/Toronto') >= ${w.since}
+        ${w.prune}
+      GROUP BY collection
+      HAVING collection IS NOT NULL AND collection != ''
+      ORDER BY pv DESC LIMIT 200`);
+
+    if (!rows.length) {
+      document.getElementById('aoneCatContent').innerHTML = emptyMsg('📂', '데이터 없음', '이 기간에 컬렉션 페이지 조회가 없습니다.');
+      return;
+    }
+
+    registerTable('AONE카테고리', {
+      containerId: 'aoneCatTable',
+      headers: ['컬렉션', 'PV', '순방문자'],
+      numCols: [1, 2],
+      rows: rows.map(r => [r.collection, parseInt(r.pv) || 0, parseInt(r.visitors) || 0]),
+      cellRender: { 0: v => `<span class="mono">${esc(v)}</span>`, 1: v => num(v), 2: v => num(v) },
+      defaultSort: 1, defaultAsc: false,
+    });
+    _csvCache['AONE카테고리'] = { headers: _tables['AONE카테고리'].headers, rows: _tables['AONE카테고리'].rows };
+
+    const top = rows.slice(0, 15);
+    document.getElementById('aoneCatContent').innerHTML = `
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">📂 컬렉션 TOP 15</span></div>
+        <div class="chart-box tall"><canvas id="aoneCatChart"></canvas></div>
+      </div>
+      <div class="tbl-card" style="margin-top:16px">
+        <div class="tbl-hdr"><span class="tbl-title">📂 컬렉션별 조회</span><span style="display:flex;gap:10px;align-items:center"><span class="tbl-count">${rows.length}</span>${csvBtn('AONE카테고리')}</span></div>
+        <div class="tbl-wrap" style="max-height:480px" id="aoneCatTable">${renderTable('AONE카테고리')}</div>
+      </div>`;
+
+    mkChart('aoneCatChart', {
+      type: 'bar',
+      data: {
+        labels: top.map(r => r.collection),
+        datasets: [
+          { label: 'PV', data: top.map(r => parseInt(r.pv) || 0), backgroundColor: 'rgba(59,130,246,.6)', maxBarThickness: 44 },
+          { label: '순방문자', data: top.map(r => parseInt(r.visitors) || 0), backgroundColor: 'rgba(20,184,166,.6)', maxBarThickness: 44 },
+        ],
+      },
+      options: baseOpts(35),
+    });
+  } catch (e) { errBox('aoneCatContent', e); }
 }
 
 // ══════════════════════════════════════
