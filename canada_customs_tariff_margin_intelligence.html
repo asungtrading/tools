@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canada 2026 Customs Tariff & Margin Analytics App</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;500;600;700;800;900&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        darkbg: '#0B0F19',
+                        darkcard: '#161F30',
+                        accent: '#E5A93B',
+                        accenthover: '#CCA43B',
+                        emerald: '#10B981',
+                        bordercolor: '#26334D',
+                        textlight: '#F3F4F6',
+                        textmuted: '#9CA3AF'
+                    },
+                    fontFamily: {
+                        sans: ['Urbanist', 'Noto Sans KR', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #0B0F19;
+            color: #F3F4F6;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 100%;
+            height: 320px;
+        }
+        select, input {
+            appearance: none;
+            background-color: #1E293B;
+            border: 1px solid #26334D;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        select:focus, input:focus {
+            outline: none;
+            border-color: #E5A93B;
+            box-shadow: 0 0 0 2px rgba(229, 169, 59, 0.2);
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0B0F19;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #26334D;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #E5A93B;
+        }
+    </style>
+</head>
+<body class="antialiased font-sans min-h-screen flex flex-col justify-between">
+
+    <header class="border-b border-bordercolor bg-darkbg/90 backdrop-blur-md sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <span class="text-3xl text-accent">&#127809;</span>
+                <div>
+                    <h1 class="text-xl font-extrabold tracking-tight text-textlight">CANADA TRADE NAVIGATOR</h1>
+                    <p class="text-xs text-textmuted">Official 2026 Customs Tariff & Origin-based Margin Planner</p>
+                </div>
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-3">
+                <span class="text-xs font-bold text-emerald bg-emerald/10 border border-emerald/20 px-3 py-1.5 rounded-full flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-emerald animate-pulse"></span>
+                    2026 Tariff & Duty(1)_2.xlsx 정렬 완료
+                </span>
+                <button onclick="downloadSelfHTML()" class="bg-accent hover:bg-accenthover text-darkbg font-bold px-4 py-1.5 rounded-xl text-xs transition-all flex items-center gap-1.5 shadow-lg">
+                    <i class="fa-solid fa-download"></i>
+                    오프라인용 HTML 다운로드
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full space-y-12">
+
+        <section id="simulator-section" class="space-y-6">
+            <div class="bg-gradient-to-r from-darkcard to-slate-900 rounded-3xl p-6 sm:p-8 border border-bordercolor relative overflow-hidden shadow-2xl">
+                <div class="absolute -top-10 -right-10 w-48 h-48 bg-accent/5 rounded-full blur-3xl"></div>
+                <div class="relative z-10 max-w-4xl space-y-3">
+                    <span class="text-xs font-bold text-accent tracking-widest uppercase bg-accent/10 px-3 py-1 rounded-full">INTELLIGENT DECISION ENGINE</span>
+                    <h2 class="text-2xl sm:text-3xl font-extrabold text-textlight tracking-tight">원산지 자동 연동형 마진 프라이싱 플래너</h2>
+                    <p class="text-textmuted text-sm leading-relaxed">
+                        선택하신 <strong>원산지 조건</strong>에 따라 캐나다 2026 관세 공식 규정(CUSMA 0%, CKFTA 0%, MFN)이 자동으로 식별되어 계산기에 부과됩니다. 
+                        수하 세관(CBSA)의 선적지 인도조건(FOB) 과세 기준을 만족하며, 목표 마진을 안전하게 확보한 후 끝자리 9센트(.x9)로 수렴하는 실제 도매 판매 가격을 역산하여 제공합니다.
+                    </p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                
+                <div class="lg:col-span-4 bg-darkcard rounded-3xl p-6 border border-bordercolor shadow-xl space-y-6">
+                    <div class="border-b border-bordercolor pb-3 flex justify-between items-center">
+                        <h3 class="text-sm font-extrabold tracking-tight text-accent flex items-center gap-2">
+                            <i class="fa-solid fa-sliders text-accent"></i> 01. 수입원가 입력 정보
+                        </h3>
+                        <button onclick="resetInputs()" class="text-xs font-semibold text-textmuted hover:text-accent transition-colors">
+                            초기화
+                        </button>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div class="space-y-1.5">
+                            <label class="block text-[11px] font-bold text-textmuted uppercase tracking-wider">적용 대상 품목 (Selected Item)</label>
+                            <div class="bg-darkbg/60 rounded-xl px-4 py-3 border border-bordercolor text-sm">
+                                <span id="selectedItemDisplay" class="font-extrabold text-textlight block">3304.99.00 - Skincare (Creams, Serums, Lotions)</span>
+                            </div>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <label class="block text-[11px] font-bold text-textmuted uppercase tracking-wider">원산지 조건 (Country of Origin)</label>
+                            <select id="originSelect" onchange="handleOriginChange();" class="w-full rounded-xl px-3 py-2.5 text-xs font-bold text-textlight cursor-pointer">
+                            </select>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="space-y-1.5">
+                                <label class="block text-[11px] font-bold text-textmuted uppercase tracking-wider">결제 통화</label>
+                                <select id="currencySelect" onchange="handleCurrencyChange();" class="w-full rounded-xl px-3 py-2.5 text-xs font-bold text-textlight cursor-pointer">
+                                </select>
+                            </div>
+                            <div class="space-y-1.5">
+                                <label class="block text-[11px] font-bold text-textmuted uppercase tracking-wider">적용 환율 (vs CAD)</label>
+                                <input type="number" id="exchangeRateInput" step="0.0001" oninput="calculateMarginalOutputs();" class="w-full rounded-xl px-3 py-2 text-xs font-bold text-textlight">
+                            </div>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <label class="block text-[11px] font-bold text-textmuted uppercase tracking-wider">공급가 (외화)</label>
+                            <div class="relative">
+                                <span id="currencySymbol" class="absolute left-4 top-2 text-sm font-bold text-accent">₩</span>
+                                <input type="number" id="fobForeignInput" value="0" min="0" oninput="calculateMarginalOutputs();" class="w-full rounded-xl pl-9 pr-4 py-2 text-sm font-bold text-textlight">
+                            </div>
+                            <span class="text-[10px] text-textmuted block">인보이스 상 기재된 제조사 순수 제품 공급 단가</span>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="space-y-1.5">
+                                <label class="block text-[11px] font-bold text-textmuted uppercase tracking-wider">국제운송 & 보험료 (%)</label>
+                                <div class="relative">
+                                    <input type="number" id="freightPercentInput" value="0" step="0.1" min="0" oninput="calculateMarginalOutputs();" class="w-full rounded-xl px-3 py-2 text-xs font-bold text-textlight">
+                                    <span class="absolute right-4 top-2 text-xs font-bold text-textmuted">%</span>
+                                </div>
+                            </div>
+                            <div class="space-y-1.5">
+                                <label class="block text-[11px] font-bold text-textmuted uppercase tracking-wider">목표 마진율 (%)</label>
+                                <div class="relative">
+                                    <input type="number" id="targetMarginInput" value="30" min="0" max="99" oninput="calculateMarginalOutputs();" class="w-full rounded-xl px-3 py-2 text-xs font-bold text-textlight">
+                                    <span class="absolute right-4 top-2 text-xs font-bold text-textmuted">%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-4 bg-darkcard rounded-3xl p-6 border border-bordercolor shadow-xl space-y-6">
+                    <div class="border-b border-bordercolor pb-3">
+                        <h3 class="text-sm font-extrabold tracking-tight text-accent flex items-center gap-2">
+                            <i class="fa-solid fa-calculator text-accent"></i> 02. 수입 관세 분석 (CBSA Rule)
+                        </h3>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div class="bg-darkbg/50 p-4 rounded-2xl border border-bordercolor">
+                            <span class="text-[10px] font-bold text-textmuted uppercase tracking-wider block mb-1">CAD 환산 공급가 (FOB Value)</span>
+                            <span id="fobCadDisplay" class="text-xl font-extrabold text-textlight">$0.00</span>
+                        </div>
+
+                        <div class="bg-darkbg/50 p-4 rounded-2xl border border-bordercolor">
+                            <span class="text-[10px] font-bold text-textmuted uppercase tracking-wider block mb-1">국제 물류비 (Freight & Insurance)</span>
+                            <span id="freightCostDisplay" class="text-xl font-extrabold text-textlight">$0.00</span>
+                        </div>
+
+                        <div class="bg-darkbg/50 p-4 rounded-2xl border border-bordercolor">
+                            <span class="text-[10px] font-bold text-textmuted uppercase tracking-wider block mb-1">관세 평가 대상 금액 (Value for Duty)</span>
+                            <span id="vfdDisplay" class="text-2xl font-black text-accent">$0.00</span>
+                            <p class="text-[10px] text-textmuted mt-1.5">선적지 인도조건(FOB) 가액 적용 (국제 운송비 제외)</p>
+                        </div>
+
+                        <div class="bg-darkbg/50 p-4 rounded-2xl border border-bordercolor relative">
+                            <div class="flex justify-between items-center mb-1.5">
+                                <span class="text-[10px] font-bold text-textmuted uppercase tracking-wider">적용 관세율 (Customs Duty Rate)</span>
+                                <span class="text-[10px] bg-accent/20 text-accent font-extrabold px-2 py-0.5 rounded-full uppercase">Editable</span>
+                            </div>
+                            <div class="relative flex items-center">
+                                <input type="number" id="dutyOverrideInput" step="0.1" min="0" oninput="calculateMarginalOutputs();" class="w-full rounded-xl px-4 py-2.5 text-base font-extrabold text-accent bg-darkbg border border-bordercolor">
+                                <span class="absolute right-4 text-base font-bold text-accent">%</span>
+                            </div>
+                            <span class="text-[9px] text-textmuted block mt-1.5 leading-relaxed">선택하신 원산지에 대응하는 공식 관세율이 자동 바인딩되며 수동 수정도 언제든 지원합니다.</span>
+                        </div>
+
+                        <div class="bg-darkbg/50 p-4 rounded-2xl border border-bordercolor">
+                            <span class="text-[10px] font-bold text-textmuted uppercase tracking-wider block mb-1.5">원산지별 수입 협정 세종 (Tariff Treatment)</span>
+                            <span id="treatmentDisplay" class="text-xs font-bold text-textlight bg-slate-800 border border-bordercolor px-3 py-1.5 rounded-lg inline-block">MFN</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-4 bg-gradient-to-b from-darkcard to-slate-950 rounded-3xl p-6 border border-bordercolor shadow-xl flex flex-col justify-between min-h-[500px]">
+                    <div class="space-y-6">
+                        <div class="border-b border-bordercolor pb-3">
+                            <h3 class="text-sm font-extrabold tracking-tight text-accent flex items-center gap-2">
+                                <i class="fa-solid fa-chart-line text-accent"></i> 03. 원가 및 마진 분석표
+                            </h3>
+                        </div>
+
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-center py-2 border-b border-bordercolor">
+                                <span class="text-xs font-medium text-textmuted">예상 수입 관세액 (Duty)</span>
+                                <span id="dutyAmountDisplay" class="text-sm font-bold text-textlight">$0.00</span>
+                            </div>
+
+                            <div class="flex justify-between items-center py-2 border-b border-bordercolor">
+                                <span class="text-xs font-medium text-textmuted">총 수입 원가 (Landed Cost)</span>
+                                <span id="landedCostDisplay" class="text-sm font-bold text-textlight">$0.00</span>
+                            </div>
+
+                            <div class="bg-darkbg/40 p-4 rounded-2xl border border-bordercolor space-y-1">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-xs font-bold text-textmuted uppercase">SRP (이론적 도매 가격)</span>
+                                    <span id="srpDisplay" class="text-base font-extrabold text-textlight">$0.00</span>
+                                </div>
+                            </div>
+
+                            <div class="bg-darkbg/80 p-5 rounded-2xl border border-accent/30 space-y-3 shadow-inner relative">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-xs font-extrabold text-accent uppercase tracking-wider">실제 도매 판매 가격</span>
+                                    <span class="text-[9px] bg-accent/20 text-accent font-extrabold px-2 py-0.5 rounded">Customizable</span>
+                                </div>
+                                <div class="relative flex items-center">
+                                    <span class="absolute left-4 text-lg font-black text-accent">$</span>
+                                    <input type="number" id="actualPriceInput" step="0.01" min="0" oninput="calculateActualMargins();" class="w-full rounded-xl pl-9 pr-4 py-2.5 text-lg font-extrabold text-accent bg-darkbg border border-accent/20 focus:border-accent">
+                                </div>
+                                <p class="text-[9px] text-textmuted leading-relaxed">이론 권장가 기준 소수점 둘째 자리에서 올림한 후 끝자리를 무조건 9센트(.x9)로 처리한 초기 기이드가 적용되며 직접 편성에 따라 가격 수정이 가능합니다.</p>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="bg-darkbg/50 p-3 rounded-2xl border border-bordercolor text-center">
+                                    <span class="text-[9px] font-bold text-textmuted uppercase block mb-1">실제 도출 마진</span>
+                                    <span id="actualProfitDisplay" class="text-base font-black text-emerald">$0.00</span>
+                                </div>
+                                <div class="bg-darkbg/50 p-3 rounded-2xl border border-bordercolor text-center">
+                                    <span class="text-[9px] font-bold text-textmuted uppercase block mb-1">실제 마진율</span>
+                                    <span id="actualMarginRateDisplay" class="text-base font-black text-emerald">0.0%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pt-4 text-center">
+                        <p class="text-[8px] text-textmuted leading-relaxed">※ 도매가 실제 마진율 공식: (실제도매판매가 - Landed Cost) / 실제도매판매가<br>※ 캐나다 GST/HST/PST 및 현지 배송 대행 수수료는 불포함</p>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <section id="directory-section" class="space-y-6">
+            <div class="bg-darkcard rounded-3xl p-6 sm:p-8 border border-bordercolor shadow-xl space-y-6">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-bordercolor pb-5">
+                    <div>
+                        <h3 class="text-xl font-extrabold text-textlight flex items-center gap-2">
+                            <i class="fa-solid fa-folder-open text-accent"></i> 2026 캐나다 세관 통합 분류 브라우저 (개별 장별 완벽 분리)
+                        </h3>
+                        <p class="text-xs text-textmuted mt-1">엑셀 파일 내 신규 68종 품목의 관세청 공식 요율 및 기술 규격 정보를 Chapter 단위별로 정교하게 매칭해 조회합니다.</p>
+                    </div>
+                    
+                    <div class="flex gap-2 w-full md:w-auto">
+                        <select id="chapterFilter" onchange="searchTariff()" class="rounded-xl px-3 py-2 text-xs font-bold text-textlight bg-darkbg border border-bordercolor">
+                            <option value="all">전체 장(Chapters) 개별 필터링</option>
+                            <option value="ch33">Chapter 33: 화장품류 (Cosmetics)</option>
+                            <option value="ch34">Chapter 34: 세안 고체 비누 (Soaps)</option>
+                            <option value="ch35">Chapter 35: 이미용 글루 접착제 (Adhesives)</option>
+                            <option value="ch39">Chapter 39: 플라스틱 용기 및 잡화 (Plastics)</option>
+                            <option value="ch40">Chapter 40: 이미용 가전 고무 패드 (Rubber)</option>
+                            <option value="ch48">Chapter 48: 패키징 박스 및 라벨지 (Paper)</option>
+                            <option value="ch61">Chapter 61: 메라지 등 니트 의류 (Knitted Apparel)</option>
+                            <option value="ch62">Chapter 62: 우븐 의류 및 팬츠 (Woven Apparel)</option>
+                            <option value="ch64">Chapter 64: 천연 가죽 구두 및 슈즈 (Footwear)</option>
+                            <option value="ch65">Chapter 65: 패션 볼캡, 비니, 모자 (Headgear)</option>
+                            <option value="ch67">Chapter 67: 합성 가발 및 인조 속눈썹 (Wigs)</option>
+                            <option value="ch70">Chapter 70: 화장대 거울 및 반사경 (Glass & Mirrors)</option>
+                            <option value="ch71">Chapter 71: 모조 주얼리 및 악세사리 (Jewellery)</option>
+                            <option value="ch73">Chapter 73: 이미용 카트 및 철강 잡화 (Steel Articles)</option>
+                            <option value="ch82">Chapter 82: 손톱깎이 세트 및 전문 족집게 (Tools)</option>
+                            <option value="ch83">Chapter 83: 파우치 부속 고리 및 버클 (Metal Clasps)</option>
+                            <option value="ch94">Chapter 94: 진열 매대 가구 및 인테리어 (Furniture)</option>
+                            <option value="ch96">Chapter 96: 메이크업 화장 브러쉬 및 머리핀 (Misc Brushes)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- 키워드 대화형 검색 엔진 바 -->
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+                    <div class="md:col-span-8 relative">
+                        <span class="absolute left-4 top-3 text-textmuted"><i class="fa-solid fa-search"></i></span>
+                        <input type="text" id="tariffSearchInput" oninput="searchTariff()" placeholder="검색하고 싶으신 품목 이름이나 HS Code 번호를 직접 입력하세요 (예: 6505, 3304, Manicure, Razor, Beanie, Bottle)..." class="w-full bg-darkbg rounded-xl pl-11 pr-4 py-2.5 text-xs font-bold text-textlight border border-bordercolor focus:border-accent">
+                    </div>
+                    <div class="md:col-span-4 flex items-center justify-end">
+                        <span id="searchResultCount" class="text-xs font-bold text-accent bg-accent/10 px-3 py-2 rounded-xl">전체 데이터 검색 대기 중</span>
+                    </div>
+                </div>
+
+                <!-- 품목 리스트 그리드/테이블 -->
+                <div class="overflow-x-auto rounded-2xl border border-bordercolor bg-darkbg/40">
+                    <table class="w-full text-left text-xs">
+                        <thead>
+                            <tr class="text-textmuted border-b border-bordercolor bg-darkcard/50">
+                                <th class="py-3.5 px-4 font-bold">HS Code (품목 분류)</th>
+                                <th class="py-3.5 px-4 font-bold">공식 영문 품목명 및 세부 규격 (Description)</th>
+                                <th class="py-3.5 px-4 text-center font-bold">일반 최혜국 (MFN)</th>
+                                <th class="py-3.5 px-4 text-center font-bold">선택 원산지 적용 관세</th>
+                                <th class="py-3.5 px-4 text-center font-bold">기타 무역 특혜 우대세율</th>
+                                <th class="py-3.5 px-4 text-center font-bold">실무 연동</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tariffTableBody" class="divide-y divide-bordercolor/30">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section id="chart-section" class="scroll-mt-24 pt-4 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+            <div class="lg:col-span-4 space-y-4">
+                <span class="text-xs font-bold text-accent tracking-widest uppercase bg-accent/10 px-3 py-1 rounded-full">REAL-TIME TARIFF COMPARISON</span>
+                <h3 class="text-2xl font-extrabold text-textlight">공식 관세 대조 분석 시스템</h3>
+                <p class="text-textmuted text-sm leading-relaxed">
+                    선택하신 카테고리 내 품목들의 일반 최혜국(MFN) 기본세율과 무역 협정세율(FTA)의 차이를 실시간 비교합니다. 
+                    미국산 및 한국산 제품 등의 FTA 특혜관세(0%) 적용에 따른 경영 우위를 비교하십시오.
+                </p>
+                <div class="p-4 bg-darkcard rounded-2xl border border-bordercolor inline-block">
+                    <p class="text-xs font-bold text-textlight">기준 품목: <span id="chartCategoryLabel" class="text-accent">-</span></p>
+                </div>
+            </div>
+            <div class="lg:col-span-8 bg-darkcard p-6 rounded-3xl border border-bordercolor shadow-xl">
+                <div class="chart-container">
+                    <canvas id="tariffChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="border-t border-bordercolor bg-darkbg/90 py-8 text-center text-textmuted text-xs">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-2">
+            <p class="font-bold text-textlight">Canada 2026 Customs Tariff & Margin Intelligence Dashboard</p>
+            <p>본 플랫폼의 정보는 캐나다 Border Services Agency(CBSA)의 2026년도 공식 관세 분류 체계를 준용하고 있으며, 실거래 원가 편성 지원용 연산 툴입니다.</p>
+        </div>
+    </footer>
+
+    <script>
+        // 추가항목 엑셀 파일 내 모든 데이터와 2026 관세율표 매칭 마스터 데이터베이스 재빌드 (장별 완전 분리)
+        const masterTariffDatabase = {
+            "ch33": {
+                name: "Chapter 33: 화장품 및 에센셜 오일류",
+                items: [
+                    { hs: "3304.30.00", name: "Manicure or pedicure preparations", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "매니큐어 및 페디큐어 전용 화장품 미용제" },
+                    { hs: "3304.99.00", name: "Skincare (Creams, Serums, Lotions)", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "미용 스킨케어 크림류" },
+                    { hs: "3304.99.90", name: "Other beauty or make-up preparations", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "기타 기초 및 기능성 색조 메이크업 제품" },
+                    { hs: "3304.10.00", name: "Lip Make-up (Lipsticks & Glosses)", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "립스틱 등 입술 메이크업" },
+                    { hs: "3304.20.00", name: "Eye Make-up (Mascaras & Liners)", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "마스카라, 아이라이너" },
+                    { hs: "3304.91.00", name: "Face Powders (Compressed or loose)", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "안면용 페이스 파우더" },
+                    { hs: "3303.00.00", name: "Perfumes and Toilet Waters", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "액상 향수 및 토일렛 워터" },
+                    { hs: "3305.10.00", name: "Hair Shampoos & Cleansers", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "두발 세정용 샴푸" },
+                    { hs: "3305.20.00", name: "Preparations for permanent waving or straightening", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "파마약 및 헤어 스트레이트너 제품군" },
+                    { hs: "3305.30.00", name: "Hair lacquers", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "헤어 래커 및 고정용 헤어스프레이 제품" },
+                    { hs: "3305.90.00", name: "Other hair preparations", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "기타 헤어 트리트먼트 및 에센스 영양제 제품" }
+                ]
+            },
+            "ch34": {
+                name: "Chapter 34: 세안 고체 비누",
+                items: [
+                    { hs: "3401.11.10", name: "Toilet Soaps & Solid Bars", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "세안 비누 및 합성 세제바" }
+                ]
+            },
+            "ch35": {
+                name: "Chapter 35: 이미용 글루 접착제",
+                items: [
+                    { hs: "3506.10.00", name: "Products suitable for use as glues or adhesives", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "속눈썹 접착제, 소형 소매용 패키징 글루 및 접착제 일체" }
+                ]
+            },
+            "ch39": {
+                name: "Chapter 39: 플라스틱 용기 및 잡화",
+                items: [
+                    { hs: "3923.10.00", name: "Boxes, cases, crates and similar articles of plastics", mfn: 0.0, kr: 0.0, us: 0.0, fr: 0.0, tr: 0.0, cn: 0.0, detail: "화장품 보관용 플라스틱 하드 케이스, 박스 상자" },
+                    { hs: "3923.21.90", name: "Other sacks and bags of polymers of ethylene", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "폴리에틸렌 재질의 화장품 패키징 비닐백, 샘플 파우치 지퍼백" },
+                    { hs: "3923.29.90", name: "Sacks and bags of other plastics", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "기타 재질 플라스틱 가공 비닐백 파우치 소모품" },
+                    { hs: "3923.30.90", name: "Carboys, bottles, flasks and similar articles", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "화장품 액상 공병, 플라스틱 디스펜서 펌프 병 용기" },
+                    { hs: "3923.50.90", name: "Stoppers, lids, caps and other closures", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "공병 조립용 플라스틱 캡, 마개, 뚜껑 닫기 부품" },
+                    { hs: "3926.20.91", name: "Disposable plastic gloves", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "위생 소모용 일회용 플라스틱 장갑" },
+                    { hs: "3926.20.94", name: "Other articles of apparel and clothing accessories", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "플라스틱제 이미용 가운, 앞치마 등 보호용 위생 의스크 잡화" },
+                    { hs: "3926.90.10", name: "Articles for climbing or mountaineering", mfn: 0.0, kr: 0.0, us: 0.0, fr: 0.0, tr: 0.0, cn: 0.0, detail: "플라스틱 특수 고정 고리 부속 부품" },
+                    { hs: "3926.90.99", name: "Other articles of plastics", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "기타 플라스틱 가공 뷰티 소모 잡화 및 헤어피스 지지대" }
+                ]
+            },
+            "ch40": {
+                name: "Chapter 40: 이미용 가전 고무 패드",
+                items: [
+                    { hs: "4015.19.90", name: "Other rubber gloves (e.g. Nitrile / Latex)", mfn: 15.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 15.5, cn: 15.5, detail: "뷰티숍 시술용 니트릴 및 라텍스 위생 고무장갑 고율관세" },
+                    { hs: "4016.99.90", name: "Other articles of vulcanized rubber", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "이미용 가전 받침용 고무 패드 및 고무 패킹 부자재" }
+                ]
+            },
+            "ch48": {
+                name: "Chapter 48: 패키징 박스 및 라벨지",
+                items: [
+                    { hs: "4811.41.00", name: "Self-adhesive paper and paperboard", mfn: 0.0, kr: 0.0, us: 0.0, fr: 0.0, tr: 0.0, cn: 0.0, detail: "라벨 부착용 스티커 종이, 화장품 패키지 점착 라벨지" },
+                    { hs: "4819.10.00", name: "Cartons, boxes and cases, of corrugated paper", mfn: 0.0, kr: 0.0, us: 0.0, fr: 0.0, tr: 0.0, cn: 0.0, detail: "물류 배송용 골판지 택배 박스 및 포장 상자" },
+                    { hs: "4823.90.00", name: "Other paper, paperboard, cellulose wadding", mfn: 0.0, kr: 0.0, us: 0.0, fr: 0.0, tr: 0.0, cn: 0.0, detail: "기타 화장용 종이 패키징 부속재 및 가공 종이 트레이" }
+                ]
+            },
+            "ch61": {
+                name: "Chapter 61: 헤어네트 등 니트 의류",
+                items: [
+                    { hs: "6109.10.00", name: "Cotton T-shirts (Knitted)", mfn: 18.0, kr: 0.0, us: 0.0, fr: 0.0, tr: 18.0, cn: 18.0, detail: "면 재질의 니트 티셔츠" },
+                    { hs: "6115.95.00", name: "Cotton Socks & Legwear", mfn: 16.0, kr: 0.0, us: 0.0, fr: 0.0, tr: 16.0, cn: 16.0, detail: "양말류 패션 소모품" }
+                ]
+            },
+            "ch62": {
+                name: "Chapter 62: 우븐 의류 및 팬츠",
+                items: [
+                    { hs: "6203.42.00", name: "Men's Denim Jeans / Pants", mfn: 17.0, kr: 0.0, us: 0.0, fr: 0.0, tr: 17.0, cn: 17.0, detail: "남성용 데님 팬츠" },
+                    { hs: "6204.62.00", name: "Women's Skirts & Dresses", mfn: 16.0, kr: 0.0, us: 0.0, fr: 0.0, tr: 16.0, cn: 16.0, detail: "여성용 우븐 스커트" }
+                ]
+            },
+            "ch64": {
+                name: "Chapter 64: 천연 가죽 구두 및 슈즈",
+                items: [
+                    { hs: "6403.99.30", name: "Genuine Leather Shoes & Sneakers", mfn: 18.0, kr: 0.0, us: 0.0, fr: 0.0, tr: 18.0, cn: 18.0, detail: "천연 가죽 단화 및 운동화" }
+                ]
+            },
+            "ch65": {
+                name: "Chapter 65: 패션 볼캡, 비니, 모자",
+                items: [
+                    { hs: "6505.00.40", name: "Other hats, hoods, caps, bonnets or berets", mfn: 12.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 12.5, cn: 12.5, detail: "섬유제 헤어 보닛, 부직포 패션 베레모 및 캡류" },
+                    { hs: "6506.10.90", name: "Safety Helmets (Protective)", mfn: 0.0, kr: 0.0, us: 0.0, fr: 0.0, tr: 0.0, cn: 0.0, detail: "산업용 안전모 및 자전거 보호 헬멧 제품군" },
+                    { hs: "6506.91.00", name: "Headgear of rubber or of plastics", mfn: 9.0, kr: 0.0, us: 0.0, fr: 0.0, tr: 9.0, cn: 9.0, detail: "염색용 시술 플라스틱 헤어캡 및 방수용 샤워캡 제품군" },
+                    { hs: "6505.00.90", name: "Knitted Hats & Caps (Beanies)", mfn: 15.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 15.5, cn: 15.5, detail: "편직제 및 직물제 모자, 비니, 볼캡" }
+                ]
+            },
+            "ch67": {
+                name: "Chapter 67: 가발 및 인조 속눈썹",
+                items: [
+                    { hs: "6704.19.00", name: "Wigs, false beards, eyebrows of synthetic textile", mfn: 15.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 15.5, cn: 15.5, detail: "합성 섬유제 패션 가발, 인조 속눈썹, 속눈썹 연장 자재" }
+                ]
+            },
+            "ch70": {
+                name: "Chapter 70: 화장대 거울 및 반사경",
+                items: [
+                    { hs: "7009.10.00", name: "Rear-view mirrors for vehicles", mfn: 0.0, kr: 0.0, us: 0.0, fr: 0.0, tr: 0.0, cn: 0.0, detail: "차량용 백미러 및 반사경 기구" },
+                    { hs: "7009.91.00", name: "Glass mirrors (Unframed)", mfn: 0.0, kr: 0.0, us: 0.0, fr: 0.0, tr: 0.0, cn: 0.0, detail: "프레임이 없는 거울 유리, 컴팩트 파우더 내장용 거울 원판" },
+                    { hs: "7009.92.00", name: "Glass mirrors (Framed)", mfn: 0.0, kr: 0.0, us: 0.0, fr: 0.0, tr: 0.0, cn: 0.0, detail: "테두리가 있는 탁상용 메이크업 화장대 거울, 핸드 미러" }
+                ]
+            },
+            "ch71": {
+                name: "Chapter 71: 모조 주얼리 및 악세사리",
+                items: [
+                    { hs: "7117.19.90", name: "Other imitation jewellery of base metal", mfn: 8.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 8.5, cn: 8.5, detail: "비금속제 패션 악세사리, 네일아트용 데코 메탈 파츠, 코스튬 주얼리" }
+                ]
+            },
+            "ch73": {
+                name: "Chapter 73: 이미용 카트 및 철강 잡화",
+                items: [
+                    { hs: "7326.90.90", name: "Other articles of iron or steel", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "기타 철강제 미용 보관대, 철제 카트 및 시술용 메탈 부자재" }
+                ]
+            },
+            "ch82": {
+                name: "Chapter 82: 이미용 전용 금속 하드웨어",
+                items: [
+                    { hs: "8203.20.00", name: "Pliers, pincers, tweezers and similar tools", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "미용용 족집게(트위저), 니퍼 및 정밀 플라이어 도구" },
+                    { hs: "8203.30.90", name: "Other metal shears and cutting cutters", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "기타 금속제 미용 가위 및 전단 소형 절단 기구" },
+                    { hs: "8205.51.90", name: "Other household hand tools", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "기타 가공 가정용 핸드 툴 이미용 보조 기구" },
+                    { hs: "8212.10.00", name: "Razors", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "안전 수동 면도기, 이미용 전용 눈썹 면도 도구" },
+                    { hs: "8212.20.00", name: "Safety razor blades (including blade blanks)", mfn: 6.0, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.0, cn: 6.0, detail: "교체용 면도날 및 스테인리스 스트립 BLADE" },
+                    { hs: "8214.10.00", name: "Paper knives, pencil sharpeners and blades", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "사무용 칼 및 화장품 펜슬 샤프너(연필깎이)" },
+                    { hs: "8214.20.00", name: "Manicure or pedicure sets and instruments", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "네일 파일, 손톱깎이 세트 및 전문 네일케어 인스트루먼트" },
+                    { hs: "8214.90.90", name: "Other articles of cutlery", mfn: 7.0, kr: 0.0, us: 0.0, fr: 0.0, tr: 7.0, cn: 7.0, detail: "기타 소형 미용 절단기 및 미용 전용 나이프 잡화" }
+                ]
+            },
+            "ch83": {
+                name: "Chapter 83: 파우치 고리 및 하드웨어",
+                items: [
+                    { hs: "8308.10.00", name: "Hooks, eyes and eyelets of base metal", mfn: 0.0, kr: 0.0, us: 0.0, fr: 0.0, tr: 0.0, cn: 0.0, detail: "가공 비금속제 훅, 아이 및 의류 파우치용 아일릿" },
+                    { hs: "8308.90.00", name: "Other clasps, frames, buckles and parts", mfn: 0.0, kr: 0.0, us: 0.0, fr: 0.0, tr: 0.0, cn: 0.0, detail: "화장품 파우치/가방용 버클, 프레임, 잠금장치 부속 부품" }
+                ]
+            },
+            "ch94": {
+                name: "Chapter 94: 진열 매대 가구 및 조명",
+                items: [
+                    { hs: "9403.60.00", name: "General Wooden Furniture", mfn: 9.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 9.5, cn: 9.5, detail: "목재형 수납가구류" },
+                    { hs: "9403.70.90", name: "Other furniture of plastics", mfn: 0.0, kr: 0.0, us: 0.0, fr: 0.0, tr: 0.0, cn: 0.0, detail: "미용실 진열용 플라스틱 트레이 가구, 아크릴 화장품 진열대" },
+                    { hs: "9403.89.90", name: "Furniture of other materials (including rattan)", mfn: 0.0, kr: 0.0, us: 0.0, fr: 0.0, tr: 0.0, cn: 0.0, detail: "기타 목재 대나무/라탄 소재 이미용 의자 및 가구 인테리어 부품" },
+                    { hs: "9405.11.00", name: "LED Interior Lighting Fittings", mfn: 7.0, kr: 0.0, us: 0.0, fr: 0.0, tr: 7.0, cn: 7.0, detail: "실내 조명 가전기구" }
+                ]
+            },
+            "ch96": {
+                name: "Chapter 96: 이미용 솔, 빗 및 머리핀류",
+                items: [
+                    { hs: "9603.29.00", name: "Other hair brushes and eyelash brushes", mfn: 7.0, kr: 0.0, us: 0.0, fr: 0.0, tr: 7.0, cn: 7.0, detail: "두발용 헤어 브러쉬, 헤어 빗 및 속눈썹 빗(스크류 브러쉬)" },
+                    { hs: "9603.30.90", name: "Other artists' brushes and cosmetic brushes", mfn: 0.0, kr: 0.0, us: 0.0, fr: 0.0, tr: 0.0, cn: 0.0, detail: "기타 파우더/아이섀도우 칠용 전문 메이크업 화장용 브러쉬" },
+                    { hs: "9615.11.00", name: "Combs, hair-slides of hard rubber/plastic", mfn: 5.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 5.5, cn: 5.5, detail: "플라스틱제 머리핀, 헤어 클립, 바레트 및 헤어 빗 소모품" },
+                    { hs: "9615.19.00", name: "Combs, hair-slides of other materials", mfn: 7.0, kr: 0.0, us: 0.0, fr: 0.0, tr: 7.0, cn: 7.0, detail: "금속 또는 기타 복합 소재 헤어핀, 고정용 클립 장식품" },
+                    { hs: "9615.90.00", name: "Other hairpins, curling pins, hair-curlers", mfn: 6.5, kr: 0.0, us: 0.0, fr: 0.0, tr: 6.5, cn: 6.5, detail: "기타 헤어 컬러(구루프), 헤어 롤 및 미용실 고정용 헤어핀 부속품" }
+                ]
+            }
+        };
+
+        const countries = [
+            { id: "US", name: "미국 (United States)", fta: "CUSMA 특혜세율 (UST)", currency: "USD", dbKey: "us" },
+            { id: "KR", name: "대한민국 (South Korea)", fta: "한-캐 FTA 협정세율 (KRT)", currency: "KRW", dbKey: "kr" },
+            { id: "FR", name: "프랑스 (France / EU)", fta: "캐-유럽 협정세율 (CEUT)", currency: "EUR", dbKey: "fr" },
+            { id: "TR", name: "튀르키예 (Türkiye)", fta: "일반 최혜국 대우 (MFN)", currency: "TRY", dbKey: "tr" },
+            { id: "CN", name: "중국 (China)", fta: "일반 최혜국 대우 (MFN)", currency: "USD", dbKey: "cn" }
+        ];
+
+        const currencies = {
+            "USD": { symbol: "$", rate: 1.40 },
+            "KRW": { symbol: "₩", rate: 0.0010 },
+            "EUR": { symbol: "€", rate: 1.48 },
+            "TRY": { symbol: "₺", rate: 0.040 },
+            "CAD": { symbol: "$", rate: 1.00 }
+        };
+
+        let currentItem = {
+            hs: "3304.99.00",
+            name: "Skincare (Creams, Serums, Lotions)",
+            mfn: 6.5,
+            kr: 0.0,
+            us: 0.0,
+            fr: 0.0,
+            tr: 6.5,
+            cn: 6.5,
+            detail: "미용 스킨케어 크림류"
+        };
+        let activeChart = null;
+
+        const el = {
+            selectedItemDisplay: document.getElementById('selectedItemDisplay'),
+            originSelect: document.getElementById('originSelect'),
+            currencySelect: document.getElementById('currencySelect'),
+            exchangeRateInput: document.getElementById('exchangeRateInput'),
+            fobForeignInput: document.getElementById('fobForeignInput'),
+            freightPercentInput: document.getElementById('freightPercentInput'),
+            targetMarginInput: document.getElementById('targetMarginInput'),
+            dutyOverrideInput: document.getElementById('dutyOverrideInput'),
+            currencySymbol: document.getElementById('currencySymbol'),
+            fobCadDisplay: document.getElementById('fobCadDisplay'),
+            freightCostDisplay: document.getElementById('freightCostDisplay'),
+            vfdDisplay: document.getElementById('vfdDisplay'),
+            treatmentDisplay: document.getElementById('treatmentDisplay'),
+            dutyAmountDisplay: document.getElementById('dutyAmountDisplay'),
+            landedCostDisplay: document.getElementById('landedCostDisplay'),
+            srpDisplay: document.getElementById('srpDisplay'),
+            actualPriceInput: document.getElementById('actualPriceInput'),
+            actualProfitDisplay: document.getElementById('actualProfitDisplay'),
+            actualMarginRateDisplay: document.getElementById('actualMarginRateDisplay'),
+            chartCategoryLabel: document.getElementById('chartCategoryLabel'),
+            tariffTableBody: document.getElementById('tariffTableBody'),
+            chapterFilter: document.getElementById('chapterFilter'),
+            tariffSearchInput: document.getElementById('tariffSearchInput'),
+            searchResultCount: document.getElementById('searchResultCount')
+        };
+
+        function init() {
+            countries.forEach(c => {
+                const opt = new Option(`${c.name} - ${c.fta}`, c.id);
+                el.originSelect.add(opt);
+            });
+            el.originSelect.value = "US";
+
+            Object.keys(currencies).forEach(cur => {
+                const opt = new Option(`${cur} (${currencies[cur].symbol})`, cur);
+                el.currencySelect.add(opt);
+            });
+            el.currencySelect.value = "USD";
+            el.exchangeRateInput.value = currencies["USD"].rate;
+            el.currencySymbol.textContent = currencies["USD"].symbol;
+
+            [el.fobForeignInput, el.exchangeRateInput, el.freightPercentInput, el.targetMarginInput, el.dutyOverrideInput].forEach(item => {
+                item.addEventListener('input', calculateMarginalOutputs);
+            });
+
+            renderTable();
+            applyItem(currentItem);
+        }
+
+        function applyItem(item) {
+            currentItem = item;
+            el.selectedItemDisplay.textContent = `${item.hs} - ${item.name}`;
+            updateRecommendedDuty();
+        }
+
+        function handleOriginChange() {
+            const originId = el.originSelect.value;
+            const originCountry = countries.find(c => c.id === originId);
+            
+            el.currencySelect.value = originCountry.currency;
+            handleCurrencyChange();
+            updateRecommendedDuty();
+        }
+
+        function updateRecommendedDuty() {
+            const originId = el.originSelect.value;
+            const originCountry = countries.find(c => c.id === originId);
+            const dbKey = originCountry.dbKey;
+
+            const activeRate = currentItem[dbKey] !== undefined ? currentItem[dbKey] : currentItem.mfn;
+
+            el.dutyOverrideInput.value = activeRate.toFixed(1);
+            el.treatmentDisplay.textContent = originCountry.fta;
+
+            calculateMarginalOutputs();
+        }
+
+        function calculateMarginalOutputs() {
+            const fobForeign = parseFloat(el.fobForeignInput.value) || 0;
+            const rate = parseFloat(el.exchangeRateInput.value) || 0;
+            const freightPct = parseFloat(el.freightPercentInput.value) || 0;
+            const targetMargin = parseFloat(el.targetMarginInput.value) || 0;
+            const dutyPct = parseFloat(el.dutyOverrideInput.value) || 0;
+
+            const fobCad = fobForeign * rate;
+            const freightCost = fobCad * (freightPct / 100);
+            const vfd = fobCad; 
+            const dutyAmount = vfd * (dutyPct / 100);
+            const landedCost = fobCad + freightCost + dutyAmount;
+
+            let srp = 0;
+            if (targetMargin < 100 && targetMargin >= 0) {
+                srp = landedCost / (1 - (targetMargin / 100));
+            } else {
+                srp = landedCost;
+            }
+
+            const fmt = new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' });
+
+            el.fobCadDisplay.textContent = fmt.format(fobCad);
+            el.freightCostDisplay.textContent = fmt.format(freightCost);
+            el.vfdDisplay.textContent = fmt.format(vfd);
+            el.dutyAmountDisplay.textContent = fmt.format(dutyAmount);
+            el.landedCostDisplay.textContent = fmt.format(landedCost);
+            el.srpDisplay.textContent = fmt.format(srp);
+
+            if (document.activeElement !== el.actualPriceInput) {
+                let cents = Math.ceil(srp * 100);
+                let lastDigit = cents % 10;
+                if (lastDigit < 9) {
+                    cents += (9 - lastDigit);
+                }
+                let adjustedSrp = cents / 100;
+                el.actualPriceInput.value = adjustedSrp.toFixed(2);
+            }
+
+            calculateActualMargins(landedCost);
+        }
+
+        function calculateActualMargins(landedCost = null) {
+            if (landedCost === null) {
+                const landedCostStr = el.landedCostDisplay.textContent.replace(/[^0-9.-]+/g,"");
+                landedCost = parseFloat(landedCostStr) || 0;
+            }
+
+            const actualPrice = parseFloat(el.actualPriceInput.value) || 0;
+            const actualProfit = actualPrice - landedCost;
+            const actualMarginRate = actualPrice > 0 ? (actualProfit / actualPrice) * 100 : 0;
+
+            const fmt = new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' });
+            el.actualProfitDisplay.textContent = fmt.format(actualProfit);
+            el.actualMarginRateDisplay.textContent = actualMarginRate.toFixed(1) + '%';
+
+            if (actualProfit < 0) {
+                el.actualProfitDisplay.className = "text-lg font-black text-red-500";
+                el.actualMarginRateDisplay.className = "text-lg font-black text-red-500";
+            } else {
+                el.actualProfitDisplay.className = "text-lg font-black text-emerald";
+                el.actualMarginRateDisplay.className = "text-lg font-black text-emerald";
+            }
+
+            renderChart();
+        }
+
+        function handleCurrencyChange() {
+            const cur = el.currencySelect.value;
+            el.exchangeRateInput.value = currencies[cur].rate;
+            el.currencySymbol.textContent = currencies[cur].symbol;
+            calculateMarginalOutputs();
+        }
+
+        function resetInputs() {
+            el.fobForeignInput.value = 0;
+            el.freightPercentInput.value = 0;
+            el.targetMarginInput.value = 30;
+            el.originSelect.value = "US";
+            handleOriginChange();
+        }
+
+        function renderTable() {
+            el.tariffTableBody.innerHTML = '';
+            const filterCh = el.chapterFilter.value;
+            const searchKeyword = el.tariffSearchInput.value.toLowerCase();
+            
+            const selectedOriginId = el.originSelect.value;
+            const originCountry = countries.find(c => c.id === selectedOriginId);
+            const dbKey = originCountry.dbKey;
+
+            let count = 0;
+
+            Object.keys(masterTariffDatabase).forEach(catKey => {
+                if (filterCh !== "all" && catKey !== filterCh) return;
+
+                const group = masterTariffDatabase[catKey];
+                group.items.forEach(item => {
+                    const matchKeyword = item.name.toLowerCase().includes(searchKeyword) || 
+                                         item.hs.includes(searchKeyword) || 
+                                         item.detail.toLowerCase().includes(searchKeyword);
+                    if (!matchKeyword) return;
+
+                    count++;
+                    const row = document.createElement('tr');
+                    row.className = "hover:bg-slate-800/40 transition-colors text-textmuted border-b border-bordercolor/20";
+                    
+                    const activeRate = item[dbKey] !== undefined ? item[dbKey] : item.mfn;
+
+                    row.innerHTML = `
+                        <td class="py-3 px-4 font-mono font-bold text-accent">${item.hs}</td>
+                        <td class="py-3 px-4">
+                            <span class="text-textlight font-semibold block">${item.name}</span>
+                            <span class="text-[10px] text-textmuted block mt-0.5">${item.detail}</span>
+                        </td>
+                        <td class="py-3 px-4 text-center text-textlight">${item.mfn.toFixed(1)}%</td>
+                        <td class="py-3 px-4 text-center text-emerald font-black bg-emerald/5">${activeRate.toFixed(1)}%</td>
+                        <td class="py-3 px-4 text-center text-accent/80 font-semibold">
+                            KRT: ${item.kr.toFixed(1)}% | US: ${item.us.toFixed(1)}% | CETA: ${item.fr.toFixed(1)}%
+                        </td>
+                        <td class="py-3 px-4 text-center">
+                            <button onclick='selectRowItem(${JSON.stringify(item)})' class="bg-accent/10 border border-accent/20 hover:bg-accent hover:text-darkbg text-accent font-bold px-3 py-1.5 rounded-lg text-[10px] transition-all">
+                                계산기 적용
+                            </button>
+                        </td>
+                    `;
+                    el.tariffTableBody.appendChild(row);
+                });
+            });
+
+            el.searchResultCount.textContent = `검색 품목 수: 총 ${count}건`;
+        }
+
+        function selectRowItem(item) {
+            applyItem(item);
+            document.getElementById('simulator-section').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function searchTariff() {
+            renderTable();
+        }
+
+        function renderChart() {
+            el.chartCategoryLabel.textContent = currentItem.name;
+
+            const labels = ["최혜국 기본 (MFN)", "한국 (CKFTA 우대)", "미국 (CUSMA 우대)", "프랑스 (CETA 우대)"];
+            const chartData = [currentItem.mfn, currentItem.kr, currentItem.us, currentItem.fr];
+
+            if (activeChart) {
+                activeChart.destroy();
+            }
+
+            const ctx = document.getElementById('tariffChart').getContext('2d');
+            activeChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: '원산지 협정별 적용 관세 요율 (%)',
+                            data: chartData,
+                            backgroundColor: ['#26334D', '#10B981', '#E5A93B', '#4A5568'],
+                            borderRadius: 6,
+                            borderWidth: 1,
+                            borderColor: '#BDC3C7'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 30,
+                            ticks: {
+                                callback: function(value) { return value + "%" },
+                                color: '#9CA3AF'
+                            },
+                            grid: { color: 'rgba(38, 51, 77, 0.4)' }
+                        },
+                        x: {
+                            ticks: { color: '#F3F4F6', font: { family: 'Urbanist, sans-serif', size: 10 } },
+                            grid: { display: false }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+            
+            if (document.getElementById('tariffTableBody')) {
+                renderTable();
+            }
+        }
+
+        function downloadSelfHTML() {
+            const docType = "<!DOCTYPE html>\n";
+            const htmlContent = docType + document.documentElement.outerHTML;
+            const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8;' });
+            
+            const link = document.createElement('a');
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', 'canada_tariff_margin_simulator_2026.html');
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
