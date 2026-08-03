@@ -250,6 +250,13 @@ tr:hover td { background: var(--surface2); }
   padding: 2px 6px; border-radius: 4px; margin-right: 6px; vertical-align: middle;
   text-transform: uppercase;
 }
+/* List price 변동 라벨 (30일간 유지) */
+.pc-badge {
+  display: inline-block; margin-top: 3px; font-size: 9px; font-weight: 700;
+  padding: 1px 5px; border-radius: 4px; white-space: nowrap; cursor: default;
+}
+.pc-up   { color: #ef4444; background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.3); }
+.pc-down { color: #22c55e; background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.3); }
 tr.pl-new td { background: rgba(245, 158, 11, 0.04); }
 tr.pl-new td:first-child { box-shadow: inset 3px 0 0 #f59e0b; }
 .brand-tag { color: var(--mid); font-size: 11px; }
@@ -458,6 +465,7 @@ tr.pl-new td:first-child { box-shadow: inset 3px 0 0 #f59e0b; }
       <button class="pl-sort-btn active" id="plSortDefault" onclick="setPlSort('default')">Default</button>
       <button class="pl-sort-btn" id="plSortNew" onclick="setPlSort('new')">🌟 New first</button>
       <button class="pl-sort-btn" id="plSortDeal" onclick="setPlSort('deal')">🔥 Best deals</button>
+      <button class="pl-sort-btn" id="plSortChange" onclick="setPlSort('change')">📈 Price changed</button>
     </div>
     <div id="pricelistContent"><div class="loading"><div class="spinner"></div> Loading…</div></div>
   </div>
@@ -1282,7 +1290,7 @@ function renderDrawer(sku, product, data) {
 let _plAll = [];
 let _plTier = '';
 let _plStockLoc = 'both';   // 'toronto' | 'edmonton' | 'both'
-let _plSort = 'default';    // 'default' | 'new' | 'deal'
+let _plSort = 'default';    // 'default' | 'new' | 'deal' | 'change'
 let _plShown = 100;
 const _PL_PAGE = 100;
 
@@ -1351,6 +1359,20 @@ function _plFiltered() {
   } else if (_plSort === 'deal') {
     // 실제 할인율 높은 순
     filtered.sort((a,b) => _plDiscountRate(b) - _plDiscountRate(a));
+  } else if (_plSort === 'change') {
+    // 가격 변동 있는 것 먼저 → 최근 변동순 → 변동폭 큰 순
+    filtered.sort((a,b) => {
+      const ad = Math.abs(_plNum(a.price_change) || 0);
+      const bd = Math.abs(_plNum(b.price_change) || 0);
+      const ah = ad > 0 ? 1 : 0, bh = bd > 0 ? 1 : 0;
+      if (ah !== bh) return bh - ah;
+      if (ah && bh) {
+        const cmp = String(b.change_date||'').localeCompare(String(a.change_date||''));
+        if (cmp !== 0) return cmp;
+        return bd - ad;
+      }
+      return 0;
+    });
   }
 
   return filtered;
@@ -1364,6 +1386,7 @@ function setPlSort(mode) {
   document.getElementById('plSortDefault').classList.toggle('active', mode==='default');
   document.getElementById('plSortNew').classList.toggle('active', mode==='new');
   document.getElementById('plSortDeal').classList.toggle('active', mode==='deal');
+  document.getElementById('plSortChange').classList.toggle('active', mode==='change');
   _plShown = _PL_PAGE;
   renderPriceList();
 }
@@ -1388,6 +1411,19 @@ function _volBadge(disc, price) {
   if (!d || d === '-' || p === null) return '';
   // disc may be a qty threshold like "6" or "12"
   return `<span style="display:inline-block;background:var(--surface3);border:1px solid var(--border2);border-radius:4px;padding:1px 6px;font-size:10px;color:var(--mid);margin-right:4px">${d}+ : ${fmt(p)}</span>`;
+}
+
+// List price 변동 라벨. price_change 는 부호 있는 숫자(예: 0.6 / -1.25) 또는 null.
+// PriceCalculator.gs 가 변동 감지일로부터 30일간 유지하며 채운다.
+function _pcBadge(r) {
+  const d = _plNum(r.price_change);
+  if (d === null || d === 0) return '';
+  const up   = d > 0;
+  const sign = up ? '+' : '-';
+  const abs  = Math.abs(d).toFixed(2);
+  const when = r.change_date ? ` on ${r.change_date}` : '';
+  const tip  = `List price ${up ? 'increased' : 'decreased'} by ${sign}${abs}${when}`;
+  return `<div class="pc-badge ${up ? 'pc-up' : 'pc-down'}" title="${tip}">${up ? '▲' : '▼'} ${sign}${abs}</div>`;
 }
 
 function renderPriceList() {
@@ -1460,7 +1496,7 @@ function renderPriceList() {
                 <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${newBadge}${r.product||'—'}</td>
                 <td class="brand-tag">${r.brand||'—'}</td>
                 <td style="font-size:11px;color:var(--mid)">${r.category||'—'}</td>
-                <td class="num" style="color:var(--dim);text-decoration:line-through">${list!==null?fmt(list):'—'}</td>
+                <td class="num"><span style="color:var(--dim);text-decoration:line-through">${list!==null?fmt(list):'—'}</span>${_pcBadge(r)}</td>
                 <td class="num" style="font-weight:700;color:var(--green)">${your!==null?fmt(your):'—'}${dealBadge}</td>
                 ${stockCells}
                 <td>${vol||'<span style="color:var(--dim);font-size:11px">—</span>'}</td>
@@ -1484,6 +1520,8 @@ function exportPriceList() {
     };
     if (showTO) o.Stock_Toronto  = r.stock_toronto;
     if (showED) o.Stock_Edmonton = r.stock_edmonton;
+    o.Price_Change = (r.price_change === null || r.price_change === undefined || r.price_change === 0) ? '' : r.price_change;
+    o.Change_Date  = r.change_date || '';
     o.Barcode = r.barcode;
     return o;
   });
