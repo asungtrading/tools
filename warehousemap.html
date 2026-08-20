@@ -1136,7 +1136,22 @@ function buildAltMap_(){
 function prodOf(sku){ return PRODUCTS[sku]||PRODUCTS[String(sku||'').trim()]||null; }
 function itemStock(it){ if(typeof it.stock==='number')return it.stock; const m=/재고\s*(-?\d+)/.exec(it.note||''); return m?+m[1]:null; }
 function itemIsPast(it){ if(it.cur===false)return true; const st=itemStock(it); return st!==null&&st<=0; }
-function init(){ renderWHTabs(); loadSaved(); buildZones(); fitZones(); setupEvents(); updateCrumbs(); updateCount(); loadBinsJson(); loadProductsJson(); }
+function init(){ renderWHTabs(); loadSaved(); buildZones(); fitZones(); setupEvents(); updateCrumbs(); updateCount();
+  const _bins=loadBinsJson(); const _prods=loadProductsJson();
+  // ── deep link (WMS 연동): ?loc=BIN코드 → 해당 로케이션으로 바로 이동, ?q=검색어 → 검색 실행
+  //    예) warehousemap.html?loc=A0101  /  warehousemap.html?q=SKU123
+  try{
+    const _dp=new URLSearchParams(location.search);
+    const _loc=(_dp.get('loc')||'').trim().toUpperCase();
+    const _q=(_dp.get('q')||'').trim();
+    if(_loc||_q){
+      Promise.all([_bins,_prods]).then(()=>{ setTimeout(()=>{
+        if(_loc){ gotoLoc(_loc); }
+        else if(_q){ const el=document.getElementById('srch'); if(el){ el.value=_q; runSearch(_q); } }
+      },80); });
+    }
+  }catch(e){}
+}
 window.addEventListener('DOMContentLoaded',init);
 
 </script></body></html>
